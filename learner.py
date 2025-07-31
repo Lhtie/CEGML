@@ -70,6 +70,19 @@ class Learner:
                 examples.append(string)
         
         return examples
+    
+    def generate_examples_from_random(self, n, seq_len, round=0):
+        strs = self.task.generate_random_strings(n, seq_len)
+        preds = self.classify(strs)
+
+        pos_str, neg_str = [], []
+        for string, pred in zip(strs, preds):
+            if pred == 0:
+                neg_str.append(string)
+            if pred == 1:
+                pos_str.append(string)
+        
+        return neg_str, pos_str
 
     def train(self, x, y, epochs, lr, batch_size, round=0):
         self.model.train()
@@ -108,7 +121,7 @@ class Learner:
 
         return losses
 
-    def classify(self, strings, batch_size=16):
+    def classify(self, strings, batch_size=32):
         self.model.eval()
         res = []
         for i in range(0, len(strings), batch_size):

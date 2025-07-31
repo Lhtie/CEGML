@@ -58,24 +58,29 @@ if __name__ == "__main__":
 
     agg_losses = []
     for epoch in tqdm(range(args.rounds)):
-        neg_ex = learner.generate_examples(
-            n=args.batch_size, 
-            batch_size=args.batch_size, 
-            target=0,
+        # neg_ex = learner.generate_examples(
+        #     n=args.batch_size, 
+        #     batch_size=args.batch_size, 
+        #     target=0,
+        #     seq_len=args.max_length,
+        #     round=epoch
+        # )
+        # neg_pred = learner.classify(neg_ex)
+        # pos_ex = learner.generate_examples(
+        #     n=args.batch_size, 
+        #     batch_size=args.batch_size, 
+        #     target=1,
+        #     seq_len=args.max_length,
+        #     round=epoch
+        # )
+        # pos_pred = learner.classify(pos_ex)
+        # neg_ex = [ex for ex, pred in zip(neg_ex, neg_pred) if pred == 0]
+        # pos_ex = [ex for ex, pred in zip(pos_ex, pos_pred) if pred == 1]
+        neg_ex, pos_ex = learner.generate_examples_from_random(
+            n=args.batch_size,
             seq_len=args.max_length,
             round=epoch
         )
-        neg_pred = learner.classify(neg_ex)
-        pos_ex = learner.generate_examples(
-            n=args.batch_size, 
-            batch_size=args.batch_size, 
-            target=1,
-            seq_len=args.max_length,
-            round=epoch
-        )
-        pos_pred = learner.classify(pos_ex)
-        neg_ex = [ex for ex, pred in zip(neg_ex, neg_pred) if pred == 0]
-        pos_ex = [ex for ex, pred in zip(pos_ex, pos_pred) if pred == 1]
 
         print(f"Epoch: {epoch}")
         print("Negative Examples")

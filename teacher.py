@@ -58,15 +58,15 @@ class Teacher:
         for ex in neg_ex:
             gt = self.task.accepts(ex)
             if gt:
-                x, y = self._gen_from_ex(ex, n)
-                ce_x += x
-                ce_y += y
+                x, y = self._gen_from_ex(ex, n - 1)
+                ce_x += [ex] + x
+                ce_y += [gt] + y
         for ex in pos_ex:
             gt = self.task.accepts(ex)
             if not gt:
-                x, y = self._gen_from_ex(ex, n)
-                ce_x += x
-                ce_y += y
+                x, y = self._gen_from_ex(ex, n - 1)
+                ce_x += [ex] + x
+                ce_y += [gt] + y
         return ce_x, ce_y
     
     def _generate_random_ab_strings(self, m, n):
