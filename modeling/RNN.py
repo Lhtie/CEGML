@@ -16,7 +16,7 @@ class RNN(nn.Module):
     def forward(self, x, lengths):
         out, _ = self.rnn(x)
         out = torch.stack([
-            out[i, lengths[i] - 1, :] for i in range(x.shape[0])
+            out[i, lengths[i], :] for i in range(x.shape[0])
         ])
         out = self.fc(out)
         return out

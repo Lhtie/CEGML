@@ -12,41 +12,56 @@ class Learner:
 
         self.device = next(model.parameters()).device
 
-    def onehotreg(self, x):
+    def onehotreg(self, x, mask=None):
         x_prob = F.softmax(x, dim=-1)
         max_probs = x_prob.max(dim=-1)[0]
-        return (1.0 - max_probs).mean()
+        if mask is not None:
+            return ((1.0 - max_probs) * mask).mean()
+        else:
+            return (1.0 - max_probs).mean()
 
-    def generate_examples(self, n, batch_size, target, seq_len, round=0):
+    def generate_examples(self, n, batch_size, target, seq_len, round=0, verbose=False):
         self.model.train()
         for p in self.model.parameters():
             p.requires_grad = False
-        criterion = torch.nn.CrossEntropyLoss()
-        reg_weight = 0.5
+        criterion = torch.nn.MSELoss()
+        reg_weight = 0.3
         
         examples = []
         for i in range(0, n, batch_size):
             num = min(i+batch_size, n) - i
-            x = torch.randn(num, seq_len + 1, self.model.input_dim, 
-                            requires_grad=True, device=self.device)
-            lengths = torch.full((num, ), seq_len, device=self.device)
-            y = torch.full((num, ), target, device=self.device)
+            lengths = torch.randint(1, seq_len + 1, (num, ), device=self.device)
+            x = torch.randn(num, seq_len + 1, self.model.input_dim, device=self.device)
+            for r in range(num):
+                x[r, lengths[r], :] = 1.0
+                x[r, lengths[r]+1:, :] = 0.0
+            x.requires_grad = True
+            y = target.unsqueeze(0).repeat(num, 1).to(self.device)
+            mask = torch.zeros(x.shape[:2], device=self.device)
+            for r in range(num):
+                mask[r, :lengths[r]] = 1.0
             
-            optimizer = torch.optim.Adam([x], lr=0.03)
+            optimizer = torch.optim.Adam([x], lr=0.01)
             losses = []
             patience, patience_counter = 10, 0
             delta = 0.001
             best_loss = float('inf')
             for step in range(1024):
                 optimizer.zero_grad()
-                logits = self.model(x, lengths)
+                x_softmaxed = torch.where(
+                    mask.unsqueeze(-1) == 1.0,
+                    F.softmax(x, dim=-1),
+                    x
+                )
+                logits = self.model(x_softmaxed, lengths)
 
                 loss_cls = criterion(logits, y)
-                loss_reg = self.onehotreg(x)
+                loss_reg = self.onehotreg(x, mask=mask)
                 loss = loss_cls + reg_weight * loss_reg
                 losses.append(loss.item())
 
                 loss.backward()
+                x.grad *= mask.unsqueeze(-1)
                 optimizer.step()
 
                 if loss.item() < best_loss - delta:
@@ -58,18 +73,30 @@ class Learner:
                 if patience_counter >= patience:
                     print(f'Early stopping at epoch {step}. Loss did not improve for {patience} epochs.')
                     break
-                # if step % 10 == 0:
-                    # print(f"Generate examples Step {step}, Loss {loss.item()}")
+
             print(f"Generate examples Step {step}, Loss {np.mean(losses)}")
-            # plot_loss_curve(losses, "loss_curves", f"Target#{target}-Round#{round}")
+            # if verbose:
+                # plot_loss_curve(losses, "loss_curves", f"Target#{target}-Round#{round}")
         
             x = x.detach()
-            for sample in x:
-                chars = F.softmax(sample, dim=-1).max(dim=-1)[1]
+            for r, sample in enumerate(x):
+                chars = F.softmax(sample, dim=-1).max(dim=-1)[1][:lengths[r]]
+                if verbose:
+                    print(f"Round {round}, Example {i+r}, input logits: {F.softmax(sample, dim=-1)}")
                 string = "".join([chr(c + ord('a')) for c in chars])
                 examples.append(string)
+
+            # Put the examples back and check the quality
+            if verbose:
+                self.model.eval()
+                batch_x_tensor, lengths = self.task.to_tensor(examples)
+                batch_x_tensor = batch_x_tensor.to(self.device)
+
+                with torch.no_grad():
+                    logits = self.model(batch_x_tensor, lengths)
+                    print(f"Round {round}, output logits: {F.softmax(logits, dim=-1)}")
         
-        return examples
+        return np.unique(examples).astype(str).tolist()
     
     def generate_examples_from_random(self, n, seq_len, round=0):
         strs = self.task.generate_random_strings(n, seq_len)
@@ -82,7 +109,7 @@ class Learner:
             if pred == 1:
                 pos_str.append(string)
         
-        return neg_str, pos_str
+        return np.unique(neg_str).astype(str).tolist(), np.unique(pos_str).astype(str).tolist()
 
     def train(self, x, y, epochs, lr, batch_size, round=0):
         self.model.train()

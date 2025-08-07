@@ -15,9 +15,9 @@ class SimplyRegularLanguage:
         self.num_categories = 2     # positive | negative
 
     def to_tensor(self, batched_str):
-        lengths = torch.tensor([len(s) + 1 for s in batched_str], dtype=torch.long)
+        lengths = torch.tensor([len(s) for s in batched_str], dtype=torch.long)
         max_length = lengths.max().item()
-        tensor = torch.zeros((len(batched_str), max_length, self.num_alphabets), dtype=torch.float)
+        tensor = torch.zeros((len(batched_str), max_length + 1, self.num_alphabets), dtype=torch.float)
         for i, s in enumerate(batched_str):
             for j, c in enumerate(s):
                 tensor[i, j, ord(c) - ord('a')] = 1

@@ -41,8 +41,11 @@ class Teacher:
 
         paired = list(zip(strings, labels))
         sampled = random.sample(paired, num_samples)
-        strings, labels = zip(*sampled)
-        return list(strings), list(labels)
+        if num_samples == 0:
+            return [], []
+        else:
+            strings, labels = zip(*sampled)
+            return list(strings), list(labels)
 
     def _gen_from_ex(self, ex, n):
         state = self._get_final_state(self.task.dfa, ex)
@@ -60,20 +63,20 @@ class Teacher:
             if gt:
                 x, y = self._gen_from_ex(ex, n - 1)
                 ce_x += [ex] + x
-                ce_y += [gt] + y
+                ce_y += [int(gt)] + y
         for ex in pos_ex:
             gt = self.task.accepts(ex)
             if not gt:
                 x, y = self._gen_from_ex(ex, n - 1)
                 ce_x += [ex] + x
-                ce_y += [gt] + y
+                ce_y += [int(gt)] + y
         return ce_x, ce_y
     
     def _generate_random_ab_strings(self, m, n):
         strings = []
         alphabet = [chr(c + ord('a')) for c in range(self.task.num_alphabets)]
         for _ in range(m):
-            length = random.randint(0, n)
+            length = random.randint(1, n)
             s = ''.join(random.choices(alphabet, k=length))
             strings.append(s)
         return strings
