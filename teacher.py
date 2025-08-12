@@ -81,8 +81,8 @@ class Teacher:
             strings.append(s)
         return strings
     
-    def judge(self, classifier, n, batch_size):
-        inputs = self._generate_random_ab_strings(n, self.task.max_length)
+    def judge(self, classifier, n, batch_size, seq_len):
+        inputs = self._generate_random_ab_strings(n, seq_len)
         labels = [int(self.task.accepts(i)) for i in inputs]
 
         pred = classifier(inputs, batch_size)

@@ -36,11 +36,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--regex", type=str, default="(a(a)*b)*")
     parser.add_argument("--max_length", type=int, default=8)
+    parser.add_argument("--test_max_length", type=int, default=8)
     parser.add_argument("--hidden_dim", type=int, default=64)
     parser.add_argument("--num_layers", type=int, default=2)
     parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--num_train_str_per_ce", type=int, default=4)
-    parser.add_argument("--rounds", type=int, default=400)
+    parser.add_argument("--num_train_str_per_ce", type=int, default=1)
+    parser.add_argument("--rounds", type=int, default=150)
     parser.add_argument("--epochs_per_round", type=int, default=3)
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--mode", type=str, default="normal_CEs",
@@ -125,6 +126,8 @@ if __name__ == "__main__":
         print(" ".join(["Pos" if learner.classify([ex])[0] == 1 else "Neg" for ex in pos_ex]))
 
         ce_str, ce_y = teacher.generate_counterexamples(args.num_train_str_per_ce, neg_ex, pos_ex)
+        # num_train_samples += len(neg_ex) + len(pos_ex)
+        num_train_samples += len(ce_str)
         print("Counterexamples")
         print(ce_str)
         print(" ".join(["Pos" if y == 1 else "Neg" for y in ce_y]))
@@ -143,12 +146,12 @@ if __name__ == "__main__":
             round=epoch
         )
         agg_losses += losses
-        num_train_samples += len(ce_str)
 
         eval = teacher.judge(
             classifier=learner.classify,
             n=args.batch_size * 32,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            seq_len=args.test_max_length,
         )
         num_samples.append(num_train_samples)
         accs.append(eval)

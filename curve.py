@@ -64,7 +64,7 @@ if __name__ == "__main__":
     for (k, d), c in zip(data.items(), colors):
         num_samples = d["num_samples"]
         accs = d["accs"]
-        smoothed_accs = smooth(accs, window_size=7)
+        smoothed_accs = smooth(accs, window_size=5)
 
         plt.plot(num_samples, smoothed_accs, label=k, color=c, linewidth=2)
         

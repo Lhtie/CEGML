@@ -1,5 +1,6 @@
 import torch
 import random
+import numpy as np
 from pyformlang.regular_expression import Regex
 
 class SimplyRegularLanguage:
@@ -24,13 +25,26 @@ class SimplyRegularLanguage:
             tensor[i, len(s), :] = 1
         return tensor, lengths
     
-    def generate_random_strings(self, m, n):
+    def generate_random_strings_uniform(self, m, n):
         strings = []
         alphabet = [chr(c + ord('a')) for c in range(self.num_alphabets)]
         for _ in range(m):
             length = random.randint(1, n)
             s = ''.join(random.choices(alphabet, k=length))
             strings.append(s)
+        return strings
+
+    def generate_random_strings_beta(self, m, n, alpha=None):
+        alphabet = [chr(ord('a') + i) for i in range(self.num_alphabets)]
+        if isinstance(alpha, (int, float)) or alpha is None:
+            alpha = [alpha if alpha else 1.0] * self.num_alphabets
+        strings = []
+
+        for _ in range(m):
+            probs = np.random.dirichlet(alpha)
+            
+            indices = np.random.choice(self.num_alphabets, size=n, p=probs)
+            strings.append(''.join(alphabet[i] for i in indices))
         return strings
 
     def accepts(self, str):
