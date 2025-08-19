@@ -99,10 +99,11 @@ class Learner:
         return np.unique(examples).astype(str).tolist()
     
     def generate_examples_from_random(self, n, seq_len, round=0):
-        strs = self.task.generate_random_strings_uniform(n, seq_len)
+        # strs = self.task.generate_random_strings_uniform(n, seq_len)
         # strs = self.task.generate_random_strings_beta(
         #     n, seq_len, alpha=[2.0, 1.0]
         # )
+        strs = self.task.generate_random_strings_balanced(n, seq_len)
         preds = self.classify(strs)
 
         pos_str, neg_str = [], []

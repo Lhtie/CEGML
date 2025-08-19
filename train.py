@@ -41,10 +41,12 @@ if __name__ == "__main__":
     parser.add_argument("--num_layers", type=int, default=2)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--num_train_str_per_ce", type=int, default=1)
-    parser.add_argument("--rounds", type=int, default=150)
+    parser.add_argument("--mode_train_str_from_ce", type=str, default="dfa_state",
+                        choices=["dfa_state", "random"])
+    parser.add_argument("--rounds", type=int, default=250)
     parser.add_argument("--epochs_per_round", type=int, default=3)
     parser.add_argument("--lr", type=float, default=0.001)
-    parser.add_argument("--mode", type=str, default="normal_CEs",
+    parser.add_argument("--mode", type=str, default="random_CEs",
                         choices=["50_50_CEs", "100_CEs", "random_CEs", "normal_CEs"])
     args = parser.parse_args()
 
@@ -125,7 +127,12 @@ if __name__ == "__main__":
         print(pos_ex)
         print(" ".join(["Pos" if learner.classify([ex])[0] == 1 else "Neg" for ex in pos_ex]))
 
-        ce_str, ce_y = teacher.generate_counterexamples(args.num_train_str_per_ce, neg_ex, pos_ex)
+        ce_str, ce_y = teacher.generate_counterexamples(
+            args.num_train_str_per_ce, 
+            neg_ex, 
+            pos_ex,
+            mode=args.mode_train_str_from_ce
+        )
         # num_train_samples += len(neg_ex) + len(pos_ex)
         num_train_samples += len(ce_str)
         print("Counterexamples")
@@ -158,4 +165,5 @@ if __name__ == "__main__":
         print(f"Accuracy at epoch {epoch}: {eval}, total training samples: {num_train_samples}")
 
     plot_loss_curve(agg_losses, "loss_curves", "Overall_Train_Losses")
-    plot_accuracy_curve(num_samples, accs, "accuracy_curves", f"Overall_Accuracy_{args.mode}")
+    plot_accuracy_curve(list(range(len(accs))), accs, "accuracy_curves", 
+                        f"Regex={args.regex}-mode={args.mode}-train_length={args.max_length}-test_length={args.test_max_length}-num_aug={args.num_train_str_per_ce}-aug_strategy={args.mode_train_str_from_ce}-epochs_per_round={args.epochs_per_round}")

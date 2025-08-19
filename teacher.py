@@ -47,27 +47,33 @@ class Teacher:
             strings, labels = zip(*sampled)
             return list(strings), list(labels)
 
-    def _gen_from_ex(self, ex, n):
-        state = self._get_final_state(self.task.dfa, ex)
-        return self._generate_strings_to_state(
-            self.task.dfa, 
-            state, 
-            max_depth=self.task.max_length,
-            num_samples=n
-        )
+    def _gen_from_ex(self, ex, n, mode):
+        if mode == "dfa_state":
+            state = self._get_final_state(self.task.dfa, ex)
+            return self._generate_strings_to_state(
+                self.task.dfa, 
+                state, 
+                max_depth=self.task.max_length,
+                num_samples=n
+            )
+        elif mode == "random":
+            x = self.task.generate_random_strings_uniform(n, self.task.max_length)
+            y = [int(self.task.accepts(s)) for s in x]
+            return x, y
+                   
 
-    def generate_counterexamples(self, n, neg_ex, pos_ex):
+    def generate_counterexamples(self, n, neg_ex, pos_ex, mode="dfa_state"):
         ce_x, ce_y = [], []
         for ex in neg_ex:
             gt = self.task.accepts(ex)
             if gt:
-                x, y = self._gen_from_ex(ex, n - 1)
+                x, y = self._gen_from_ex(ex, n - 1, mode)
                 ce_x += [ex] + x
                 ce_y += [int(gt)] + y
         for ex in pos_ex:
             gt = self.task.accepts(ex)
             if not gt:
-                x, y = self._gen_from_ex(ex, n - 1)
+                x, y = self._gen_from_ex(ex, n - 1, mode)
                 ce_x += [ex] + x
                 ce_y += [int(gt)] + y
         return ce_x, ce_y
@@ -82,7 +88,7 @@ class Teacher:
         return strings
     
     def judge(self, classifier, n, batch_size, seq_len):
-        inputs = self._generate_random_ab_strings(n, seq_len)
+        inputs = self.task.generate_random_strings_balanced(n, seq_len)
         labels = [int(self.task.accepts(i)) for i in inputs]
 
         pred = classifier(inputs, batch_size)
