@@ -14,7 +14,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--regex", type=str, default="(a b + b a) (a + b b + c)* (a c + b a)")        # (a b + b a) (a + b b + c)* (a c + b a)
+    parser.add_argument("--regex", type=str, default="(a(a)*b)*")        # (a b + b a) (a + b b + c)* (a c + b a)
     parser.add_argument("--max_length", type=int, default=8)
     parser.add_argument("--test_max_length", type=int, default=8)
     parser.add_argument("--hidden_dim", type=int, default=64)
