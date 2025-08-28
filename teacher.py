@@ -24,11 +24,13 @@ class Teacher:
 
         while queue:
             current_state, path, depth = queue.popleft()
+            if depth > max_depth:
+                continue
             if current_state == target_state:
                 string = "".join(path)
                 strings.append(string)
                 labels.append(int(current_state in dfa.final_states))
-            if depth > max_depth or current_state is None:
+            elif current_state == None:
                 continue
 
             for symbol in dfa.symbols:
@@ -37,10 +39,10 @@ class Teacher:
                     next_state = next_state[0]
                 else:
                     next_state = None
-                queue.append((next_state, path + [symbol.value], depth + 1))
+                queue.append((next_state, path + [symbol.value], depth + len(symbol.value)))
 
         paired = list(zip(strings, labels))
-        sampled = random.sample(paired, num_samples)
+        sampled = random.choices(paired, k=num_samples)
         if num_samples == 0:
             return [], []
         else:
@@ -60,7 +62,10 @@ class Teacher:
             x = self.task.generate_random_strings_uniform(n, self.task.max_length)
             y = [int(self.task.accepts(s)) for s in x]
             return x, y
-                   
+        elif mode == "repeat":
+            x = [ex] * n
+            y = [int(self.task.accepts(ex))] * n
+            return x, y
 
     def generate_counterexamples(self, n, neg_ex, pos_ex, mode="dfa_state"):
         ce_x, ce_y = [], []
@@ -78,16 +83,28 @@ class Teacher:
                 ce_y += [int(gt)] + y
         return ce_x, ce_y
     
-    def _generate_random_ab_strings(self, m, n):
-        strings = []
-        alphabet = [chr(c + ord('a')) for c in range(self.task.num_alphabets)]
-        for _ in range(m):
-            length = random.randint(1, n)
-            s = ''.join(random.choices(alphabet, k=length))
-            strings.append(s)
-        return strings
+    def generate_posexamples(self, n, seq_len):
+        final_states = list(self.task.dfa.final_states)
+        xs, ys = [], []
+        nums = [0] * len(final_states)
+        for x in range(n):
+            bucket_id = random.randrange(len(final_states))
+            nums[bucket_id] += 1
+
+        for i, num in enumerate(nums):
+            x, y = self._generate_strings_to_state(
+                self.task.dfa,
+                final_states[i],
+                max_depth=seq_len,
+                num_samples=num
+            )
+            xs += x
+            ys += y
+        return xs, ys
     
     def judge(self, classifier, n, batch_size, seq_len):
+        # pos_x, pos_y = self.generate_posexamples(int(n * 0.4), seq_len)
+        # inputs = pos_x + self.task.generate_random_strings_uniform(n - int(n * 0.4), seq_len)
         inputs = self.task.generate_random_strings_balanced(n, seq_len)
         labels = [int(self.task.accepts(i)) for i in inputs]
 

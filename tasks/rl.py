@@ -12,8 +12,7 @@ class SimplyRegularLanguage:
 
         self.nfa = self.regex.to_epsilon_nfa()
         self.dfa = self.nfa.to_deterministic().minimize()
-        # print(len(self.dfa.states))
-        self.num_alphabets = 2      # a, b
+        self.num_alphabets = len(self.dfa.symbols)
         self.num_categories = 2     # positive | negative
 
     def to_tensor(self, batched_str):
@@ -48,13 +47,13 @@ class SimplyRegularLanguage:
             strings.append(''.join(alphabet[i] for i in indices))
         return strings
     
-    def generate_random_strings_balanced(self, m, n):
+    def generate_random_strings_balanced(self, m, n, rate=0.5):
         strings = []
         alphabet = [chr(c + ord('a')) for c in range(self.num_alphabets)]
         for _ in range(m):
-            length = random.randint(1, n)
-            accepted = random.choice([True, False])
-            for _ in range(10):
+            length = random.randint(4, n)
+            accepted = random.random() < rate
+            while True:
                 s = ''.join(random.choices(alphabet, k=length))
                 if (accepted and self.accepts(s)) or (not accepted and not self.accepts(s)):
                     strings.append(s)

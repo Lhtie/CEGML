@@ -1,5 +1,6 @@
 import torch
 import argparse
+import random
 import numpy as np
 from tqdm import tqdm
 
@@ -34,21 +35,28 @@ def print_dfa_transitions(dfa):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--regex", type=str, default="(a(a)*b)*")
+    parser.add_argument("--regex", type=str, default="(a b + b a) (a + b b + c)* (a c + b a)")           # (a(a)*b)* or (a b + b a) (a + b b + c)* (a c + b a)
     parser.add_argument("--max_length", type=int, default=8)
     parser.add_argument("--test_max_length", type=int, default=8)
     parser.add_argument("--hidden_dim", type=int, default=64)
     parser.add_argument("--num_layers", type=int, default=2)
-    parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--num_train_str_per_ce", type=int, default=1)
+    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--num_train_str_per_ce", type=int, default=3)
     parser.add_argument("--mode_train_str_from_ce", type=str, default="dfa_state",
-                        choices=["dfa_state", "random"])
-    parser.add_argument("--rounds", type=int, default=250)
+                        choices=["dfa_state", "random", "repeat"])
+    parser.add_argument("--rounds", type=int, default=300)
     parser.add_argument("--epochs_per_round", type=int, default=3)
     parser.add_argument("--lr", type=float, default=0.001)
-    parser.add_argument("--mode", type=str, default="random_CEs",
+    parser.add_argument("--mode", type=str, default="normal_CEs",
                         choices=["50_50_CEs", "100_CEs", "random_CEs", "normal_CEs"])
+    parser.add_argument("--preheat", default=False, action="store_true")
+    parser.add_argument("--seed", type=int, default=43)
     args = parser.parse_args()
+
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed(args.seed)
 
     task = SimplyRegularLanguage(args.regex, args.max_length)
     model = RNN(
@@ -62,8 +70,27 @@ if __name__ == "__main__":
     teacher = Teacher(task)
     learner = Learner(model, task)
 
+    if args.preheat:
+        x = task.generate_random_strings_balanced(128 , args.max_length)
+        y = [int(task.accepts(ex)) for ex in x]
+        losses = learner.train(
+            x, y, 
+            epochs=args.epochs_per_round,
+            lr=args.lr,
+            batch_size=args.batch_size,
+            round=0
+        )
+
+        eval = teacher.judge(
+            classifier=learner.classify,
+            n=args.batch_size * 32,
+            batch_size=args.batch_size,
+            seq_len=args.test_max_length,
+        )
+        print(f"Pretrained on {len(x)} supervised examples, Eval Acc: {eval}")
+
     agg_losses, num_samples, accs = [], [], []
-    num_train_samples = 0
+    num_train_samples, num_train_pos_sam = 0, 0
     for epoch in tqdm(range(args.rounds)):
         if args.mode == "50_50_CEs":
             exs = learner.generate_examples(
@@ -133,26 +160,24 @@ if __name__ == "__main__":
             pos_ex,
             mode=args.mode_train_str_from_ce
         )
-        # num_train_samples += len(neg_ex) + len(pos_ex)
-        num_train_samples += len(ce_str)
         print("Counterexamples")
         print(ce_str)
         print(" ".join(["Pos" if y == 1 else "Neg" for y in ce_y]))
         if ce_str == [] and ce_y == []:
             print(f"Round {epoch}: No counterexamples found, skipped.")
-            continue
-        # if len(np.unique(ce_y)) != task.num_categories:
-        #     print(f"Round {epoch}: Not enough categories provided in training examples, skipped.")
-        #     continue
+        else:
+            # num_train_samples += len(neg_ex) + len(pos_ex)
+            num_train_samples += len(ce_str)
+            num_train_pos_sam += np.sum(np.array(ce_y) == 1)
 
-        losses = learner.train(
-            ce_str, ce_y, 
-            epochs=args.epochs_per_round,
-            lr=args.lr,
-            batch_size=args.batch_size,
-            round=epoch
-        )
-        agg_losses += losses
+            losses = learner.train(
+                ce_str, ce_y, 
+                epochs=args.epochs_per_round,
+                lr=args.lr,
+                batch_size=args.batch_size,
+                round=epoch
+            )
+            agg_losses += losses
 
         eval = teacher.judge(
             classifier=learner.classify,
@@ -164,6 +189,8 @@ if __name__ == "__main__":
         accs.append(eval)
         print(f"Accuracy at epoch {epoch}: {eval}, total training samples: {num_train_samples}")
 
+    print(f"Pos train / Tot train = {num_train_pos_sam} / {num_train_samples}")
+
     plot_loss_curve(agg_losses, "loss_curves", "Overall_Train_Losses")
-    plot_accuracy_curve(list(range(len(accs))), accs, "accuracy_curves", 
+    plot_accuracy_curve(num_samples, accs, "accuracy_curves", 
                         f"Regex={args.regex}-mode={args.mode}-train_length={args.max_length}-test_length={args.test_max_length}-num_aug={args.num_train_str_per_ce}-aug_strategy={args.mode_train_str_from_ce}-epochs_per_round={args.epochs_per_round}")

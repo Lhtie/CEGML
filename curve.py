@@ -52,29 +52,31 @@ def smooth(y, window_size=5):
 if __name__ == "__main__":
     # names = ["baseline", "50_50_CEs", "100_CEs", "random_CEs", "normal_CEs"]
     # colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple']
-    # names = ["baseline", "random_CEs"]
+    # names = ["baseline", "normal_CEs"]
     # colors = ['tab:blue', 'tab:red']
-    names = ["num_aug=1-aug_strategy=dfa_state", "num_aug=5-aug_strategy=dfa_state", "num_aug=5-aug_strategy=random"]
-    colors = ['tab:blue', 'tab:orange', 'tab:green']
+    names = ["posrate=0.05", "posrate=0.1", "posrate=0.23", "posrate=0.3", "posrate=0.5", "posrate=0.8"]
+    colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown']
+    # names = ["num_aug=1-aug_strategy=dfa_state", "num_aug=5-aug_strategy=dfa_state", "num_aug=5-aug_strategy=random", "num_aug=5-aug_strategy=repeat"]
+    # colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:purple']
 
     data = {}
     for name in names:
-        with open(os.path.join("accuracy_curves", f"Regex=(a(a)*b)*-mode=50_50_CEs-train_length=8-test_length=8-{name}-epochs_per_round=3.json"), "r") as f:
+        with open(os.path.join("accuracy_curves", f"Regex=(a b + b a) (a + b b + c)* (a c + b a)-mode=baseline-train_length=8-test_length=8-num_aug=1-aug_strategy=dfa_state-epochs_per_round=3-{name}.json"), "r") as f:
             data[name] = json.load(f)
 
     plt.figure(figsize=(10, 6))
     for (k, d), c in zip(data.items(), colors):
         num_samples = d["num_samples"]
         accs = d["accs"]
-        smoothed_accs = smooth(accs, window_size=5)
+        smoothed_accs = smooth(accs, window_size=9)
 
         plt.plot(num_samples, smoothed_accs, label=k, color=c, linewidth=2)
         
     plt.title('Smoothed Accuracy Curve', fontsize=16)
-    plt.xlabel('#TrainingRounds', fontsize=14)
+    plt.xlabel('#TrainingSamples', fontsize=14)
     plt.ylabel('Accuracy', fontsize=14)
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
 
-    plt.savefig(os.path.join("accuracy_curves", "Aug_Cmp_50_50.png"), dpi=500)
+    plt.savefig(os.path.join("accuracy_curves", "complex_baseline_generalizability.png"), dpi=500)

@@ -14,16 +14,23 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--regex", type=str, default="(a(a)*b)*")
+    parser.add_argument("--regex", type=str, default="(a b + b a) (a + b b + c)* (a c + b a)")        # (a b + b a) (a + b b + c)* (a c + b a)
     parser.add_argument("--max_length", type=int, default=8)
     parser.add_argument("--test_max_length", type=int, default=8)
     parser.add_argument("--hidden_dim", type=int, default=64)
     parser.add_argument("--num_layers", type=int, default=2)
-    parser.add_argument("--batch_size", type=int, default=12)
-    parser.add_argument("--rounds", type=int, default=200)
+    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--rounds", type=int, default=300)
     parser.add_argument("--epochs_per_round", type=int, default=3)
     parser.add_argument("--lr", type=float, default=0.001)
+    parser.add_argument("--posrate", type=float, default=0.5)
+    parser.add_argument("--seed", type=int, default=43)
     args = parser.parse_args()
+
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed(args.seed)
 
     task = SimplyRegularLanguage(args.regex, args.max_length)
     model = RNN(
@@ -39,21 +46,23 @@ if __name__ == "__main__":
     num_samples, accs = [], []
     num_train_samples = 0
     for epoch in tqdm(range(args.rounds)):
-        ce_str = task.generate_random_strings_uniform(args.batch_size, args.max_length)
-        # ce_str = task.generate_random_strings_beta(
+        # str = task.generate_random_strings_uniform(args.batch_size, args.max_length)
+        # str = task.generate_random_strings_beta(
         #     args.batch_size,
         #     args.max_length,
         #     alpha=[2.0, 1.0]
         # )
-        ce_y = [int(task.accepts(i)) for i in ce_str]
+        str = task.generate_random_strings_balanced(args.batch_size, args.max_length, rate=args.posrate)
+        y = [int(task.accepts(i)) for i in str]
+        print(str)
 
         learner.train(
-            ce_str, ce_y, 
+            str, y, 
             epochs=3,
             lr=args.lr,
             batch_size=args.batch_size
         )
-        num_train_samples += len(ce_str)
+        num_train_samples += len(str)
 
         if True:
             eval = teacher.judge(
@@ -67,4 +76,5 @@ if __name__ == "__main__":
             num_samples.append(num_train_samples)
             accs.append(eval)
 
-    plot_accuracy_curve(num_samples, accs, "accuracy_curves", "Overall_Accuracy_baseline")
+    plot_accuracy_curve(num_samples, accs, "accuracy_curves", 
+                        f"Regex={args.regex}-mode=baseline-train_length={args.max_length}-test_length={args.test_max_length}-num_aug=1-aug_strategy=dfa_state-epochs_per_round={args.epochs_per_round}-posrate={args.posrate}")
