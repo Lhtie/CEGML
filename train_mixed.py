@@ -35,9 +35,10 @@ def print_dfa_transitions(dfa):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--regex", nargs="+", default=["b(a(a)*b)*", "(b(b)*a)*b", "b(ab)*", "(a+bab)*", "(b+aba)*"])  # bababab...
-    parser.add_argument("--max_length", type=int, default=8)
-    parser.add_argument("--test_max_length", type=int, default=8)
+    parser.add_argument("--regex", nargs="+", default=["b(a(a)*b)*", "(b(b)*a)*b", "b(a b)*", "(a+b a b)*", "(b+a b a)*"])  # bababab...
+    parser.add_argument("--target_regex", type=str, default="(b a)*b")
+    parser.add_argument("--max_length", type=int, default=9)
+    parser.add_argument("--test_max_length", type=int, default=9)
     parser.add_argument("--hidden_dim", type=int, default=64)
     parser.add_argument("--num_layers", type=int, default=2)
     parser.add_argument("--batch_size", type=int, default=16)
@@ -56,7 +57,9 @@ if __name__ == "__main__":
     num_alphabets = 0
     for r in args.regex:
         tasks.append(SimplyRegularLanguage(r, args.max_length))
+        tasks[-1].num_categories = 5
         num_alphabets = max(num_alphabets, tasks[-1].num_alphabets)
+    overall_task = SimplyRegularLanguage(args.target_regex, args.max_length)
 
     model = RNN(
         input_dim=num_alphabets,
@@ -65,14 +68,14 @@ if __name__ == "__main__":
         num_layers=args.num_layers,
         device=device
     )
-    learner = Learner(model, None)
+    learner = Learner(model, tasks[0])
 
     agg_losses, num_samples, accs = [], [], []
     num_train_samples, num_train_pos_sam = 0, 0
     for epoch in tqdm(range(args.rounds)):
-        strs = tasks[0].generate_random_strings_balanced(
-            n=args.batch_size, 
-            seq_len=args.max_length
+        strs = tasks[0].generate_random_strings_uniform(
+            m=args.batch_size, 
+            n=args.max_length
         )
         ys = []
         for str in strs:
@@ -92,9 +95,16 @@ if __name__ == "__main__":
         agg_losses += losses
 
         # Tests
-        inputs = tasks[0].generate_random_strings_balanced(
-            n=args.batch_size * 32, 
-            seq_len=args.test_max_length
+        def len_gen(n):
+            length = random.randint(1, n)
+            if length % 2 == 0:
+                length += 1
+            return length
+
+        inputs = overall_task.generate_random_strings_balanced(
+            m=args.batch_size * 32, 
+            n=args.test_max_length,
+            len_gen=len_gen
         )
         labels = []
         for str in inputs:
@@ -102,7 +112,7 @@ if __name__ == "__main__":
             for task in tasks:
                 ct += int(task.accepts(str))
             labels.append(int(ct == len(tasks)))
-        pred = learner.classifier(inputs, args.batch_size)
+        pred = learner.classify(inputs, args.batch_size)
         eval = sum([int(x == y) for x, y in zip(pred, labels)]) / len(pred)
 
         num_samples.append(num_train_samples)

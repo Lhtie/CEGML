@@ -47,11 +47,14 @@ class SimplyRegularLanguage:
             strings.append(''.join(alphabet[i] for i in indices))
         return strings
     
-    def generate_random_strings_balanced(self, m, n, rate=0.5):
+    def generate_random_strings_balanced(self, m, n, rate=0.5, len_gen=None):
         strings = []
         alphabet = [chr(c + ord('a')) for c in range(self.num_alphabets)]
         for _ in range(m):
-            length = random.randint(4, n)
+            if len_gen == None:
+                length = random.randint(4, n)
+            else:
+                length = len_gen(n)
             accepted = random.random() < rate
             while True:
                 s = ''.join(random.choices(alphabet, k=length))
