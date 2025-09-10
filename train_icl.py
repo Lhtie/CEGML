@@ -54,6 +54,7 @@ Evaluating Data:
 {1}
 
 Please answer True/False to each evaluating data, and output a single list containing all the answers in order. Eg: [True, False, False, ...]
+**Only output the list, do not include any other text.**
 """
 
 train_data_template = "String: {0}\nLabel: {1}"
@@ -74,13 +75,7 @@ def run(mkey, model, tokenizer, msgdict, msg, temp=0.3):
         sleep(1)
         outputs = model(inputs, max_tokens=1024, temperature=temp)
         ch = outputs.choices[0]
-        print("finish_reason:", ch.finish_reason)        # 看是 stop/length/tool_calls/content_filter/...
-        print("content_repr:", repr(ch.message.content)) # 看是不是空字符串/全空白
-        print("usage:", getattr(outputs, "usage", None))    # 看 prompt/ completion tokens
-        msgdict.append({
-            'role': 'assistant',
-            'content': outputs.choices[0].message.content
-        })
+        res = outputs.choices[0].message.content
     else:
         outputs = model.generate(
             inputs, 
@@ -91,11 +86,8 @@ def run(mkey, model, tokenizer, msgdict, msg, temp=0.3):
             temperature=temp
         ) # other params: https://huggingface.co/docs/transformers/v4.39.3/en/main_classes/text_generation
         
-        msgdict.append({
-            'role': 'assistant',
-            'content': tokenizer.decode(outputs[0][len(inputs[0]):], skip_special_tokens=True)
-        })
-    return msgdict
+        res = tokenizer.decode(outputs[0][len(inputs[0]):], skip_special_tokens=True)
+    return msgdict, res
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -155,8 +147,9 @@ if __name__ == "__main__":
 
         # print(prompt)
 
-        msgdict = run(mkey, model, tokenizer, msgdict, prompt)
-        eval_pred = msgdict[-1]["content"][1:-1].split(",")
+        msgdict, res = run(mkey, model, tokenizer, msgdict, prompt)
+        print(f"Results at epoch {epoch}: {res}")
+        eval_pred = res[1:-1].split(",")
         eval = sum([int(x.strip() == y.strip()) for x, y in zip(eval_pred, eval_labels)]) / len(eval_labels)
 
         num_samples.append(len(train_ex))
@@ -166,8 +159,6 @@ if __name__ == "__main__":
         os.makedirs(".cache", exist_ok=True)
         with open(f".cache/msgdict.json", "w") as f:
             json.dump(msgdict, f, indent=4)
-
-    print(f"Pos train / Tot train = {num_train_pos_sam} / {num_train_samples}")
 
     plot_accuracy_curve(num_samples, accs, "accuracy_curves", 
                         f"icl_model={args.mkey}")
