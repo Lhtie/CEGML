@@ -25,30 +25,10 @@ modelpaths = {
         "ds-chat":      "deepseek-chat",
         "ds-reasoner":  "deepseek-reasoner",
         "gm2.5":        "gemini-2.5-flash",
+        "cl35":         "claude-3-5",
         "gpt3.5":       "gpt-3.5-turbo",
         "gpt4":         "gpt-4-turbo"
 }
-
-def print_dfa_transitions(dfa):
-    print("All states:")
-    for state in dfa.states:
-        print(f"  {state}")
-
-    print("\nStart state:")
-    print(f"  {dfa.start_state}")
-
-    print("\nAccept states:")
-    for state in dfa.final_states:
-        print(f"  {state}")
-
-    print("\nAll transitions:")
-    for state in dfa.states:
-        for symbol in dfa.symbols:
-            try:
-                target = dfa._transition_function(state, symbol)
-                print(f"  {state} --{symbol}--> {target}")
-            except KeyError:
-                continue  # No transition defined
 
 prompt_template = """Task: Infer a single regular language (unknown but fixed) from labeled examples, then classify new strings against that same rule.
 Training Data:
@@ -69,7 +49,7 @@ def tokens_of_text(enc, text) -> int:
     return len(enc.encode(text, disallowed_special=()))
 
 def useAPI(mkey):
-    if mkey.startswith(("gpt3", "gpt4")):
+    if mkey.startswith(("gpt", "ds", "gm", "cl")):
         return True
     return False
 
@@ -139,6 +119,8 @@ if __name__ == "__main__":
             oai_client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         elif mkey.startswith("gm"):
             oai_client = OpenAI(api_key=api_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
+        elif mkey.startswith("cl"):
+            oai_client = OpenAI(api_key=api_key, base_url="https://api.anthropic.com/v1")
         model = lambda msgdict, **k : oai_client.chat.completions.create(
                 messages = msgdict,
                 model = mpath,
