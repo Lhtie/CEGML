@@ -3,6 +3,7 @@ import argparse
 import random
 import os
 import json
+import re
 import numpy as np
 from tqdm import tqdm
 from openai import OpenAI
@@ -53,14 +54,16 @@ Training Data:
 Evaluating Data:
 {1}
 
-Please answer True/False to each evaluating data, and output a single list containing all the answers in order. Eg: [True, False, False, ...]
+- Please answer True/False to each line of the evaluating data.
+- You could think step by step, and finally output a list containing all the answers in order.
+- Please wrap your final answer in <ans> and </ans> tags, for example: ... <ans>[True, False, ...]</ans>
 """
 
 train_data_template = "String: {0}\nLabel: {1}"
 eval_data_template = "String: {0}"
 
-def run(mkey, model, tokenizer, msgdict, msg, temp=0.3):
-    msgdict.append({ 'role': 'user', 'content': msg })
+def run(mkey, model, tokenizer, msg, temp=0.3):
+    msgdict = [{'role': 'user', 'content': msg}]
     if mkey.startswith(("gpt3", "gpt4")):
         inputs = msgdict
     else:
@@ -73,7 +76,6 @@ def run(mkey, model, tokenizer, msgdict, msg, temp=0.3):
     if mkey.startswith(("gpt3", "gpt4")):
         sleep(1)
         outputs = model(inputs, max_tokens=1024, temperature=temp)
-        ch = outputs.choices[0]
         res = outputs.choices[0].message.content
     else:
         outputs = model.generate(
@@ -86,7 +88,16 @@ def run(mkey, model, tokenizer, msgdict, msg, temp=0.3):
         ) # other params: https://huggingface.co/docs/transformers/v4.39.3/en/main_classes/text_generation
         
         res = tokenizer.decode(outputs[0][len(inputs[0]):], skip_special_tokens=True)
-    return msgdict, res
+    return res
+
+def extract_ans(res):
+    match = re.search(r"<ans>\s*(\[.*?\])\s*</ans>", res, re.DOTALL)
+    if match:
+        ans_str = match.group(1)
+        ans = [x.strip() for x in ans_str[1:-1].split(",")]
+        return ans
+    else:
+        return None
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -94,8 +105,9 @@ if __name__ == "__main__":
     parser.add_argument("--max_length", type=int, default=8)
     parser.add_argument("--test_max_length", type=int, default=8)
     parser.add_argument("--mkey", type=str, default="gpt3")
-    parser.add_argument("--batch_size", type=int, default=16)
-    parser.add_argument("--rounds", type=int, default=5)
+    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--eval_size", type=int, default=32)
+    parser.add_argument("--rounds", type=int, default=10)
     parser.add_argument("--seed", type=int, default=43)
     args = parser.parse_args()
 
@@ -130,16 +142,16 @@ if __name__ == "__main__":
     msgdict = {}
     for epoch in tqdm(range(args.rounds)):
         train_ex = task.generate_random_strings_balanced(
-            n=args.batch_size, 
-            m=args.max_length
+            m=args.batch_size, 
+            n=args.max_length
         )
         train_labels = ["True" if task.accepts(x) else "False" for x in train_ex]
         agg_train_ex += train_ex
         agg_train_labels += train_labels
 
         eval_ex = task.generate_random_strings_balanced(
-            n=args.batch_size, 
-            m=args.max_length * 8
+            m=args.eval_size, 
+            n=args.max_length
         )
         eval_labels = ["True" if task.accepts(x) else "False" for x in eval_ex]
 
@@ -157,7 +169,8 @@ if __name__ == "__main__":
             })
 
             pred = extract_ans(response)
-            acc += int(pred == label)
+            if pred is not None:
+                acc += int(pred[0] == label)
 
         acc /= len(eval_ex)
         num_samples.append(len(agg_train_ex))
