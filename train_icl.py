@@ -172,7 +172,7 @@ if __name__ == "__main__":
             })
 
             pred = extract_ans(response)
-            if pred is not None:
+            if pred is not None and len(pred) == 1:
                 acc += int(pred[0] == label)
 
         acc /= len(eval_ex)
