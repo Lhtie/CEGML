@@ -54,7 +54,6 @@ Evaluating Data:
 {1}
 
 Please answer True/False to each evaluating data, and output a single list containing all the answers in order. Eg: [True, False, False, ...]
-**Only output the list, do not include any other text.**
 """
 
 train_data_template = "String: {0}\nLabel: {1}"
@@ -126,14 +125,17 @@ if __name__ == "__main__":
         model.eval()
 
     agg_losses, num_samples, accs = [], [], []
+    agg_train_ex, agg_train_labels = [], []
     num_train_samples, num_train_pos_sam = 0, 0
-    msgdict = []
+    msgdict = {}
     for epoch in tqdm(range(args.rounds)):
         train_ex = task.generate_random_strings_balanced(
             n=args.batch_size, 
             m=args.max_length
         )
         train_labels = ["True" if task.accepts(x) else "False" for x in train_ex]
+        agg_train_ex += train_ex
+        agg_train_labels += train_labels
 
         eval_ex = task.generate_random_strings_balanced(
             n=args.batch_size, 
@@ -141,20 +143,32 @@ if __name__ == "__main__":
         )
         eval_labels = ["True" if task.accepts(x) else "False" for x in eval_ex]
 
-        train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(train_ex, train_labels)])
-        eval_p = "\n".join(eval_data_template.format(ex) for ex in eval_ex)
-        prompt = prompt_template.format(train_p, eval_p)
+        train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)])
 
-        # print(prompt)
+        msgs = []
+        acc = 0
+        for ex, label in zip(eval_ex, eval_labels):
+            eval_p = eval_data_template.format(ex)
+            prompt = prompt_template.format(train_p, eval_p)
+            response = run(mkey, model, tokenizer, prompt)
+            msgs.append({
+                "Prompt": prompt,
+                "Response": response
+            })
 
-        msgdict, res = run(mkey, model, tokenizer, msgdict, prompt)
-        print(f"Results at epoch {epoch}: {res}")
-        eval_pred = res[1:-1].split(",")
-        eval = sum([int(x.strip() == y.strip()) for x, y in zip(eval_pred, eval_labels)]) / len(eval_labels)
+            pred = extract_ans(response)
+            acc += int(pred == label)
 
-        num_samples.append(len(train_ex))
-        accs.append(eval)
-        print(f"Accuracy at epoch {epoch}: {eval}, total training samples: {num_train_samples}")
+        acc /= len(eval_ex)
+        num_samples.append(len(agg_train_ex))
+        accs.append(acc)
+        print(f"Accuracy at epoch {epoch}: {acc}, total training samples: {len(agg_train_ex)}")
+
+        msgdict[epoch] = {
+            "Accuracy": acc,
+            "NumTrainingSamples": len(agg_train_ex),
+            "Logs": msgs
+        }
 
         os.makedirs(".cache", exist_ok=True)
         with open(f".cache/msgdict.json", "w") as f:
