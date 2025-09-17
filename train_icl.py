@@ -37,9 +37,9 @@ Training Data:
 Evaluating Data:
 {1}
 
-- Please answer True/False to each line of the evaluating data.
+- Please answer 0/1 to each line of the evaluating data.
 - You could think step by step, and finally output a list containing all the answers in order.
-- Please wrap your final answer in <ans> and </ans> tags, for example: ... <ans>[True, False, ...]</ans>
+- Please wrap your final answer in <ans> and </ans> tags, for example: ... <ans>[1, 0, ...]</ans>
 """
 
 train_data_template = "String: {0}\nLabel: {1}"
@@ -85,8 +85,11 @@ def extract_ans(res):
     match = re.search(r"<ans>\s*(\[.*?\])\s*</ans>", res, re.DOTALL)
     if match:
         ans_str = match.group(1)
-        ans = [x.strip() for x in ans_str[1:-1].split(",")]
-        return ans
+        try:
+            ans = [int(x.strip()) for x in ans_str[1:-1].split(",")]
+            return ans
+        except ValueError:
+            return None
     else:
         return None
 
@@ -145,7 +148,7 @@ if __name__ == "__main__":
             m=args.batch_size, 
             n=args.max_length
         )
-        train_labels = ["True" if task.accepts(x) else "False" for x in train_ex]
+        train_labels = [1 if task.accepts(x) else 0 for x in train_ex]
         agg_train_ex += train_ex
         agg_train_labels += train_labels
 
@@ -153,7 +156,7 @@ if __name__ == "__main__":
             m=args.eval_size, 
             n=args.max_length
         )
-        eval_labels = ["True" if task.accepts(x) else "False" for x in eval_ex]
+        eval_labels = [1 if task.accepts(x) else 0 for x in eval_ex]
 
         train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)])
 
