@@ -4,6 +4,7 @@ import random
 import os
 import json
 import re
+import tiktoken
 import numpy as np
 from tqdm import tqdm
 from openai import OpenAI
@@ -20,11 +21,13 @@ from keysecrets import api_key
 device_map = "cuda" if torch.cuda.is_available() else "cpu"
 device = torch.device(device_map)
 modelpaths = {
-        "ds7":      "deepseek-ai/deepseek-llm-7b-chat",
-        "gpt3":     "gpt-3.5-turbo",
-        "gpt4":     "gpt-4-turbo"
+        "ds7":          "deepseek-ai/deepseek-llm-7b-chat",
+        "ds-chat":      "deepseek-chat",
+        "ds-reasoner":  "deepseek-reasoner",
+        "gm2.5":        "gemini-2.5-flash",
+        "gpt3.5":       "gpt-3.5-turbo",
+        "gpt4":         "gpt-4-turbo"
 }
-oai_client = OpenAI(api_key=api_key)
 
 def print_dfa_transitions(dfa):
     print("All states:")
@@ -62,9 +65,17 @@ Evaluating Data:
 train_data_template = "String: {0}\nLabel: {1}"
 eval_data_template = "String: {0}"
 
+def tokens_of_text(enc, text) -> int:
+    return len(enc.encode(text, disallowed_special=()))
+
+def useAPI(mkey):
+    if mkey.startswith(("gpt3", "gpt4")):
+        return True
+    return False
+
 def run(mkey, model, tokenizer, msg, temp=0.3):
     msgdict = [{'role': 'user', 'content': msg}]
-    if mkey.startswith(("gpt3", "gpt4")):
+    if useAPI(mkey):
         inputs = msgdict
     else:
         inputs = tokenizer.apply_chat_template(
@@ -73,7 +84,7 @@ def run(mkey, model, tokenizer, msg, temp=0.3):
                 add_generation_prompt=True)
         inputs = inputs.to(device)
     
-    if mkey.startswith(("gpt3", "gpt4")):
+    if useAPI(mkey):
         sleep(1)
         outputs = model(inputs, max_tokens=1024, temperature=temp)
         res = outputs.choices[0].message.content
@@ -104,9 +115,9 @@ if __name__ == "__main__":
     parser.add_argument("--regex", type=str, default="(a(a)*b)*")           # (a(a)*b)* or (a b + b a) (a + b b + c)* (a c + b a)
     parser.add_argument("--max_length", type=int, default=8)
     parser.add_argument("--test_max_length", type=int, default=8)
-    parser.add_argument("--mkey", type=str, default="gpt3")
-    parser.add_argument("--batch_size", type=int, default=64)
-    parser.add_argument("--eval_size", type=int, default=32)
+    parser.add_argument("--mkey", type=str, default="gpt3.5")
+    parser.add_argument("--batch_size", type=int, default=128)
+    parser.add_argument("--eval_size", type=int, default=64)
     parser.add_argument("--rounds", type=int, default=10)
     parser.add_argument("--seed", type=int, default=43)
     args = parser.parse_args()
@@ -119,8 +130,15 @@ if __name__ == "__main__":
     task = SimplyRegularLanguage(args.regex, args.max_length)
     mkey = args.mkey
     mpath = modelpaths[mkey]
-    if args.mkey.startswith(("gpt3", "gpt4")):
+    if useAPI(args.mkey):
         tokenizer = None
+        if mkey.startswith("gpt"):
+            oai_client = OpenAI(api_key=api_key)
+            tokenizer = tiktoken.encoding_for_model(mpath)
+        elif mkey.startswith("ds"):
+            oai_client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        elif mkey.startswith("gm"):
+            oai_client = OpenAI(api_key=api_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
         model = lambda msgdict, **k : oai_client.chat.completions.create(
                 messages = msgdict,
                 model = mpath,
@@ -158,10 +176,13 @@ if __name__ == "__main__":
         train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)])
 
         msgs = []
-        acc = 0
+        acc, max_token_len = 0, 0
         for ex, label in zip(eval_ex, eval_labels):
             eval_p = eval_data_template.format(ex)
             prompt = prompt_template.format(train_p, eval_p)
+            if args.mkey.startswith("gpt"):
+                max_token_len = max(max_token_len, tokens_of_text(tokenizer, prompt))
+
             response = run(mkey, model, tokenizer, prompt)
             msgs.append({
                 "Prompt": prompt,
@@ -175,7 +196,7 @@ if __name__ == "__main__":
         acc /= len(eval_ex)
         num_samples.append(len(agg_train_ex))
         accs.append(acc)
-        print(f"Accuracy at epoch {epoch}: {acc}, total training samples: {len(agg_train_ex)}")
+        print(f"Accuracy at epoch {epoch}: {acc}, total training samples: {len(agg_train_ex)}, token length: {max_token_len}")
 
         msgdict[epoch] = {
             "Accuracy": acc,
@@ -188,4 +209,4 @@ if __name__ == "__main__":
             json.dump(msgdict, f, indent=4)
 
     plot_accuracy_curve(num_samples, accs, "accuracy_curves", 
-                        f"icl_model={args.mkey}")
+                        f"icl_model={args.mkey}_batch={args.batch_size}_eval={args.eval_size}")
