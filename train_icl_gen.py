@@ -5,11 +5,14 @@ import os
 import json
 import re
 import tiktoken
+import pynini
 import numpy as np
 from tqdm import tqdm
 from openai import OpenAI
 from time import sleep
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from pyformlang.regular_expression import Regex
+from pyformlang.finite_automaton import DeterministicFiniteAutomaton
 
 from modeling.RNN import RNN
 from tasks.rl import SimplyRegularLanguage
@@ -30,20 +33,18 @@ modelpaths = {
         "gpt4":         "gpt-4o"
 }
 
-prompt_template = """Task: Infer a single regular language (unknown but fixed) from labeled examples, then classify new strings against that same rule.
+prompt_template = """Task: Infer a single regular language (unknown but fixed) from labeled examples, then directly output the infered regex string that is valid for pyformlang.regular_expression.Regex.
+Syntax rules:
+- Union is | or +; concatenation is a space or a dot .; Kleene star is *; epsilon is epsilon or $.
+- Do not use ?, character classes [], {{m,n}}, lookaheads, or anchors.
+
+You could think step by step (keep it concise so that the final answer is outputed), and finally output the regex.
+Please wrap your final answer in <ans> and </ans> tags, for example: ... <ans>(a+b)*c</ans>
 Training Data:
 {0}
-
-Evaluating Data:
-{1}
-
-- Please answer 0/1 to each line of the evaluating data.
-- You could think step by step (keep it concise so that the final answer is outputed), and finally output a list containing all the answers in order.
-- Please wrap your final answer in <ans> and </ans> tags, for example: ... <ans>[1, 0, ...]</ans>
 """
 
 train_data_template = "String: {0}\nLabel: {1}"
-eval_data_template = "String: {0}"
 
 def tokens_of_text(enc, text) -> int:
     return len(enc.encode(text, disallowed_special=()))
@@ -83,16 +84,64 @@ def run(mkey, model, tokenizer, msg, temp=0.3):
     return res
 
 def extract_ans(res):
-    match = re.search(r"<ans>\s*(\[.*?\])\s*</ans>", res, re.DOTALL)
+    match = re.search(r"<ans>\s*(.*?)\s*</ans>", res, re.DOTALL)
     if match:
         ans_str = match.group(1)
-        try:
-            ans = [int(x.strip()) for x in ans_str[1:-1].split(",")]
-            return ans
-        except ValueError:
-            return None
+        return ans_str
     else:
         return None
+
+def sigma_from_chars(chars):
+    st = pynini.SymbolTable()
+    for i, ch in enumerate(chars, start=1):
+        st.add_symbol(ch, i)
+    return st
+
+def dfa_to_pynini_fst(dfa: DeterministicFiniteAutomaton, sigma: pynini.SymbolTable) -> pynini.Fst:
+    f = pynini.Fst()
+    idmap = {}
+    for q in dfa.states:
+        idmap[q] = f.add_state()
+    f.set_start(idmap[dfa.start_state])
+    for q in dfa.final_states:
+        f.set_final(idmap[q])
+    for q, a, t in dfa._transition_function.get_edges():
+        il = sigma.find(a.value) if hasattr(a, "value") else sigma.find(a)
+        if il == -1:
+            raise ValueError(f"symbol {a} not in sigma")
+        f.add_arc(idmap[q], pynini.Arc(il, il, pynini.Weight.one(f.weight_type()), idmap[t]))
+    f.set_input_symbols(sigma); f.set_output_symbols(sigma)
+    return pynini.minimize(pynini.determinize(f)).optimize()
+
+def regex_to_pynini_via_pyformlang(rx: str, sigma=None):
+    re = Regex(rx)
+    nfa = re.to_epsilon_nfa()
+    dfa = nfa.to_deterministic().minimize()
+    if sigma is None:
+        sigma = sigma_from_chars([s.value for s in dfa.symbols])
+    fst = dfa_to_pynini_fst(dfa, sigma)
+    return fst, sigma
+
+def equivalent_and_witness(A: pynini.Fst, B: pynini.Fst, sigma: pynini.SymbolTable):
+    """
+    Returns (equivalent: bool, witness: str or None).
+    We compute symmetric difference and test emptiness.
+    If nonempty, we extract a shortest witness string using shortestpath.
+    """
+    # Symmetric difference = (A\B) ∪ (B\A)
+    symdiff = (pynini.difference(A, B) | pynini.difference(B, A)).optimize()
+
+    # Empty FSA has no valid start
+    if symdiff.start() == pynini.NO_STATE_ID or symdiff.num_states() == 0:
+        return True, None
+
+    # Get a shortest string in the difference (witness)
+    sp = pynini.shortestpath(symdiff).optimize()
+    # Convert path to string using the symbol table
+    sp.set_input_symbols(sigma)
+    sp.set_output_symbols(sigma)
+    s = pynini.shortestpath(sp).string(token_type=sigma)  # or rewrite.lattice_to_string(sp)
+    return False, s
     
 def log_scaling(total, start, scale_factor):
     sizes = []
@@ -112,11 +161,9 @@ if __name__ == "__main__":
     parser.add_argument("--tot_train_size", type=int, default=1280)
     parser.add_argument("--start_size", type=int, default=5)
     parser.add_argument("--scale_factor", type=float, default=2.0)
-    parser.add_argument("--eval_size", type=int, default=32)
-    parser.add_argument("--eval_batch_size", type=int, default=4)
     parser.add_argument("--seed", type=int, default=43)
     parser.add_argument("--temp", type=float, default=0.0)
-    parser.add_argument("--retires", type=int, default=3)
+    parser.add_argument("--retries", type=int, default=3)
     args = parser.parse_args()
 
     np.random.seed(args.seed)
@@ -153,10 +200,11 @@ if __name__ == "__main__":
         )
         model.eval()
 
-    config_name = f"icl_model={args.mkey}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}_totEval={args.eval_size}_evalBatch={args.eval_batch_size}"
+    config_name = f"icl_gen_model={args.mkey}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}"
     dataset = f".cache/dataset_regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
     with open(dataset, "r") as f:
         data = json.load(f)
+    dfa_gt, sigma = regex_to_pynini_via_pyformlang(args.regex)
 
     agg_losses, num_samples, accs = [], [], []
     agg_train_ex, agg_train_labels = [], []
@@ -171,38 +219,39 @@ if __name__ == "__main__":
         agg_train_ex += train_ex
         agg_train_labels += train_labels
 
-        eval_ex = data["eval_ex"]
-        eval_labels = data["eval_labels"]
-
         train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)])
 
         msgs = []
         acc, max_token_len = 0, 0
-        for i in tqdm(range(0, len(eval_ex), args.eval_batch_size)):
-            j = min(i+args.eval_batch_size, len(eval_ex))
-            eval_ex_batch = eval_ex[i:j]
-            eval_labels_batch = eval_labels[i:j]
-            eval_p = "\n".join([eval_data_template.format(ex) for ex in eval_ex_batch])
-
-            prompt = prompt_template.format(train_p, eval_p)
+        for i in range(args.retries):
+            prompt = prompt_template.format(train_p)
             if args.mkey.startswith("gpt"):
                 max_token_len = max(max_token_len, tokens_of_text(tokenizer, prompt))
             elif args.mkey.startswith("ds"):
                 max_token_len = max(max_token_len, int(len(prompt) * 0.5))
 
             response = run(mkey, model, tokenizer, prompt, args.temp)
+            pred = extract_ans(response)
             msgs.append({
                 "Prompt": prompt,
-                "Response": response
+                "Response": response,
+                "Prediction": pred
             })
 
-            pred = extract_ans(response)
-            if pred is not None and len(pred) == len(eval_labels_batch):
-                acc += sum([int(p == l) for p, l in zip(pred, eval_labels_batch)])
+            dfa_pred = None
+            try:
+                dfa_pred, _ = regex_to_pynini_via_pyformlang(pred, sigma)
+                eq, witness = equivalent_and_witness(dfa_gt, dfa_pred, sigma)
+                acc = max(acc, int(eq))
+                msgs[-1]["Equivalent"] = eq
+                msgs[-1]["Witness"] = witness
 
-        acc /= len(eval_ex)
+            except Exception as e:
+                print(f"Error compiling regex: {e}")
+                continue
+
         accs.append(acc)
-        print(f"Accuracy at epoch {epoch}: {acc}, total training samples: {len(agg_train_ex)}, token length: {max_token_len}")
+        print(f"Accuracy at epoch {epoch}: {acc}, token length: {max_token_len}")
 
         msgdict[epoch] = {
             "Accuracy": acc,

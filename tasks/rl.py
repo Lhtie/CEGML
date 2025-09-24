@@ -1,7 +1,10 @@
 import torch
 import random
 import numpy as np
+
 from pyformlang.regular_expression import Regex
+from collections import deque
+from pyformlang.finite_automaton import State, Symbol, DeterministicFiniteAutomaton
 
 class SimplyRegularLanguage:
     def __init__(self, regex_str, max_length):
@@ -24,6 +27,39 @@ class SimplyRegularLanguage:
                 tensor[i, j, ord(c) - ord('a')] = 1
             tensor[i, len(s), :] = 1
         return tensor, lengths
+    
+    def _generate_string_to_state(self, dfa, target_state, max_depth):
+        strings, labels = [], []
+        visited = set()
+
+        queue = deque([(dfa.start_state, [], 0)])
+        visited.add((dfa.start_state, 0))
+        alphabet = list(dfa.symbols)
+
+        while queue:
+            current_state, path, depth = queue.popleft()
+            if depth > max_depth:
+                continue
+            if current_state == target_state and depth > 0:
+                string = "".join(path)
+                strings.append(string)
+                labels.append(int(current_state in dfa.final_states))
+            elif current_state == None:
+                continue
+
+            random.shuffle(alphabet)
+            for symbol in alphabet:
+                next_state = dfa._transition_function(current_state, symbol)
+                if len(next_state) > 0:
+                    next_state = next_state[0]
+                else:
+                    next_state = None
+                if (next_state, depth + len(symbol.value)) not in visited:
+                    queue.append((next_state, path + [symbol.value], depth + len(symbol.value)))
+                    visited.add((next_state, depth + len(symbol.value)))
+
+        assert len(strings) > 0, "Cannot generate string to target state"
+        return random.choice(strings)
     
     def generate_random_strings_uniform(self, m, n):
         strings = []
@@ -51,17 +87,17 @@ class SimplyRegularLanguage:
         strings = []
         alphabet = [chr(c + ord('a')) for c in range(self.num_alphabets)]
         for _ in range(m):
-            if len_gen == None:
-                length = random.randint(4, n)
-            else:
-                length = len_gen(n)
             accepted = random.random() < rate
-            while True:
-                s = ''.join(random.choices(alphabet, k=length))
-                if (accepted and self.accepts(s)) or (not accepted and not self.accepts(s)):
-                    strings.append(s)
-                    # print(f"String {s} accepted {accepted}")
-                    break
+            if accepted:
+                s = self._generate_string_to_state(self.dfa, random.choice(list(self.dfa.final_states)), n)
+                strings.append(s)
+            else:
+                length = random.randint(1, n)
+                while True:
+                    s = ''.join(random.choices(alphabet, k=length))
+                    if not self.accepts(s):
+                        strings.append(s)
+                        break
         return strings
 
     def accepts(self, str):
