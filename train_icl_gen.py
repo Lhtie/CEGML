@@ -35,8 +35,8 @@ modelpaths = {
 
 prompt_template = """Task: Infer a single regular language (unknown but fixed) from labeled examples, then directly output the infered regex string that is valid for pyformlang.regular_expression.Regex.
 Syntax rules:
-- Union is | or +; concatenation is a space or a dot .; Kleene star is *; epsilon is epsilon or $.
-- Do not use ?, character classes [], {{m,n}}, lookaheads, or anchors.
+- Union is +; Concatenation is space-separated tokens (we do not need multi-char tokens); Kleene star is *;
+- Do not use |, ., ?, character classes [], {{m,n}}, lookaheads, or anchors.
 
 You could think step by step (keep it concise so that the final answer is outputed), and finally output the regex.
 Please wrap your final answer in <ans> and </ans> tags, for example: ... <ans>(a+b)*c</ans>
@@ -120,7 +120,7 @@ def regex_to_pynini_via_pyformlang(rx: str, sigma=None):
     if sigma is None:
         sigma = sigma_from_chars([s.value for s in dfa.symbols])
     fst = dfa_to_pynini_fst(dfa, sigma)
-    return fst, sigma
+    return dfa, fst, sigma
 
 def equivalent_and_witness(A: pynini.Fst, B: pynini.Fst, sigma: pynini.SymbolTable):
     """
@@ -204,7 +204,9 @@ if __name__ == "__main__":
     dataset = f".cache/dataset_regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
     with open(dataset, "r") as f:
         data = json.load(f)
-    dfa_gt, sigma = regex_to_pynini_via_pyformlang(args.regex)
+    dfa_gt, fst_gt, sigma = regex_to_pynini_via_pyformlang(args.regex)
+    eval_ex = data["eval_ex"]
+    eval_labels = data["eval_labels"]
 
     agg_losses, num_samples, accs = [], [], []
     agg_train_ex, agg_train_labels = [], []
@@ -240,11 +242,13 @@ if __name__ == "__main__":
 
             dfa_pred = None
             try:
-                dfa_pred, _ = regex_to_pynini_via_pyformlang(pred, sigma)
-                eq, witness = equivalent_and_witness(dfa_gt, dfa_pred, sigma)
+                dfa_pred, fst_pred, _ = regex_to_pynini_via_pyformlang(pred, sigma)
+                eq, witness = equivalent_and_witness(fst_gt, fst_pred, sigma)
                 acc = max(acc, int(eq))
                 msgs[-1]["Equivalent"] = eq
                 msgs[-1]["Witness"] = witness
+                msgs[-1]["scoreTrainSet"] = sum([int(int(dfa_pred.accepts(ex)) == label) for ex, label in zip(agg_train_ex, agg_train_labels)]) / len(agg_train_ex)
+                msgs[-1]["scoreEvalSet"] = sum([int(int(dfa_pred.accepts(ex)) == label) for ex, label in zip(eval_ex, eval_labels)]) / len(eval_ex)
 
             except Exception as e:
                 print(f"Error compiling regex: {e}")

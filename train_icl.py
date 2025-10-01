@@ -116,7 +116,7 @@ if __name__ == "__main__":
     parser.add_argument("--eval_batch_size", type=int, default=4)
     parser.add_argument("--seed", type=int, default=43)
     parser.add_argument("--temp", type=float, default=0.0)
-    parser.add_argument("--retires", type=int, default=3)
+    parser.add_argument("--retries", type=int, default=3)
     args = parser.parse_args()
 
     np.random.seed(args.seed)
@@ -190,15 +190,24 @@ if __name__ == "__main__":
             elif args.mkey.startswith("ds"):
                 max_token_len = max(max_token_len, int(len(prompt) * 0.5))
 
-            response = run(mkey, model, tokenizer, prompt, args.temp)
-            msgs.append({
-                "Prompt": prompt,
-                "Response": response
-            })
+            acc_retried = []
+            for retry in range(args.retries):
+                response = run(mkey, model, tokenizer, prompt, args.temp)
 
-            pred = extract_ans(response)
-            if pred is not None and len(pred) == len(eval_labels_batch):
-                acc += sum([int(p == l) for p, l in zip(pred, eval_labels_batch)])
+                pred = extract_ans(response)
+                if pred is not None and len(pred) == len(eval_labels_batch):
+                    acc_retried.append(sum([int(p == l) for p, l in zip(pred, eval_labels_batch)]))
+
+                msgs.append({
+                    "BatchIndices": (i, j),
+                    "Retry": retry,
+                    "Prompt": prompt,
+                    "Response": response,
+                    "Prediction": pred,
+                    "GroundTruth": eval_labels_batch
+                })
+            if len(acc_retried) > 0:
+                acc += np.mean(acc_retried)
 
         acc /= len(eval_ex)
         accs.append(acc)
