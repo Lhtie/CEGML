@@ -27,7 +27,8 @@ modelpaths = {
         "gm2.5":        "gemini-2.5-pro",
         "cl35":         "claude-3-5",
         "gpt3.5":       "gpt-3.5-turbo",
-        "gpt4":         "gpt-4o"
+        "gpt4":         "gpt-4o",
+        "gpt5":         "gpt-5",
 }
 
 prompt_template = """Task: Infer a single regular language (unknown but fixed) from labeled examples, then classify new strings against that same rule.
@@ -108,7 +109,7 @@ if __name__ == "__main__":
     parser.add_argument("--regex", type=str, default="(a(b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*")           # (a(a)*b)* or (a b + b a) (a + b b + c)* (a c + b a)
     parser.add_argument("--max_length", type=int, default=32)
     parser.add_argument("--eval_max_length", type=int, default=32)
-    parser.add_argument("--mkey", type=str, default="ds-chat")
+    parser.add_argument("--mkey", type=str, default="gpt-5")
     parser.add_argument("--tot_train_size", type=int, default=1280)
     parser.add_argument("--start_size", type=int, default=5)
     parser.add_argument("--scale_factor", type=float, default=2.0)
