@@ -67,7 +67,10 @@ def run(mkey, model, tokenizer, msg, temp=0.3):
     
     if useAPI(mkey):
         sleep(1)
-        outputs = model(inputs, max_tokens=8192, temperature=temp)
+        if mkey.startswith("gpt5"):
+            outputs = model(inputs, max_completion_tokens=32768)
+        else:
+            outputs = model(inputs, max_tokens=8192, temperature=temp)
         res = outputs.choices[0].message.content
         print(f"usage: {outputs.usage}")
     else:
@@ -109,7 +112,7 @@ if __name__ == "__main__":
     parser.add_argument("--regex", type=str, default="(a(b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*")           # (a(a)*b)* or (a b + b a) (a + b b + c)* (a c + b a)
     parser.add_argument("--max_length", type=int, default=32)
     parser.add_argument("--eval_max_length", type=int, default=32)
-    parser.add_argument("--mkey", type=str, default="gpt-5")
+    parser.add_argument("--mkey", type=str, default="gpt5")
     parser.add_argument("--tot_train_size", type=int, default=1280)
     parser.add_argument("--start_size", type=int, default=5)
     parser.add_argument("--scale_factor", type=float, default=2.0)
@@ -132,7 +135,8 @@ if __name__ == "__main__":
         tokenizer = None
         if mkey.startswith("gpt"):
             oai_client = OpenAI(api_key=api_key)
-            tokenizer = tiktoken.encoding_for_model(mpath)
+            if mkey.startswith(("gpt3", "gpt4")):
+                tokenizer = tiktoken.encoding_for_model(mpath)
         elif mkey.startswith("ds"):
             oai_client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         elif mkey.startswith("gm"):
@@ -186,7 +190,7 @@ if __name__ == "__main__":
             eval_p = "\n".join([eval_data_template.format(ex) for ex in eval_ex_batch])
 
             prompt = prompt_template.format(train_p, eval_p)
-            if args.mkey.startswith("gpt"):
+            if mkey.startswith(("gpt3", "gpt4")):
                 max_token_len = max(max_token_len, tokens_of_text(tokenizer, prompt))
             elif args.mkey.startswith("ds"):
                 max_token_len = max(max_token_len, int(len(prompt) * 0.5))
@@ -197,29 +201,39 @@ if __name__ == "__main__":
 
                 pred = extract_ans(response)
                 if pred is not None and len(pred) == len(eval_labels_batch):
-                    acc_retried.append(sum([int(p == l) for p, l in zip(pred, eval_labels_batch)]))
+                    acc_single = sum([int(p == l) for p, l in zip(pred, eval_labels_batch)])
+                    acc_retried.append(acc_single)
+                else:
+                    acc_single = None
 
                 msgs.append({
                     "BatchIndices": (i, j),
                     "Retry": retry,
                     "Prompt": prompt,
                     "Response": response,
+                    "Acc": acc_single,
                     "Prediction": pred,
                     "GroundTruth": eval_labels_batch
                 })
+                msgdict[epoch] = {
+                    "Logs": msgs
+                }
+                os.makedirs(".cache", exist_ok=True)
+                with open(f".cache/msgdict_{config_name}.json", "w") as f:
+                    json.dump(msgdict, f, indent=4)
+                
             if len(acc_retried) > 0:
                 acc += np.mean(acc_retried)
 
         acc /= len(eval_ex)
         accs.append(acc)
         print(f"Accuracy at epoch {epoch}: {acc}, total training samples: {len(agg_train_ex)}, token length: {max_token_len}")
-
+        
         msgdict[epoch] = {
             "Accuracy": acc,
             "NumTrainingSamples": len(agg_train_ex),
             "Logs": msgs
         }
-
         os.makedirs(".cache", exist_ok=True)
         with open(f".cache/msgdict_{config_name}.json", "w") as f:
             json.dump(msgdict, f, indent=4)
