@@ -89,7 +89,12 @@ class SimplyRegularLanguage:
         for _ in range(m):
             accepted = random.random() < rate
             if accepted:
-                s = self._generate_string_to_state(self.dfa, random.choice(list(self.dfa.final_states)), n)
+                while True:
+                    try:
+                        s = self._generate_string_to_state(self.dfa, random.choice(list(self.dfa.final_states)), n)
+                        break
+                    except AssertionError:
+                        continue
                 strings.append(s)
             else:
                 length = random.randint(1, n)

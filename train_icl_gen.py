@@ -30,7 +30,8 @@ modelpaths = {
         "gm2.5":        "gemini-2.5-pro",
         "cl35":         "claude-3-5",
         "gpt3.5":       "gpt-3.5-turbo",
-        "gpt4":         "gpt-4o"
+        "gpt4":         "gpt-4o",
+        "gpt5":         "gpt-5"
 }
 
 prompt_template = """Task: Infer a single regular language (unknown but fixed) from labeled examples, then directly output the infered regex string that is valid for pyformlang.regular_expression.Regex.
@@ -67,7 +68,10 @@ def run(mkey, model, tokenizer, msg, temp=0.3):
     
     if useAPI(mkey):
         sleep(1)
-        outputs = model(inputs, max_tokens=8192, temperature=temp)
+        if mkey.startswith("gpt5"):
+            outputs = model(inputs, max_completion_tokens=32768)
+        else:
+            outputs = model(inputs, max_tokens=8192, temperature=temp)
         res = outputs.choices[0].message.content
         print(f"usage: {outputs.usage}")
     else:
@@ -157,9 +161,9 @@ if __name__ == "__main__":
     parser.add_argument("--regex", type=str, default="(a(b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*")           # (a(a)*b)* or (a b + b a) (a + b b + c)* (a c + b a)
     parser.add_argument("--max_length", type=int, default=32)
     parser.add_argument("--eval_max_length", type=int, default=32)
-    parser.add_argument("--mkey", type=str, default="ds-chat")
-    parser.add_argument("--tot_train_size", type=int, default=1280)
-    parser.add_argument("--start_size", type=int, default=5)
+    parser.add_argument("--mkey", type=str, default="gpt5")
+    parser.add_argument("--tot_train_size", type=int, default=384)
+    parser.add_argument("--start_size", type=int, default=3)
     parser.add_argument("--scale_factor", type=float, default=2.0)
     parser.add_argument("--seed", type=int, default=43)
     parser.add_argument("--temp", type=float, default=0.0)
@@ -178,7 +182,8 @@ if __name__ == "__main__":
         tokenizer = None
         if mkey.startswith("gpt"):
             oai_client = OpenAI(api_key=api_key)
-            tokenizer = tiktoken.encoding_for_model(mpath)
+            if mkey.startswith(("gpt3", "gpt4")):
+                tokenizer = tiktoken.encoding_for_model(mpath)
         elif mkey.startswith("ds"):
             oai_client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         elif mkey.startswith("gm"):
@@ -200,7 +205,7 @@ if __name__ == "__main__":
         )
         model.eval()
 
-    config_name = f"icl_gen_model={args.mkey}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}"
+    config_name = f"icl_gen_model={args.mkey}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}_regex={args.regex}"
     dataset = f".cache/dataset_regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
     with open(dataset, "r") as f:
         data = json.load(f)
@@ -227,7 +232,7 @@ if __name__ == "__main__":
         acc, max_token_len = 0, 0
         for i in range(args.retries):
             prompt = prompt_template.format(train_p)
-            if args.mkey.startswith("gpt"):
+            if mkey.startswith(("gpt3", "gpt4")):
                 max_token_len = max(max_token_len, tokens_of_text(tokenizer, prompt))
             elif args.mkey.startswith("ds"):
                 max_token_len = max(max_token_len, int(len(prompt) * 0.5))
@@ -254,6 +259,13 @@ if __name__ == "__main__":
                 print(f"Error compiling regex: {e}")
                 continue
 
+            msgdict[epoch] = {
+                "Logs": msgs
+            }
+            os.makedirs(".cache", exist_ok=True)
+            with open(f".cache/msgdict_{config_name}.json", "w") as f:
+                json.dump(msgdict, f, indent=4)
+
         accs.append(acc)
         print(f"Accuracy at epoch {epoch}: {acc}, token length: {max_token_len}")
 
@@ -262,9 +274,8 @@ if __name__ == "__main__":
             "NumTrainingSamples": len(agg_train_ex),
             "Logs": msgs
         }
-
         os.makedirs(".cache", exist_ok=True)
         with open(f".cache/msgdict_{config_name}.json", "w") as f:
             json.dump(msgdict, f, indent=4)
 
-    plot_accuracy_curve(list(range(len(num_samples))), accs, "accuracy_curves", config_name)
+    # plot_accuracy_curve(list(range(len(num_samples))), accs, "accuracy_curves", config_name)

@@ -8,6 +8,17 @@ from tqdm import tqdm
 
 from tasks.rl import SimplyRegularLanguage
 
+regex_list = [
+    "(a(a)*b)*",                                # 2 states
+    "((a+b)c(a+b))*",                           # 3 states
+    "((a a)*+(b b)*+(c c)*)*",                  # 4 states
+    "(c(a+c)(a+b+c)a(b+c))*c",                  # 5 states
+    "((a+b)(b+c)(a+c)a(b+c)(a+b+c))*",          # 6 states
+    "((b+c)(a+b+c)a b c(a+c))*b",               # 7 states
+    "((a b)*+(a c)*+(b c)*)",                   # 8 states
+    "(a(b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*"       # 8 states
+]
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--regex", type=str, default="(a(b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*")
@@ -24,6 +35,10 @@ if __name__ == "__main__":
     torch.cuda.manual_seed(args.seed)
 
     task = SimplyRegularLanguage(args.regex, args.max_length)
+
+    for r in regex_list:
+        t = SimplyRegularLanguage(r, args.max_length)
+        print(f"{r}: {len(t.dfa.states)}")
 
     train_ex = task.generate_random_strings_balanced(
         m=args.tot_train_size, 

@@ -113,14 +113,15 @@ if __name__ == "__main__":
     parser.add_argument("--max_length", type=int, default=32)
     parser.add_argument("--eval_max_length", type=int, default=32)
     parser.add_argument("--mkey", type=str, default="gpt5")
-    parser.add_argument("--tot_train_size", type=int, default=1280)
-    parser.add_argument("--start_size", type=int, default=5)
+    parser.add_argument("--tot_train_size", type=int, default=384)
+    parser.add_argument("--start_size", type=int, default=3)
     parser.add_argument("--scale_factor", type=float, default=2.0)
     parser.add_argument("--eval_size", type=int, default=32)
     parser.add_argument("--eval_batch_size", type=int, default=4)
     parser.add_argument("--seed", type=int, default=43)
     parser.add_argument("--temp", type=float, default=0.0)
     parser.add_argument("--retries", type=int, default=3)
+    parser.add_argument("--use_ce", action="store_true", default=False)
     args = parser.parse_args()
 
     np.random.seed(args.seed)
@@ -158,7 +159,8 @@ if __name__ == "__main__":
         )
         model.eval()
 
-    config_name = f"icl_model={args.mkey}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}_totEval={args.eval_size}_evalBatch={args.eval_batch_size}"
+    config_name = f"icl_model={args.mkey}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}_totEval={args.eval_size}_evalBatch={args.eval_batch_size}"\
+                    + ("_ce" if args.use_ce else "")
     dataset = f".cache/dataset_regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
     with open(dataset, "r") as f:
         data = json.load(f)
@@ -167,18 +169,38 @@ if __name__ == "__main__":
     agg_train_ex, agg_train_labels = [], []
     msgdict = {}
     num_samples = log_scaling(args.tot_train_size, args.start_size, args.scale_factor)
+    train_samples = []
     print(f"Training sizes per epoch: {num_samples}")
     for epoch in tqdm(range(len(num_samples))):
         l = len(agg_train_ex)
         r = num_samples[epoch]
         train_ex = data["train_ex"][l:r]
         train_labels = data["train_labels"][l:r]
-        agg_train_ex += train_ex
-        agg_train_labels += train_labels
+
+        if args.use_ce:
+            train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)])
+            eval_p = "\n".join([eval_data_template.format(ex) for ex in train_ex])
+
+            prompt = prompt_template.format(train_p, eval_p)
+            response = run(mkey, model, tokenizer, prompt, args.temp)
+            pred = extract_ans(response)
+            ce_x, ce_y = [], []
+            if pred is not None and len(pred) == len(train_labels):
+                for string, p, l in zip(train_ex, pred, train_labels):
+                    if p != l:
+                        ce_x.append(string)
+                        ce_y.append(l)
+            
+            agg_train_ex += ce_x
+            agg_train_labels += ce_y
+            train_samples.append(len(agg_train_ex))
+        else:
+            agg_train_ex += train_ex
+            agg_train_labels += train_labels
+            train_samples.append(len(agg_train_ex))
 
         eval_ex = data["eval_ex"]
         eval_labels = data["eval_labels"]
-
         train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)])
 
         msgs = []
@@ -238,4 +260,4 @@ if __name__ == "__main__":
         with open(f".cache/msgdict_{config_name}.json", "w") as f:
             json.dump(msgdict, f, indent=4)
 
-    plot_accuracy_curve(list(range(len(num_samples))), accs, "accuracy_curves", config_name)
+    plot_accuracy_curve(train_samples, accs, "accuracy_curves", config_name)
