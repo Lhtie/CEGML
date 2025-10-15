@@ -32,19 +32,18 @@ modelpaths = {
 }
 
 prompt_template = """Task: Infer a single regular language (unknown but fixed) from labeled examples, then classify new strings against that same rule.
-Training Data:
+Please answer 0/1 to each line of the evaluating data.
+You could think step by step, and finally output a list containing all the answers in order. (Please briefly explain your reasoning before the final answer)
+Please wrap your final answer in <ans> and </ans> tags, for example: ... <ans>[1, 0, ...]</ans>
+Training Data (Each line has one input-output pair separated by comma):
 {0}
 
-Evaluating Data:
+Evaluating Data (Each line has one input string):
 {1}
-
-- Please answer 0/1 to each line of the evaluating data.
-- You could think step by step (keep it concise so that the final answer is outputed), and finally output a list containing all the answers in order.
-- Please wrap your final answer in <ans> and </ans> tags, for example: ... <ans>[1, 0, ...]</ans>
 """
 
-train_data_template = "String: {0}\nLabel: {1}"
-eval_data_template = "String: {0}"
+train_data_template = "{0}, {1}"
+eval_data_template = "{0}"
 
 def tokens_of_text(enc, text) -> int:
     return len(enc.encode(text, disallowed_special=()))

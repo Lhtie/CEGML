@@ -83,6 +83,14 @@ class Teacher:
                 ce_y += [int(gt)] + y
         return ce_x, ce_y
     
+    def generate_counterexamples(self, n, regex_gt, regex_gen):
+        dfa_gt, fst_gt, sigma = self.task.regex_to_pynini_via_pyformlang(regex_gt)
+        dfa_gen, fst_gen, _ = self.task.regex_to_pynini_via_pyformlang(regex_gen, sigma)
+
+        ce_x = self.task.k_witnesses(fst_gt, fst_gen, sigma, k=n)
+        ce_y = [int(self.task.accepts(x)) for x in ce_x]
+        return ce_x, ce_y
+    
     def generate_posexamples(self, n, seq_len):
         final_states = list(self.task.dfa.final_states)
         xs, ys = [], []

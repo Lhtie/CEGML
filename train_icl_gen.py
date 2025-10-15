@@ -5,14 +5,11 @@ import os
 import json
 import re
 import tiktoken
-import pynini
 import numpy as np
 from tqdm import tqdm
 from openai import OpenAI
 from time import sleep
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from pyformlang.regular_expression import Regex
-from pyformlang.finite_automaton import DeterministicFiniteAutomaton
 
 from modeling.RNN import RNN
 from tasks.rl import SimplyRegularLanguage
@@ -38,14 +35,18 @@ prompt_template = """Task: Infer a single regular language (unknown but fixed) f
 Syntax rules:
 - Union is +; Concatenation is space-separated tokens (we do not need multi-char tokens); Kleene star is *;
 - Do not use |, ., ?, character classes [], {{m,n}}, lookaheads, or anchors.
+Premises:
+- Prefer simpler regexes with fewer operators and literals while still consistent with the datapoints.
+- Concretely, the total lengths (ignore spaces) <= 50 characters
+- the depths of klene star nesting <= 3
 
-You could think step by step (keep it concise so that the final answer is outputed), and finally output the regex.
+You could think step by step, and finally output the regex. (Please briefly explain your reasoning before the final answer)
 Please wrap your final answer in <ans> and </ans> tags, for example: ... <ans>(a+b)*c</ans>
-Training Data:
+Training Data (Each line has one input-output pair separated by comma):
 {0}
 """
 
-train_data_template = "String: {0}\nLabel: {1}"
+train_data_template = "{0}, {1}"
 
 def tokens_of_text(enc, text) -> int:
     return len(enc.encode(text, disallowed_special=()))
@@ -94,58 +95,6 @@ def extract_ans(res):
         return ans_str
     else:
         return None
-
-def sigma_from_chars(chars):
-    st = pynini.SymbolTable()
-    for i, ch in enumerate(chars, start=1):
-        st.add_symbol(ch, i)
-    return st
-
-def dfa_to_pynini_fst(dfa: DeterministicFiniteAutomaton, sigma: pynini.SymbolTable) -> pynini.Fst:
-    f = pynini.Fst()
-    idmap = {}
-    for q in dfa.states:
-        idmap[q] = f.add_state()
-    f.set_start(idmap[dfa.start_state])
-    for q in dfa.final_states:
-        f.set_final(idmap[q])
-    for q, a, t in dfa._transition_function.get_edges():
-        il = sigma.find(a.value) if hasattr(a, "value") else sigma.find(a)
-        if il == -1:
-            raise ValueError(f"symbol {a} not in sigma")
-        f.add_arc(idmap[q], pynini.Arc(il, il, pynini.Weight.one(f.weight_type()), idmap[t]))
-    f.set_input_symbols(sigma); f.set_output_symbols(sigma)
-    return pynini.minimize(pynini.determinize(f)).optimize()
-
-def regex_to_pynini_via_pyformlang(rx: str, sigma=None):
-    re = Regex(rx)
-    nfa = re.to_epsilon_nfa()
-    dfa = nfa.to_deterministic().minimize()
-    if sigma is None:
-        sigma = sigma_from_chars([s.value for s in dfa.symbols])
-    fst = dfa_to_pynini_fst(dfa, sigma)
-    return dfa, fst, sigma
-
-def equivalent_and_witness(A: pynini.Fst, B: pynini.Fst, sigma: pynini.SymbolTable):
-    """
-    Returns (equivalent: bool, witness: str or None).
-    We compute symmetric difference and test emptiness.
-    If nonempty, we extract a shortest witness string using shortestpath.
-    """
-    # Symmetric difference = (A\B) ∪ (B\A)
-    symdiff = (pynini.difference(A, B) | pynini.difference(B, A)).optimize()
-
-    # Empty FSA has no valid start
-    if symdiff.start() == pynini.NO_STATE_ID or symdiff.num_states() == 0:
-        return True, None
-
-    # Get a shortest string in the difference (witness)
-    sp = pynini.shortestpath(symdiff).optimize()
-    # Convert path to string using the symbol table
-    sp.set_input_symbols(sigma)
-    sp.set_output_symbols(sigma)
-    s = pynini.shortestpath(sp).string(token_type=sigma)  # or rewrite.lattice_to_string(sp)
-    return False, s
     
 def log_scaling(total, start, scale_factor):
     sizes = []
@@ -168,6 +117,9 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=43)
     parser.add_argument("--temp", type=float, default=0.0)
     parser.add_argument("--retries", type=int, default=3)
+    parser.add_argument("--use_ce", default=False, action="store_true")
+    parser.add_argument("--ce_batch_size", type=int, default=32)
+    parser.add_argument("--ce_epochs", type=int, default=8)
     args = parser.parse_args()
 
     np.random.seed(args.seed)
@@ -205,31 +157,49 @@ if __name__ == "__main__":
         )
         model.eval()
 
-    config_name = f"icl_gen_model={args.mkey}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}_regex={args.regex}"
+    config_name = f"icl_gen_model={args.mkey}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}_regex={args.regex}"\
+                    + ("_ce" if args.use_ce else "")
     dataset = f".cache/dataset_regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
     with open(dataset, "r") as f:
         data = json.load(f)
-    dfa_gt, fst_gt, sigma = regex_to_pynini_via_pyformlang(args.regex)
+    dfa_gt, fst_gt, sigma = task.regex_to_pynini_via_pyformlang(args.regex)
     eval_ex = data["eval_ex"]
     eval_labels = data["eval_labels"]
+    teacher = Teacher(task)
 
     agg_losses, num_samples, accs = [], [], []
     agg_train_ex, agg_train_labels = [], []
     msgdict = {}
+    current_guess = None
     num_samples = log_scaling(args.tot_train_size, args.start_size, args.scale_factor)
+    epochs = args.ce_epochs if args.use_ce else len(num_samples)
     print(f"Training sizes per epoch: {num_samples}")
-    for epoch in tqdm(range(len(num_samples))):
-        l = len(agg_train_ex)
-        r = num_samples[epoch]
-        train_ex = data["train_ex"][l:r]
-        train_labels = data["train_labels"][l:r]
-        agg_train_ex += train_ex
-        agg_train_labels += train_labels
+    for epoch in tqdm(range(epochs)):
+        if args.use_ce:
+            if current_guess is None:
+                ce_x = data["train_ex"][epoch*args.ce_batch_size:(epoch+1)*args.ce_batch_size]
+                ce_y = data["train_labels"][epoch*args.ce_batch_size:(epoch+1)*args.ce_batch_size]
+            else:
+                ce_x, ce_y = teacher.generate_counterexamples(
+                    n=args.ce_batch_size,
+                    regex_gt=args.regex,
+                    regex_gen=current_guess
+                )
+            agg_train_ex += ce_x
+            agg_train_labels += ce_y
+
+        else:
+            l = len(agg_train_ex)
+            r = num_samples[epoch]
+            train_ex = data["train_ex"][l:r]
+            train_labels = data["train_labels"][l:r]
+            agg_train_ex += train_ex
+            agg_train_labels += train_labels
 
         train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)])
 
         msgs = []
-        acc, max_token_len = 0, 0
+        acc, max_token_len, best_eval = 0, 0, 0
         for i in range(args.retries):
             prompt = prompt_template.format(train_p)
             if mkey.startswith(("gpt3", "gpt4")):
@@ -245,15 +215,17 @@ if __name__ == "__main__":
                 "Prediction": pred
             })
 
-            dfa_pred = None
             try:
-                dfa_pred, fst_pred, _ = regex_to_pynini_via_pyformlang(pred, sigma)
-                eq, witness = equivalent_and_witness(fst_gt, fst_pred, sigma)
+                dfa_pred, fst_pred, _ = task.regex_to_pynini_via_pyformlang(pred, sigma)
+                eq, witness = task.equivalent_and_witness(fst_gt, fst_pred, sigma)
                 acc = max(acc, int(eq))
                 msgs[-1]["Equivalent"] = eq
                 msgs[-1]["Witness"] = witness
                 msgs[-1]["scoreTrainSet"] = sum([int(int(dfa_pred.accepts(ex)) == label) for ex, label in zip(agg_train_ex, agg_train_labels)]) / len(agg_train_ex)
                 msgs[-1]["scoreEvalSet"] = sum([int(int(dfa_pred.accepts(ex)) == label) for ex, label in zip(eval_ex, eval_labels)]) / len(eval_ex)
+                if msgs[-1]["scoreEvalSet"] > best_eval:
+                    best_eval = msgs[-1]["scoreEvalSet"]
+                    current_guess = pred
 
             except Exception as e:
                 print(f"Error compiling regex: {e}")

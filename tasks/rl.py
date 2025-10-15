@@ -1,5 +1,6 @@
 import torch
 import random
+import pynini
 import numpy as np
 
 from pyformlang.regular_expression import Regex
@@ -40,7 +41,7 @@ class SimplyRegularLanguage:
             current_state, path, depth = queue.popleft()
             if depth > max_depth:
                 continue
-            if current_state == target_state and depth > 0:
+            if current_state == target_state:
                 string = "".join(path)
                 strings.append(string)
                 labels.append(int(current_state in dfa.final_states))
@@ -107,3 +108,80 @@ class SimplyRegularLanguage:
 
     def accepts(self, str):
         return self.dfa.accepts(str)
+    
+    def sigma_from_chars(self, chars):
+        st = pynini.SymbolTable()
+        for i, ch in enumerate(chars, start=1):
+            st.add_symbol(ch, i)
+        return st
+
+    def dfa_to_pynini_fst(self, dfa: DeterministicFiniteAutomaton, sigma: pynini.SymbolTable) -> pynini.Fst:
+        f = pynini.Fst()
+        idmap = {}
+        for q in dfa.states:
+            idmap[q] = f.add_state()
+        f.set_start(idmap[dfa.start_state])
+        for q in dfa.final_states:
+            f.set_final(idmap[q])
+        for q, a, t in dfa._transition_function.get_edges():
+            il = sigma.find(a.value) if hasattr(a, "value") else sigma.find(a)
+            if il == -1:
+                raise ValueError(f"symbol {a} not in sigma")
+            f.add_arc(idmap[q], pynini.Arc(il, il, pynini.Weight.one(f.weight_type()), idmap[t]))
+        f.set_input_symbols(sigma); f.set_output_symbols(sigma)
+        return pynini.minimize(pynini.determinize(f)).optimize()
+
+    def regex_to_pynini_via_pyformlang(self, rx: str, sigma=None):
+        re = Regex(rx)
+        nfa = re.to_epsilon_nfa()
+        dfa = nfa.to_deterministic().minimize()
+        if sigma is None:
+            sigma = self.sigma_from_chars([s.value for s in dfa.symbols])
+        fst = self.dfa_to_pynini_fst(dfa, sigma)
+        return dfa, fst, sigma
+
+    def equivalent_and_witness(self, A: pynini.Fst, B: pynini.Fst, sigma: pynini.SymbolTable):
+        """
+        Returns (equivalent: bool, witness: str or None).
+        We compute symmetric difference and test emptiness.
+        If nonempty, we extract a shortest witness string using shortestpath.
+        """
+        # Symmetric difference = (A\B) ∪ (B\A)
+        symdiff = (pynini.difference(A, B) | pynini.difference(B, A)).optimize()
+
+        # Empty FSA has no valid start
+        if symdiff.start() == pynini.NO_STATE_ID or symdiff.num_states() == 0:
+            return True, None
+
+        # Get a shortest string in the difference (witness)
+        sp = pynini.shortestpath(symdiff).optimize()
+        # Convert path to string using the symbol table
+        sp.set_input_symbols(sigma)
+        sp.set_output_symbols(sigma)
+        s = pynini.shortestpath(sp).string(token_type=sigma)  # or rewrite.lattice_to_string(sp)
+        return False, s
+    
+    def k_witnesses(self, A: pynini.Fst, B: pynini.Fst, sigma: pynini.SymbolTable, k=10):
+        """Return up to k shortest disagreement strings."""
+        # Symmetric difference = (A\B) ∪ (B\A)
+        symdiff = (pynini.difference(A, B) | pynini.difference(B, A)).optimize()
+
+        if symdiff.start() == pynini.NO_STATE_ID or symdiff.num_states() == 0:
+            return []
+
+        symdiff = pynini.project(symdiff, "input")
+        symdiff = pynini.rmepsilon(symdiff).optimize()
+        symdiff.set_input_symbols(sigma)
+        symdiff.set_output_symbols(sigma)
+
+        # Extract strings
+        out = []
+        for _ in range(k):
+            sp = pynini.shortestpath(symdiff).optimize()  # single shortest path
+            if sp.start() == pynini.NO_STATE_ID or sp.num_states() == 0:
+                break  # empty language
+            s = sp.string(token_type=sigma)             # shortest string
+            out.append(s.replace(" ", ""))              # remove spaces
+            # Remove that exact string from the language and continue
+            symdiff = pynini.difference(symdiff, pynini.accep(s, token_type=sigma)).optimize()
+        return out
