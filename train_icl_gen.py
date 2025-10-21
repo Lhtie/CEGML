@@ -24,6 +24,7 @@ modelpaths = {
         "ds7":          "deepseek-ai/deepseek-llm-7b-chat",
         "ds-chat":      "deepseek-chat",
         "ds-reasoner":  "deepseek-reasoner",
+        "qw-dsr1":      "DeepSeek-R1-Distill-Qwen-32B",
         "gm2.5":        "gemini-2.5-pro",
         "cl35":         "claude-3-5",
         "gpt3.5":       "gpt-3.5-turbo",
@@ -78,7 +79,7 @@ def run(mkey, model, tokenizer, msg, temp=0.3):
     else:
         outputs = model.generate(
             inputs, 
-            max_new_tokens=8192,
+            max_new_tokens=32768,
             do_sample=True,
             pad_token_id=tokenizer.eos_token_id,
             eos_token_id=tokenizer.eos_token_id,
