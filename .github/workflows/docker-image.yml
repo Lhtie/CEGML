@@ -1,0 +1,31 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set timestamp
+      run: echo "IMAGE_TAG=$(date +%s)" >> $GITHUB_ENV
+
+    - name: Create keysecrets.py with OpenAI API key
+      run: echo 'oai_key = "${{ secrets.OPENAI_API_KEY }}"' > keysecrets.py
+
+    - name: Log in to Docker Hub
+      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+    - name: Build the Docker image
+      run: docker build . --file Dockerfile --tag hliu794/CEGML:${IMAGE_TAG}
+
+    - name: Push the Docker image
+      run: docker push hliu794/CEGML:${IMAGE_TAG}
