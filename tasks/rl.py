@@ -183,5 +183,6 @@ class SimplyRegularLanguage:
             s = sp.string(token_type=sigma)             # shortest string
             out.append(s.replace(" ", ""))              # remove spaces
             # Remove that exact string from the language and continue
+            symdiff = pynini.project(symdiff, "input").optimize()
             symdiff = pynini.difference(symdiff, pynini.accep(s, token_type=sigma)).optimize()
         return out
