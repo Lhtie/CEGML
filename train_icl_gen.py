@@ -118,7 +118,7 @@ if __name__ == "__main__":
     parser.add_argument("--temp", type=float, default=0.0)
     parser.add_argument("--retries", type=int, default=3)
     parser.add_argument("--use_ce", default=False, action="store_true")
-    parser.add_argument("--ce_batch_size", type=int, default=32)
+    parser.add_argument("--ce_batch_size", type=int, default=8)
     parser.add_argument("--ce_epochs", type=int, default=8)
     args = parser.parse_args()
 
