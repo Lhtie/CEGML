@@ -161,7 +161,7 @@ if __name__ == "__main__":
 
     config_name = f"icl_model={args.mkey}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}_totEval={args.eval_size}_evalBatch={args.eval_batch_size}"\
                     + ("_ce" if args.use_ce else "")
-    dataset = f".cache/dataset_regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
+    dataset = f"logs/dataset_regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
     with open(dataset, "r") as f:
         data = json.load(f)
 
@@ -240,8 +240,8 @@ if __name__ == "__main__":
                 msgdict[epoch] = {
                     "Logs": msgs
                 }
-                os.makedirs(".cache", exist_ok=True)
-                with open(f".cache/msgdict_{config_name}.json", "w") as f:
+                os.makedirs("logs", exist_ok=True)
+                with open(f"logs/msgdict_{config_name}.json", "w") as f:
                     json.dump(msgdict, f, indent=4)
                 
             if len(acc_retried) > 0:
@@ -256,8 +256,8 @@ if __name__ == "__main__":
             "NumTrainingSamples": len(agg_train_ex),
             "Logs": msgs
         }
-        os.makedirs(".cache", exist_ok=True)
-        with open(f".cache/msgdict_{config_name}.json", "w") as f:
+        os.makedirs("logs", exist_ok=True)
+        with open(f"logs/msgdict_{config_name}.json", "w") as f:
             json.dump(msgdict, f, indent=4)
 
     plot_accuracy_curve(train_samples, accs, "accuracy_curves", config_name)

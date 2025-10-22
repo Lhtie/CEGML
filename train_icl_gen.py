@@ -160,7 +160,7 @@ if __name__ == "__main__":
 
     config_name = f"icl_gen_model={args.mkey}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}_regex={args.regex}"\
                     + ("_ce" if args.use_ce else "")
-    dataset = f".cache/dataset_regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
+    dataset = f"logs/dataset_regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
     with open(dataset, "r") as f:
         data = json.load(f)
     dfa_gt, fst_gt, sigma = task.regex_to_pynini_via_pyformlang(args.regex)
@@ -235,8 +235,8 @@ if __name__ == "__main__":
             msgdict[epoch] = {
                 "Logs": msgs
             }
-            os.makedirs(".cache", exist_ok=True)
-            with open(f".cache/msgdict_{config_name}.json", "w") as f:
+            os.makedirs("logs", exist_ok=True)
+            with open(f"logs/msgdict_{config_name}.json", "w") as f:
                 json.dump(msgdict, f, indent=4)
 
         accs.append(acc)
@@ -247,8 +247,8 @@ if __name__ == "__main__":
             "NumTrainingSamples": len(agg_train_ex),
             "Logs": msgs
         }
-        os.makedirs(".cache", exist_ok=True)
-        with open(f".cache/msgdict_{config_name}.json", "w") as f:
+        os.makedirs("logs", exist_ok=True)
+        with open(f"logs/msgdict_{config_name}.json", "w") as f:
             json.dump(msgdict, f, indent=4)
 
     # plot_accuracy_curve(list(range(len(num_samples))), accs, "accuracy_curves", config_name)
