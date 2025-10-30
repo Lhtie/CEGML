@@ -36,15 +36,17 @@ prompt_template = """Task: Infer a single regular language (unknown but fixed) f
 Syntax rules:
 - Union is +; Concatenation is space-separated tokens (we do not need multi-char tokens); Kleene star is *;
 - Do not use |, ., ?, character classes [], {{m,n}}, lookaheads, or anchors.
-Premises:
+{0}
+You could think step by step, and finally output the regex. (Please briefly explain your reasoning before the final answer)
+Please wrap your final answer in <ans> and </ans> tags, for example: ... <ans>(a+b)*c</ans>
+Training Data (Each line has one input-output pair separated by comma):
+{1}
+"""
+regularization = """Premises:
 - Prefer simpler regexes with fewer operators and literals while still consistent with the datapoints.
 - Concretely, the total lengths (ignore spaces) <= 50 characters
 - the depths of klene star nesting <= 3
 
-You could think step by step, and finally output the regex. (Please briefly explain your reasoning before the final answer)
-Please wrap your final answer in <ans> and </ans> tags, for example: ... <ans>(a+b)*c</ans>
-Training Data (Each line has one input-output pair separated by comma):
-{0}
 """
 
 train_data_template = "{0}, {1}"
@@ -118,6 +120,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=43)
     parser.add_argument("--temp", type=float, default=0.0)
     parser.add_argument("--retries", type=int, default=3)
+    parser.add_argument("--use_reg", default=False, action="store_true")
     parser.add_argument("--use_ce", default=False, action="store_true")
     parser.add_argument("--ce_batch_size", type=int, default=8)
     parser.add_argument("--ce_epochs", type=int, default=8)
@@ -158,9 +161,15 @@ if __name__ == "__main__":
         )
         model.eval()
 
-    config_name = f"icl_gen_model={args.mkey}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}_regex={args.regex}"\
-                    + ("_ce" if args.use_ce else "")
-    dataset = f"logs/dataset_regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
+    if not args.use_ce:
+        config_name = f"logs/icl_gen/model={args.mkey}/std/"
+        config_name += "reg/" if args.use_reg else "noreg/"
+        config_name += f"msgdict_regex={args.regex}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}.json"
+    else:
+        config_name = f"logs/icl_gen/model={args.mkey}/ce/"
+        config_name += "reg/" if args.use_reg else "noreg/"
+        config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs}_ceBatch={args.ce_batch_size}.json"
+    dataset = f"datasets/regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
     with open(dataset, "r") as f:
         data = json.load(f)
     dfa_gt, fst_gt, sigma = task.regex_to_pynini_via_pyformlang(args.regex)
@@ -202,7 +211,10 @@ if __name__ == "__main__":
         msgs = []
         acc, max_token_len, best_eval = 0, 0, 0
         for i in range(args.retries):
-            prompt = prompt_template.format(train_p)
+            prompt = prompt_template.format(
+                regularization if args.use_reg else "",
+                train_p
+            )
             if mkey.startswith(("gpt3", "gpt4")):
                 max_token_len = max(max_token_len, tokens_of_text(tokenizer, prompt))
             elif args.mkey.startswith("ds"):
@@ -235,8 +247,8 @@ if __name__ == "__main__":
             msgdict[epoch] = {
                 "Logs": msgs
             }
-            os.makedirs("logs", exist_ok=True)
-            with open(f"logs/msgdict_{config_name}.json", "w") as f:
+            os.makedirs(os.path.dirname(config_name), exist_ok=True)
+            with open(config_name, "w") as f:
                 json.dump(msgdict, f, indent=4)
 
         accs.append(acc)
@@ -247,8 +259,12 @@ if __name__ == "__main__":
             "NumTrainingSamples": len(agg_train_ex),
             "Logs": msgs
         }
-        os.makedirs("logs", exist_ok=True)
-        with open(f"logs/msgdict_{config_name}.json", "w") as f:
+        os.makedirs(os.path.dirname(config_name), exist_ok=True)
+        with open(config_name, "w") as f:
             json.dump(msgdict, f, indent=4)
+
+        if acc == 1.0:
+            print(f"Early stop at epoch {epoch}")
+            break
 
     # plot_accuracy_curve(list(range(len(num_samples))), accs, "accuracy_curves", config_name)

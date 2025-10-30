@@ -52,8 +52,8 @@ if __name__ == "__main__":
     )
     eval_labels = [1 if task.accepts(x) else 0 for x in eval_ex]
 
-    os.makedirs("logs", exist_ok=True)
-    with open(f"logs/dataset_regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json", "w") as f:
+    os.makedirs("datasets", exist_ok=True)
+    with open(f"datasets/regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json", "w") as f:
         json.dump({
             "train_ex": train_ex,
             "train_labels": train_labels,

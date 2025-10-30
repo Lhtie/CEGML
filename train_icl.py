@@ -33,6 +33,7 @@ modelpaths = {
 }
 
 prompt_template = """Task: Infer a single regular language (unknown but fixed) from labeled examples, then classify new strings against that same rule.
+{0}
 Please answer 0/1 to each line of the evaluating data.
 You could think step by step, and finally output a list containing all the answers in order. (Please briefly explain your reasoning before the final answer)
 Please wrap your final answer in <ans> and </ans> tags, for example: ... <ans>[1, 0, ...]</ans>
@@ -42,6 +43,13 @@ Training Data (Each line has one input-output pair separated by comma):
 Evaluating Data (Each line has one input string):
 {1}
 """
+regularization = """Premises:
+- Prefer simpler regexes with fewer operators and literals while still consistent with the datapoints.
+- Concretely, the total lengths (ignore spaces) <= 50 characters
+- the depths of klene star nesting <= 3
+
+"""
+
 
 train_data_template = "{0}, {1}"
 eval_data_template = "{0}"
@@ -121,7 +129,8 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=43)
     parser.add_argument("--temp", type=float, default=0.0)
     parser.add_argument("--retries", type=int, default=3)
-    parser.add_argument("--use_ce", action="store_true", default=False)
+    parser.add_arugment("--use_reg", default=False, action="store_true")
+    parser.add_argument("--use_ce", default=False, action="store_true")
     args = parser.parse_args()
 
     np.random.seed(args.seed)
@@ -159,9 +168,11 @@ if __name__ == "__main__":
         )
         model.eval()
 
-    config_name = f"icl_model={args.mkey}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}_totEval={args.eval_size}_evalBatch={args.eval_batch_size}"\
-                    + ("_ce" if args.use_ce else "")
-    dataset = f"logs/dataset_regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
+    config_name = f"logs/icl/model={args.mkey}/"
+    config_name += "ce/" if args.use_ce else "std/"
+    config_name += "reg/" if args.use_reg else "noreg/"
+    config_name += f"msgdict_regex={args.regex}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}_totEval={args.eval_size}_evalBatch={args.eval_batch_size}.json"
+    dataset = f"dataset/regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
     with open(dataset, "r") as f:
         data = json.load(f)
 
@@ -211,7 +222,10 @@ if __name__ == "__main__":
             eval_labels_batch = eval_labels[i:j]
             eval_p = "\n".join([eval_data_template.format(ex) for ex in eval_ex_batch])
 
-            prompt = prompt_template.format(train_p, eval_p)
+            prompt = prompt_template.format(
+                regularization if args.use_reg else "",
+                train_p, eval_p
+            )
             if mkey.startswith(("gpt3", "gpt4")):
                 max_token_len = max(max_token_len, tokens_of_text(tokenizer, prompt))
             elif args.mkey.startswith("ds"):
@@ -240,8 +254,8 @@ if __name__ == "__main__":
                 msgdict[epoch] = {
                     "Logs": msgs
                 }
-                os.makedirs("logs", exist_ok=True)
-                with open(f"logs/msgdict_{config_name}.json", "w") as f:
+                os.makedirs(os.path.dirname(config_name), exist_ok=True)
+                with open(config_name, "w") as f:
                     json.dump(msgdict, f, indent=4)
                 
             if len(acc_retried) > 0:
@@ -256,8 +270,12 @@ if __name__ == "__main__":
             "NumTrainingSamples": len(agg_train_ex),
             "Logs": msgs
         }
-        os.makedirs("logs", exist_ok=True)
-        with open(f"logs/msgdict_{config_name}.json", "w") as f:
+        os.makedirs(os.path.dirname(config_name), exist_ok=True)
+        with open(config_name, "w") as f:
             json.dump(msgdict, f, indent=4)
 
-    plot_accuracy_curve(train_samples, accs, "accuracy_curves", config_name)
+    plot_accuracy_curve(
+        train_samples, accs, 
+        os.path.dirname(config_name).replace("logs", "accuracy_curves"),
+        os.path.basename(config_name)
+    )
