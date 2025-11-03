@@ -176,6 +176,11 @@ if __name__ == "__main__":
     eval_ex = data["eval_ex"]
     eval_labels = data["eval_labels"]
     teacher = Teacher(task)
+    
+    dfa, fst, _ = task.regex_to_pynini_via_pyformlang("(a(a+b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*", sigma)
+    # dfa, fst, _ = task.regex_to_pynini_via_pyformlang("b + (a+b+c)* c a b", sigma)
+    print(task.diff_ratio(fst, fst_gt, sigma))
+    exit(0)
 
     agg_losses, num_samples, accs = [], [], []
     agg_train_ex, agg_train_labels = [], []

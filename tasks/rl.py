@@ -186,3 +186,42 @@ class SimplyRegularLanguage:
             symdiff = pynini.project(symdiff, "input").optimize()
             symdiff = pynini.difference(symdiff, pynini.accep(s, token_type=sigma)).optimize()
         return out
+    
+    def count_strings_of_length(self, fst: pynini.Fst, sigma: pynini.SymbolTable, length: int) -> int:
+        """ Count number of strings of exactly given length accepted by fst. """
+        if fst.start() == pynini.NO_STATE_ID or fst.num_states() == 0:
+            return 0
+
+        # Initialize DP table
+        dp = {state: 0 for state in fst.states()}
+        dp[fst.start()] = 1
+
+        for _ in range(length):
+            next_dp = {state: 0 for state in fst.states()}
+            for state in fst.states():
+                for arc in fst.arcs(state):
+                    next_dp[arc.nextstate] += dp[state]
+            dp = next_dp
+
+        # Sum counts of final states
+        count = sum(dp[state] for state in fst.states() if fst.final(state) != pynini.Weight.zero(fst.weight_type()))
+        return count
+    
+    def diff_ratio(self, A: pynini.Fst, B: pynini.Fst, sigma: pynini.SymbolTable, k=8):
+        """ Return ratio of disagreement strings of up to length k. """
+        symdiff = (pynini.difference(A, B) | pynini.difference(B, A)).optimize()
+        
+        if symdiff.start() == pynini.NO_STATE_ID or symdiff.num_states() == 0:
+            return 0.0
+        
+        symdiff = pynini.project(symdiff, "input")
+        symdiff = pynini.rmepsilon(symdiff).optimize()
+        symdiff.set_input_symbols(sigma)
+        symdiff.set_output_symbols(sigma)
+
+        total, diff = 0, 0
+        for length in range(1, k + 1):
+            total += sigma.num_symbols() ** length
+            diff += self.count_strings_of_length(symdiff, sigma, length)
+            
+        return diff / total if total > 0 else 0.0
