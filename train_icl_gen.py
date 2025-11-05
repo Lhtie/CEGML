@@ -122,8 +122,9 @@ if __name__ == "__main__":
     parser.add_argument("--retries", type=int, default=3)
     parser.add_argument("--use_reg", default=False, action="store_true")
     parser.add_argument("--use_ce", default=False, action="store_true")
-    parser.add_argument("--ce_batch_size", type=int, default=8)
     parser.add_argument("--ce_epochs", type=int, default=8)
+    parser.add_argument("--ce_start_size", type=int, default=8)
+    parser.add_argument("--ce_batch_size", type=int, default=128)
     args = parser.parse_args()
 
     np.random.seed(args.seed)
@@ -176,11 +177,6 @@ if __name__ == "__main__":
     eval_ex = data["eval_ex"]
     eval_labels = data["eval_labels"]
     teacher = Teacher(task)
-    
-    dfa, fst, _ = task.regex_to_pynini_via_pyformlang("(a(a+b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*", sigma)
-    # dfa, fst, _ = task.regex_to_pynini_via_pyformlang("b + (a+b+c)* c a b", sigma)
-    print(task.diff_ratio(fst, fst_gt, sigma))
-    exit(0)
 
     agg_losses, num_samples, accs = [], [], []
     agg_train_ex, agg_train_labels = [], []
@@ -192,11 +188,11 @@ if __name__ == "__main__":
     for epoch in tqdm(range(epochs)):
         if args.use_ce:
             if current_guess is None:
-                ce_x = data["train_ex"][epoch*args.ce_batch_size:(epoch+1)*args.ce_batch_size]
-                ce_y = data["train_labels"][epoch*args.ce_batch_size:(epoch+1)*args.ce_batch_size]
+                ce_x = data["train_ex"][epoch*args.ce_start_size:(epoch+1)*args.ce_start_size]
+                ce_y = data["train_labels"][epoch*args.ce_start_size:(epoch+1)*args.ce_start_size]
             else:
                 ce_x, ce_y = teacher.generate_counterexamples(
-                    n=args.ce_batch_size,
+                    bs=args.ce_batch_size,
                     regex_gt=args.regex,
                     regex_gen=current_guess
                 )

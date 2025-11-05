@@ -163,8 +163,7 @@ class SimplyRegularLanguage:
     
     def k_witnesses(self, A: pynini.Fst, B: pynini.Fst, sigma: pynini.SymbolTable, k=10):
         """Return up to k shortest disagreement strings."""
-        # Symmetric difference = (A\B) ∪ (B\A)
-        symdiff = (pynini.difference(A, B) | pynini.difference(B, A)).optimize()
+        symdiff = (pynini.difference(A, B)).optimize()
 
         if symdiff.start() == pynini.NO_STATE_ID or symdiff.num_states() == 0:
             return []
@@ -220,7 +219,7 @@ class SimplyRegularLanguage:
         symdiff.set_output_symbols(sigma)
 
         total, diff = 0, 0
-        for length in range(1, k + 1):
+        for length in range(0, k + 1):
             total += sigma.num_symbols() ** length
             diff += self.count_strings_of_length(symdiff, sigma, length)
             

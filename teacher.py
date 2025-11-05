@@ -1,4 +1,5 @@
 import random
+import numpy as np
 from collections import deque
 from pyformlang.finite_automaton import State, Symbol, DeterministicFiniteAutomaton
 
@@ -83,11 +84,15 @@ class Teacher:
                 ce_y += [int(gt)] + y
         return ce_x, ce_y
     
-    def generate_counterexamples(self, n, regex_gt, regex_gen):
+    def generate_counterexamples(self, bs, regex_gt, regex_gen):
         dfa_gt, fst_gt, sigma = self.task.regex_to_pynini_via_pyformlang(regex_gt)
         dfa_gen, fst_gen, _ = self.task.regex_to_pynini_via_pyformlang(regex_gen, sigma)
 
-        ce_x = self.task.k_witnesses(fst_gt, fst_gen, sigma, k=n)
+        rate = self.task.diff_ratio(fst_gt, fst_gen, sigma)
+        n = np.ceil(bs * rate / 2).astype(int)
+
+        ce_x = self.task.k_witnesses(fst_gt, fst_gen, sigma, k=n) + \
+                self.task.k_witnesses(fst_gen, fst_gt, sigma, k=n)
         ce_y = [int(self.task.accepts(x)) for x in ce_x]
         return ce_x, ce_y
     
