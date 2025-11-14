@@ -66,7 +66,7 @@ if __name__ == "__main__":
     print("Data size:", len(data["train"]))
     
     adapter = DFAMatchAdapter(
-        model_name=args.task_lm,
+        model=args.task_lm,
         str_max_length=args.max_length
     )
     
