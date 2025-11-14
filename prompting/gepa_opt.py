@@ -1,7 +1,12 @@
 import gepa
+import argparse
 import json
 import os
+import sys
+
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import keysecrets
+from gepa_adapter import DFAMatchAdapter
 
 def collect_data(input_dir: str, output_path: str):
     train_data = []
@@ -46,20 +51,28 @@ Please wrap your final answer in <ans> and </ans> tags, for example: ... <ans>(a
 os.environ["OPENAI_API_KEY"] = keysecrets.api_key
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--max_length", type=int, default=32)
+    args = parser.parse_args()
+    
     # icl_gen
     # collect_data("logs", "datasets/gepa_icl_gen.json")
 
     with open("datasets/gepa_icl_gen.json", "r", encoding="utf-8") as f:
         data = json.load(f)
-
     print("Data size:", len(data["train"]))
+    
+    adapter = DFAMatchAdapter(
+        model_name="openai/gpt-5",
+        str_max_length=args.max_length
+    )
     
     gepa_result = gepa.optimize(
         seed_candidate={
             "system_prompt": prompt_template
         },
         trainset=data["train"],
-        task_lm="openai/gpt-5",
+        adapter=adapter,
         max_metric_calls=150,
         reflection_lm="openai/gpt-5"
     )
