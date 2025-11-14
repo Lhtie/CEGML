@@ -53,6 +53,9 @@ os.environ["OPENAI_API_KEY"] = keysecrets.api_key
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--max_length", type=int, default=32)
+    parser.add_argument("--max_metric_calls", type=int, default=150)
+    parser.add_argument("--task_lm", type=str, default="openai/gpt-5")
+    parser.add_argument("--reflection_lm", type=str, default="openai/gpt-5")
     args = parser.parse_args()
     
     # icl_gen
@@ -63,7 +66,7 @@ if __name__ == "__main__":
     print("Data size:", len(data["train"]))
     
     adapter = DFAMatchAdapter(
-        model_name="openai/gpt-5",
+        model_name=args.task_lm,
         str_max_length=args.max_length
     )
     
@@ -73,8 +76,8 @@ if __name__ == "__main__":
         },
         trainset=data["train"],
         adapter=adapter,
-        max_metric_calls=150,
-        reflection_lm="openai/gpt-5"
+        max_metric_calls=args.max_metric_calls,
+        reflection_lm=args.reflection_lm
     )
 
     print("GEPA Optimized Prompt:", gepa_result.best_candidate['system_prompt'])
