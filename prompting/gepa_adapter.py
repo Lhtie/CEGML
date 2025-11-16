@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol, TypedDict
 from gepa.core.adapter import EvaluationBatch, GEPAAdapter
@@ -111,7 +112,7 @@ class DFAMatchAdapter(GEPAAdapter[DefaultDataInst, DefaultTrajectory, DefaultRol
             dfa_gt, fst_gt, sigma = task.regex_to_pynini_via_pyformlang(data["answer"])
             try:
                 dfa_pred, fst_pred, _ = task.regex_to_pynini_via_pyformlang(extracted_ans, sigma)
-                eq, witness = task.equivlent_and_withness(fst_gt, fst_pred, sigma)
+                eq, witness = task.equivalent_and_witness(fst_gt, fst_pred, sigma)
                 if eq:
                     score = 1.0
                     failure_reason = None
