@@ -107,8 +107,8 @@ class DFAMatchAdapter(GEPAAdapter[DefaultDataInst, DefaultTrajectory, DefaultRol
             score: float = 0.0
             extracted_ans: str = extract_ans(assistant_response)
             
-            task = SimplyRegularLanguage(batch["answer"], self.str_max_length)
-            dfa_gt, fst_gt, sigma = task.regex_to_dfa_fst(batch["answer"])
+            task = SimplyRegularLanguage(data["answer"], self.str_max_length)
+            dfa_gt, fst_gt, sigma = task.regex_to_dfa_fst(data["answer"])
             try:
                 dfa_pred, fst_pred, _ = task.regex_to_dfa_fst(extracted_ans, sigma)
                 eq, witness = task.equivlent_and_withness(fst_gt, fst_pred, sigma)
