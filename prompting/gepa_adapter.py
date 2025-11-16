@@ -108,9 +108,9 @@ class DFAMatchAdapter(GEPAAdapter[DefaultDataInst, DefaultTrajectory, DefaultRol
             extracted_ans: str = extract_ans(assistant_response)
             
             task = SimplyRegularLanguage(data["answer"], self.str_max_length)
-            dfa_gt, fst_gt, sigma = task.regex_to_dfa_fst(data["answer"])
+            dfa_gt, fst_gt, sigma = task.regex_to_pynini_via_pyformlang(data["answer"])
             try:
-                dfa_pred, fst_pred, _ = task.regex_to_dfa_fst(extracted_ans, sigma)
+                dfa_pred, fst_pred, _ = task.regex_to_pynini_via_pyformlang(extracted_ans, sigma)
                 eq, witness = task.equivlent_and_withness(fst_gt, fst_pred, sigma)
                 if eq:
                     score = 1.0
