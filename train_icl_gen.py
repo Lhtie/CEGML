@@ -108,6 +108,11 @@ def log_scaling(total, start, scale_factor):
     sizes.append(total)
     return sizes
 
+def savejson(ctx, path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(ctx, f, indent=4)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--regex", type=str, default="(a(b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*")           # (a(a)*b)* or (a b + b a) (a + b b + c)* (a c + b a)
@@ -119,7 +124,8 @@ if __name__ == "__main__":
     parser.add_argument("--scale_factor", type=float, default=2.0)
     parser.add_argument("--seed", type=int, default=43)
     parser.add_argument("--temp", type=float, default=0.0)
-    parser.add_argument("--retries", type=int, default=3)
+    parser.add_argument("--rerun", type=int, default=3)
+    parser.add_argument("--retries", type=int, default=1)
     parser.add_argument("--use_reg", default=False, action="store_true")
     parser.add_argument("--use_ce", default=False, action="store_true")
     parser.add_argument("--ce_epochs", type=int, default=8)
@@ -163,11 +169,11 @@ if __name__ == "__main__":
         model.eval()
 
     if not args.use_ce:
-        config_name = f"logs/icl_gen/model={args.mkey}/std/"
+        config_name = f"logs/opt_prompt/icl_gen/model={args.mkey}/std/"
         config_name += "reg/" if args.use_reg else "noreg/"
         config_name += f"msgdict_regex={args.regex}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}.json"
     else:
-        config_name = f"logs/icl_gen/model={args.mkey}/ce/"
+        config_name = f"logs/opt_prompt/icl_gen/model={args.mkey}/ce/"
         config_name += "reg/" if args.use_reg else "noreg/"
         config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs}_ceBatch={args.ce_batch_size}.json"
     dataset = f"datasets/regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
@@ -178,94 +184,103 @@ if __name__ == "__main__":
     eval_labels = data["eval_labels"]
     teacher = Teacher(task)
 
-    agg_losses, num_samples, accs = [], [], []
-    agg_train_ex, agg_train_labels = [], []
-    msgdict = {}
-    current_guess = None
-    num_samples = log_scaling(args.tot_train_size, args.start_size, args.scale_factor)
-    epochs = args.ce_epochs if args.use_ce else len(num_samples)
-    print(f"Training sizes per epoch: {num_samples}")
-    for epoch in tqdm(range(epochs)):
-        if args.use_ce:
-            if current_guess is None:
-                ce_x = data["train_ex"][epoch*args.ce_start_size:(epoch+1)*args.ce_start_size]
-                ce_y = data["train_labels"][epoch*args.ce_start_size:(epoch+1)*args.ce_start_size]
+    
+    msgdict, finish_states = {}, {}
+    msgdict["summary"] = None
+    for run in range(args.rerun):
+        print(f"=== Rerun {run} ===")
+        agg_losses, accs = [], []
+        agg_train_ex, agg_train_labels = [], []
+        num_samples = log_scaling(args.tot_train_size, args.start_size, args.scale_factor)
+        epochs = args.ce_epochs if args.use_ce else len(num_samples)
+        current_guess = None
+        msgdict[f"run-{run}"] = {}
+        
+        for epoch in tqdm(range(epochs)):
+            if args.use_ce:
+                if current_guess is None:
+                    ce_x = data["train_ex"][epoch*args.ce_start_size:(epoch+1)*args.ce_start_size]
+                    ce_y = data["train_labels"][epoch*args.ce_start_size:(epoch+1)*args.ce_start_size]
+                else:
+                    ce_x, ce_y = teacher.generate_counterexamples(
+                        bs=args.ce_batch_size,
+                        regex_gt=args.regex,
+                        regex_gen=current_guess
+                    )
+                agg_train_ex += ce_x
+                agg_train_labels += ce_y
+
             else:
-                ce_x, ce_y = teacher.generate_counterexamples(
-                    bs=args.ce_batch_size,
-                    regex_gt=args.regex,
-                    regex_gen=current_guess
+                l = len(agg_train_ex)
+                r = num_samples[epoch]
+                train_ex = data["train_ex"][l:r]
+                train_labels = data["train_labels"][l:r]
+                agg_train_ex += train_ex
+                agg_train_labels += train_labels
+
+            train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)])
+
+            msgs = []
+            acc, max_token_len, best_eval = 0, 0, 0
+            for i in range(args.retries):
+                prompt = prompt_template.format(
+                    regularization if args.use_reg else "",
+                    train_p
                 )
-            agg_train_ex += ce_x
-            agg_train_labels += ce_y
+                if mkey.startswith(("gpt3", "gpt4")):
+                    max_token_len = max(max_token_len, tokens_of_text(tokenizer, prompt))
+                elif args.mkey.startswith("ds"):
+                    max_token_len = max(max_token_len, int(len(prompt) * 0.5))
 
-        else:
-            l = len(agg_train_ex)
-            r = num_samples[epoch]
-            train_ex = data["train_ex"][l:r]
-            train_labels = data["train_labels"][l:r]
-            agg_train_ex += train_ex
-            agg_train_labels += train_labels
+                response = run(mkey, model, tokenizer, prompt, args.temp)
+                pred = extract_ans(response)
+                msgs.append({
+                    "Prompt": prompt,
+                    "Response": response,
+                    "Prediction": pred
+                })
 
-        train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)])
+                try:
+                    dfa_pred, fst_pred, _ = task.regex_to_pynini_via_pyformlang(pred, sigma)
+                    eq, witness = task.equivalent_and_witness(fst_gt, fst_pred, sigma)
+                    acc = max(acc, int(eq))
+                    msgs[-1]["Equivalent"] = eq
+                    msgs[-1]["Witness"] = witness
+                    msgs[-1]["scoreTrainSet"] = sum([int(int(dfa_pred.accepts(ex)) == label) for ex, label in zip(agg_train_ex, agg_train_labels)]) / len(agg_train_ex)
+                    msgs[-1]["scoreEvalSet"] = sum([int(int(dfa_pred.accepts(ex)) == label) for ex, label in zip(eval_ex, eval_labels)]) / len(eval_ex)
+                    if msgs[-1]["scoreEvalSet"] > best_eval:
+                        best_eval = msgs[-1]["scoreEvalSet"]
+                        current_guess = pred
 
-        msgs = []
-        acc, max_token_len, best_eval = 0, 0, 0
-        for i in range(args.retries):
-            prompt = prompt_template.format(
-                regularization if args.use_reg else "",
-                train_p
-            )
-            if mkey.startswith(("gpt3", "gpt4")):
-                max_token_len = max(max_token_len, tokens_of_text(tokenizer, prompt))
-            elif args.mkey.startswith("ds"):
-                max_token_len = max(max_token_len, int(len(prompt) * 0.5))
+                except Exception as e:
+                    print(f"Error compiling regex: {e}")
+                    continue
 
-            response = run(mkey, model, tokenizer, prompt, args.temp)
-            pred = extract_ans(response)
-            msgs.append({
-                "Prompt": prompt,
-                "Response": response,
-                "Prediction": pred
-            })
+                msgdict[f"run-{run}"][f"epoch-{epoch}"] = {
+                    "Logs": msgs
+                }
+                savejson(msgdict, config_name)
 
-            try:
-                dfa_pred, fst_pred, _ = task.regex_to_pynini_via_pyformlang(pred, sigma)
-                eq, witness = task.equivalent_and_witness(fst_gt, fst_pred, sigma)
-                acc = max(acc, int(eq))
-                msgs[-1]["Equivalent"] = eq
-                msgs[-1]["Witness"] = witness
-                msgs[-1]["scoreTrainSet"] = sum([int(int(dfa_pred.accepts(ex)) == label) for ex, label in zip(agg_train_ex, agg_train_labels)]) / len(agg_train_ex)
-                msgs[-1]["scoreEvalSet"] = sum([int(int(dfa_pred.accepts(ex)) == label) for ex, label in zip(eval_ex, eval_labels)]) / len(eval_ex)
-                if msgs[-1]["scoreEvalSet"] > best_eval:
-                    best_eval = msgs[-1]["scoreEvalSet"]
-                    current_guess = pred
+            accs.append(acc)
+            print(f"Accuracy at epoch {epoch}: {acc}, token length: {max_token_len}")
 
-            except Exception as e:
-                print(f"Error compiling regex: {e}")
-                continue
-
-            msgdict[epoch] = {
+            msgdict[f"run-{run}"][f"epoch-{epoch}"] = {
+                "Accuracy": acc,
+                "NumTrainingSamples": len(agg_train_ex),
                 "Logs": msgs
             }
-            os.makedirs(os.path.dirname(config_name), exist_ok=True)
-            with open(config_name, "w") as f:
-                json.dump(msgdict, f, indent=4)
+            savejson(msgdict, config_name)
 
-        accs.append(acc)
-        print(f"Accuracy at epoch {epoch}: {acc}, token length: {max_token_len}")
-
-        msgdict[epoch] = {
-            "Accuracy": acc,
-            "NumTrainingSamples": len(agg_train_ex),
-            "Logs": msgs
+            if acc == 1.0:
+                print(f"Early stop at epoch {epoch}")
+                break
+            
+        finish_states[f"run-{run}"] = {
+            "epochs": epoch + 1,
+            "final_num_samples": len(agg_train_ex),
+            "final_accuracy": accs[-1]
         }
-        os.makedirs(os.path.dirname(config_name), exist_ok=True)
-        with open(config_name, "w") as f:
-            json.dump(msgdict, f, indent=4)
-
-        if acc == 1.0:
-            print(f"Early stop at epoch {epoch}")
-            break
+        msgdict["summary"] = finish_states
+        savejson(msgdict, config_name)
 
     # plot_accuracy_curve(list(range(len(num_samples))), accs, "accuracy_curves", config_name)

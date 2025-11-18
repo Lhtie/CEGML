@@ -54,8 +54,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--max_length", type=int, default=32)
     parser.add_argument("--max_metric_calls", type=int, default=150)
-    parser.add_argument("--task_lm", type=str, default="openai/gpt-5")
-    parser.add_argument("--reflection_lm", type=str, default="openai/gpt-5")
+    parser.add_argument("--task_lm", type=str, default="openai/gpt-5.1")
+    parser.add_argument("--reflection_lm", type=str, default="openai/gpt-5.1")
     args = parser.parse_args()
     
     # icl_gen

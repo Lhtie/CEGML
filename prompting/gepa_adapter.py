@@ -59,6 +59,7 @@ class DFAMatchAdapter(GEPAAdapter[DefaultDataInst, DefaultTrajectory, DefaultRol
             import litellm
 
             self.litellm = litellm
+            # litellm._turn_on_debug()
         self.model = model
 
         self.failure_score = failure_score
