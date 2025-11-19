@@ -49,215 +49,87 @@ modelpaths = {
 
 # """
 
-prompt_template = """You are given a learning task over regular languages. Your job for each task instance is:
+prompt_template = """TASK
+You will be given labeled strings and must infer a single regular language that matches all positives (label 1) and rejects all negatives (label 0). Output a concise regex in pyformlang.regular_expression.Regex syntax.
 
-- Infer a **single regular language** (unknown but fixed per instance) from **finite labeled examples**, then
-- Output a **single regular expression string** (regex) that represents a language **consistent with all the labeled examples**.
+INPUT FORMAT
+- You receive a block titled “Training Data (Each line has one input-output pair separated by comma):”.
+- Each line is "<string>, <label>" where label ∈ {{1, 0}}. The string may be empty; an empty string appears as nothing before the comma (", 1") and represents epsilon.
+- The alphabet is exactly the set of characters appearing in the data (typically a, b, c). Do not introduce other symbols.
 
-The regex must be a valid input for `pyformlang.regular_expression.Regex` and must follow the **exact syntax and constraints** described below.
-
----
-
-## Input Format (per task instance)
-
-You will be given:
-
-- A block of text titled **"Training Data (Each line has one input-output pair separated by comma):"**.
-- Each subsequent line contains:
-  - A string over the alphabet `{{a, b, c}}`, possibly empty, then
-  - A comma `,` followed by a label:
-    - `1` = positive example (string must be accepted by the target language)
-    - `0` = negative example (string must be rejected by the target language)
-
-Example of the format:
-
-```text
-Training Data (Each line has one input-output pair separated by comma):
-ca, 0
-acac, 1
-, 1
-bc, 1
-```
-
-Notes:
-
-- The substring before the comma is the actual string. An *empty* substring (nothing before the comma) represents the **empty string** (ε).
-- Strings consist only of characters `a`, `b`, `c`, with no spaces. You must interpret each character as a separate symbol.
-- The assistant should not assume the presence of any symbol outside `{{a, b, c}}`.
-
----
-
-## Output Requirements
-
-You must output **one and only one regex** in the required syntax, wrapped inside `<ans>` and `</ans>` tags, e.g.:
-
-```text
-<ans>(a+b)* c</ans>
-```
-
-Additionally:
-
-- You **must briefly explain your reasoning before the final `<ans>...</ans>` output**.
-- The final answer line **must contain only** the `<ans>...</ans>` content (no extra commentary on that line).
-
----
-
-## Regex Syntax Rules (pyformlang-compatible subset)
-
-You must obey all of the following syntax rules:
-
-1. **Alphabet symbols**:
-   - Allowed terminal symbols: `a`, `b`, `c` (single characters).
-   - You may also use the standard regex epsilon notation if supported by pyformlang: in many examples, epsilon must be represented *implicitly* by constructs like `X*` (which includes the empty string) rather than as a literal token. In earlier attempts, the literal `ε` symbol was rejected as “not in sigma”. Therefore:
-     - **Do not use a literal symbol like `ε` in the regex**.
-     - Encode the empty string via Kleene star of appropriate subexpressions (e.g., `(a b)*` includes ε).
-
-2. **Operators**:
-   - **Union**: `+`
-   - **Concatenation**: juxtaposition of tokens separated by spaces, e.g. `(a+b) c a`
-     - A space stands for concatenation between regexes/tokens.
-   - **Kleene star**: `*` applied postfix: `R*`
-
-3. **Forbidden constructs**:
-   - Do **not** use:
-     - `|` (alternative)
-     - `.` (dot / any symbol)
-     - `?` (optional)
-     - Character classes: `[...]`
-     - Quantifiers: `{{m}}`, `{{m,n}}`, `+` as “one or more” (note: `+` is union here, not repetition)
-     - Lookaheads/lookbehinds
-     - Anchors: `^`, `$`
-     - Any explicit symbol representing epsilon like `ε` (use star for that).
-
-4. **Grouping**:
-   - Use parentheses `(...)` to group subexpressions, especially around unions and where precedence might be ambiguous.
-   - Follow the convention that Kleene star `*` has highest precedence, then concatenation, then union `+`. When in doubt, use parentheses explicitly.
-
-5. **Tokenization**:
-   - Concatenation is between *tokens* separated by spaces. Each token must be:
-     - a single symbol (`a`, `b`, `c`),
-     - a grouped subexpression in parentheses, or
-     - a grouped subexpression optionally followed by `*`.
-
-   - **Do not write multi-character terminals** like `ac`, `ab`, `bc` as a single symbol. Instead, represent them as concatenation of single-character tokens, e.g.:
-     - Incorrect: `(ac+ab+bc)*`  ← `ac` is not a single symbol
-     - Correct: `(a c + a b + b c)*` or unions of appropriate starred concatenations as needed.
-
+PYFORMLANG REGEX SYNTAX
+- Union: +
+- Concatenation: space-separated symbols (each symbol is a single character from the alphabet or the literal epsilon).
+- Kleene star: *
+- Parentheses are allowed for grouping; use them whenever you union multi-symbol sequences or need precedence control.
+- Spacing rules:
+  - Concatenation uses spaces between every symbol: "a b", not "ab".
+  - To union sequences, group them: "(a b c + a c c)".
+  - Keep tokens space-separated across parentheses when concatenating: "c (a b)*", not "c(a b)*".
+- Epsilon handling: Use the literal epsilon when needed; prefer satisfying epsilon via an existing Kleene star rather than "epsilon + ...", unless epsilon is explicitly required at the top level.
+- Do NOT use: | . ? [] {{}} anchors/lookarounds, multi-character tokens, or any symbol not present in the training data.
 {0}
----
+INFERENCE STRATEGY
+1) Start/end constraints:
+   - Check if all positives start with a specific letter or set (e.g., all non-empty positives start with c). If so, encode a mandatory prefix, e.g., "c ..." or "(b + c) ...".
+   - Check for a forced suffix or final-block restriction (e.g., must end with b or a specific 2-letter tail). Place this outside any repeating block when needed.
 
-## Interpreting the Data and Inferring the Language
+2) Length/modular and block structure:
+   - Look for fixed-length blocks repeated via "*". Many datasets fit a 5-letter block repeated after a prefix; a common successful pattern is:
+     - c ((a + c) (a + b + c) a (b + c) c)*
+       • Explains positives that start with c; then zero or more blocks of length 5 with positions constrained as:
+         X ∈ {{a,c}}, Y ∈ {{a,b,c}}, literal a, Z ∈ {{b,c}}, literal c.
+       • Accepts the singleton "c" via the star’s epsilon.
+   - More generally:
+     - Use a star over a union of allowed blocks when strings can mix block types: "((block1) + (block2))*".
+     - If internal blocks allow more endings than the final block, use: "(InternalBlockUnion)* FinalRestrictedBlock".
+   - If a singleton positive (e.g., "b") exists alongside block-based strings, include it via a top-level union only if it cannot be captured by a prefix plus star (e.g., "c (...) *" already accepts "c" because the star can be epsilon).
 
-Your job is **to infer a regular pattern** that fits all data. Some common patterns from prior examples:
+3) Union design: star-of-union vs union-of-stars
+   - If strings mix different block types within one string, prefer a star over a union of blocks: "((...)+(...))*".
+   - If each positive is formed by repeating exactly one fixed 2-letter block with no mixing, a compact union of stars can be better: "(a b)* + (a c)* + (b c)*".
 
-- **Fixed-length block repetition**:
-  - Example: `c ( (a + c) (a + b + c) (a b c + a c c) )*`
-    - Here, all nontrivial positives:
-      - Start with `c`.
-      - After the initial `c`, the remaining string is split into blocks of length 5.
-      - Each block is constrained position-wise:
-        - pos1 ∈ {{a, c}}
-        - pos2 ∈ {{a, b, c}}
-        - last 3 chars either `abc` or `acc` (represented as `(a b c + a c c)`).
-    - The `*` indicates any number (including zero) of such blocks.
-- **Union of different repetition types**:
-  - Example: `(a b)* + (a c)* + (b c)*`
-    - Language: strings made of **only** repeated `ab`, or **only** repeated `ac`, or **only** repeated `bc`, including the empty string.
-    - Note how each bigram is represented as two concatenated symbols: `a b`, `a c`, `b c`.
-    - This correctly captures that mixed patterns like `abac` are negative.
-- **Block-structured stars**:
-  - Example: `((a+b) (b+c) (a+c) a (b+c) (a+b+c))*`
-    - This describes strings formed by repeating a **6-character block**, where at each position the symbol can be drawn from certain subsets:
-      - pos1 ∈ {{a, b}} → `(a+b)`
-      - pos2 ∈ {{b, c}} → `(b+c)`
-      - pos3 ∈ {{a, c}} → `(a+c)`
-      - pos4 = a alone → `a`
-      - pos5 ∈ {{b, c}} → `(b+c)`
-      - pos6 ∈ {{a, b, c}} → `(a+b+c)`
-    - The entire string is zero or more repetitions of such blocks; empty string is allowed via the outer `*`.
+4) Compactness tactics (stay ≤ 50 chars, ignoring spaces):
+   - Factor repeated substrings (e.g., "(a+b+c) a b c (...)").
+   - Use per-position unions like "(a+b)" or "(a+b+c)" instead of enumerating full strings.
+   - Factor common prefixes/suffixes within unions: "(a b c a b + a b c c b)" instead of duplicating.
 
-**Strategy hints**:
+5) Handling epsilon:
+   - Accept epsilon only if explicitly required by the data.
+   - Prefer to obtain needed epsilon through an existing Kleene star (e.g., "c (block)*" accepts "c"; "(block)*" accepts epsilon). Use "epsilon +" only when unavoidable at top level (e.g., when the empty string is positive but cannot be included via a star elsewhere).
 
-1. **Examine positives and negatives carefully**:
-   - Look for:
-     - Shared prefixes or suffixes.
-     - Length constraints (e.g., lengths of form `1 + 5k` or multiples of some block size).
-     - Repeated subpatterns (`ab` repeated, certain substrings always appearing).
-     - Allowed symbol choices at specific positions in fixed-size blocks.
+6) Avoid over-generalization:
+   - Do not allow arbitrary middles like "(a+b+c)*" unless strictly supported by all positives and necessary to exclude negatives.
+   - Do not invent constraints not universally implied by positives.
 
-2. **Check segmentability**:
-   - For longer positives, try partitioning into equal-sized blocks (e.g., length-2, length-3, length-5, length-6).
-   - See if each position in a block can be described as a union of symbols, as in `(a+b)` etc.
+7) Quality checks before finalizing:
+   - Verify your regex accepts every 1-labeled string and rejects every 0-labeled string.
+   - Sanity-check near-misses from negatives (e.g., wrong start letter, wrong modular length, incomplete final block, mixing vs non-mixing).
+   - Re-check syntax: unions around multi-symbol sequences, spaces everywhere in concatenation, and only allowed symbols.
+   - Ensure ≤ 50 (ignoring spaces) and star nesting ≤ 3.
 
-3. **Confirm against negatives**:
-   - Ensure that:
-     - Negative strings violate length constraints, or
-     - Contain forbidden substrings, or
-     - Break the block-wise position conditions, or
-     - Mix different allowed block types when only pure repetition is allowed, etc.
+EXAMPLES OF SUCCESSFUL PATTERNS
+- Mandatory prefix plus repeated fixed 5-length block (covers singleton "c" via star):
+  c ((a + c) (a + b + c) a (b + c) c)*
+- Runs of a’s separated by single b’s, ending in b; epsilon also accepted:
+  epsilon + a a* (b a a*)* b
+- Classic internal vs final block restriction shape:
+  (b + c) ((a + b + c) a b c (a b + c b + a c + c c))* (a + b + c) (a b + c b)
 
-4. **Representing the empty string**:
-   - Use the fact that `R*` accepts the empty string.
-   - Do **not** insert a literal epsilon symbol; instead, choose a starred pattern that includes ε when needed (e.g., `X*`, `((...) ...)*`).
+OUTPUT FORMAT
+- First, provide 1–3 concise sentences explaining the observed structure (mandatory prefix/set, block size/pattern, modular length, final-block restriction, epsilon/singleton handling).
+- Then output ONLY the final regex wrapped in <ans> and </ans>, e.g.:
+  <ans>(a a* b)*</ans>
 
-5. **Avoid invalid tokens**:
-   - Each letter is a separate token; pairs or triples must be represented via concatenation:
-     - Write `a b` for the string “ab”; write `a b c` for “abc”.
-     - For union of `abc` and `acc`: `(a b c + a c c)`.
-
-6. **Respect all examples**:
-   - Unlike some earlier incorrect guesses, *do not purposely ignore some positives or negatives* to simplify.
-   - Validate at least mentally that all provided positives match and all negatives do not.
-
----
-
-## Reasoning and Answer Format
-
-Your response for each task instance must:
-
-1. Provide a **brief but clear reasoning** section explaining:
-   - The observed structure in the examples (e.g., block sizes, unions, prefix/suffix constraints).
-   - Why the chosen regex matches all positives and rejects all negatives.
-   - That you are honoring the syntax and complexity constraints.
-
-2. End with a **single line** containing only the final regex surrounded by `<ans>` and `</ans>` tags. For example:
-
-```text
-<ans>c ( (a + c) (a + b + c) (a b c + a c c) )*</ans>
-```
-
-Do not add extra output after this line.
-
-Follow these instructions exactly for every new dataset you receive.
 Training Data (Each line has one input-output pair separated by comma):
 {1}
 """
-regularization = """---
-
-## Structural and Complexity Constraints
-
-Your inferred regex must satisfy the following constraints:
-
-1. **Consistency**:
-   - Every positive example string (labeled `1`) must be **accepted** by the regex language.
-   - Every negative example string (labeled `0`) must be **rejected** by the regex language.
-
-2. **Simplicity preference**:
-   - Among all consistent regexes, **prefer simpler ones**:
-     - Fewer operators and literals overall.
-     - Simpler structural patterns.
-   - However, **do not sacrifice correctness**: you must not knowingly violate any labeled example just to simplify.
-
-3. **Formal restrictions**:
-   - Let “length” mean the number of **non-space** characters in the regex string (including parentheses, operators, and symbols). This length must be:
-     - `<= 50`
-   - **Nesting depth of Kleene stars**:
-     - The maximum depth of nested `*` operators must be `<= 3`.
-     - Depth count example:
-       - `a*` has depth 1.
-       - `(a* b*)*` has depth 2.
-       - `((a b)*)*` has depth 2.
-       - Avoid patterns like `((a)*)* *` that would push depth above 3.
+regularization = """
+CONSTRAINTS
+- Prefer simpler, more general regexes while staying consistent with all datapoints.
+- Total regex length (ignoring spaces) must be ≤ 50 characters.
+- Nesting depth of Kleene stars must be ≤ 3.
+- Use only symbols that appear in the training data (a, b, c, epsilon).
 
 """
 

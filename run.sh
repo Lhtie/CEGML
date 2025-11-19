@@ -21,7 +21,7 @@
 # python train_icl_gen.py --regex "(a(b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*" --mkey gpt5 --use_reg --tot_train_size 384 --start_size 12 --scale_factor 2.0
 
 # reg; ce
-python train_icl_gen.py --regex "(a(a)*b)*" --mkey gpt-5.1 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 128
+# python train_icl_gen.py --regex "(a(a)*b)*" --mkey gpt5 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 128
 # python train_icl_gen.py --regex "(c(a+c)(a+b+c)a(b+c))*c" --mkey gpt5 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 128
 # python train_icl_gen.py --regex "((b+c)(a+b+c)a b c(a+c))*b" --mkey gpt5 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 128
 # python train_icl_gen.py --regex "((a b)*+(a c)*+(b c)*)" --mkey gpt5 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 128
