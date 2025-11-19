@@ -75,7 +75,7 @@ def run(mkey, model, tokenizer, msg, temp=0.3):
     
     if useAPI(mkey):
         sleep(1)
-        if mkey.startswith("gpt5"):
+        if mkey.startswith(("gpt5", "gpt-5")):
             outputs = model(inputs, max_completion_tokens=32768)
         else:
             outputs = model(inputs, max_tokens=8192, temperature=temp)
