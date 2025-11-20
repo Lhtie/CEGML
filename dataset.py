@@ -8,15 +8,20 @@ from tqdm import tqdm
 
 from tasks.rl import SimplyRegularLanguage
 
-regex_list = [
+regex_list_train = [
     "(a(a)*b)*",                                # 2 states
-    "((a+b)c(a+b))*",                           # 3 states
-    "((a a)*+(b b)*+(c c)*)*",                  # 4 states
     "(c(a+c)(a+b+c)a(b+c))*c",                  # 5 states
-    "((a+b)(b+c)(a+c)a(b+c)(a+b+c))*",          # 6 states
     "((b+c)(a+b+c)a b c(a+c))*b",               # 7 states
     "((a b)*+(a c)*+(b c)*)",                   # 8 states
     "(a(b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*"       # 8 states
+]
+
+regex_list_test = [
+    "((a+b)c(a+b))*",                           # 3 states
+    "((a a)*+(b b)*+(c c)*)*",                  # 4 states
+    "(b(b+c))* a* (cc)*",                       # 4 states
+    "((a+b)(b+c)(a+c)a(b+c)(a+b+c))*",          # 6 states
+    "(c b(b+a c)a b)* (a+(b+c)*a)*",            # 8 states
 ]
 
 if __name__ == "__main__":
@@ -36,7 +41,7 @@ if __name__ == "__main__":
 
     task = SimplyRegularLanguage(args.regex, args.max_length)
 
-    for r in regex_list:
+    for r in regex_list_test:
         t = SimplyRegularLanguage(r, args.max_length)
         print(f"{r}: {len(t.dfa.states)}")
 

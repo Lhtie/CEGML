@@ -65,7 +65,6 @@ PYFORMLANG REGEX SYNTAX
 - Spacing rules:
   - Concatenation uses spaces between every symbol: "a b", not "ab".
   - To union sequences, group them: "(a b c + a c c)".
-  - Keep tokens space-separated across parentheses when concatenating: "c (a b)*", not "c(a b)*".
 - Epsilon handling: Use the literal epsilon when needed; prefer satisfying epsilon via an existing Kleene star rather than "epsilon + ...", unless epsilon is explicitly required at the top level.
 - Do NOT use: | . ? [] {{}} anchors/lookarounds, multi-character tokens, or any symbol not present in the training data.
 {0}
@@ -75,11 +74,7 @@ INFERENCE STRATEGY
    - Check for a forced suffix or final-block restriction (e.g., must end with b or a specific 2-letter tail). Place this outside any repeating block when needed.
 
 2) Length/modular and block structure:
-   - Look for fixed-length blocks repeated via "*". Many datasets fit a 5-letter block repeated after a prefix; a common successful pattern is:
-     - c ((a + c) (a + b + c) a (b + c) c)*
-       • Explains positives that start with c; then zero or more blocks of length 5 with positions constrained as:
-         X ∈ {{a,c}}, Y ∈ {{a,b,c}}, literal a, Z ∈ {{b,c}}, literal c.
-       • Accepts the singleton "c" via the star’s epsilon.
+   - Look for fixed-length blocks repeated via "*".
    - More generally:
      - Use a star over a union of allowed blocks when strings can mix block types: "((block1) + (block2))*".
      - If internal blocks allow more endings than the final block, use: "(InternalBlockUnion)* FinalRestrictedBlock".
@@ -87,9 +82,9 @@ INFERENCE STRATEGY
 
 3) Union design: star-of-union vs union-of-stars
    - If strings mix different block types within one string, prefer a star over a union of blocks: "((...)+(...))*".
-   - If each positive is formed by repeating exactly one fixed 2-letter block with no mixing, a compact union of stars can be better: "(a b)* + (a c)* + (b c)*".
+   - If each positive is formed by repeating exactly one fixed block with no mixing, a compact union of stars can be better: "(a b)* + (a c)* + (b c)*".
 
-4) Compactness tactics (stay ≤ 50 chars, ignoring spaces):
+4) Compactness tactics:
    - Factor repeated substrings (e.g., "(a+b+c) a b c (...)").
    - Use per-position unions like "(a+b)" or "(a+b+c)" instead of enumerating full strings.
    - Factor common prefixes/suffixes within unions: "(a b c a b + a b c c b)" instead of duplicating.
@@ -106,15 +101,6 @@ INFERENCE STRATEGY
    - Verify your regex accepts every 1-labeled string and rejects every 0-labeled string.
    - Sanity-check near-misses from negatives (e.g., wrong start letter, wrong modular length, incomplete final block, mixing vs non-mixing).
    - Re-check syntax: unions around multi-symbol sequences, spaces everywhere in concatenation, and only allowed symbols.
-   - Ensure ≤ 50 (ignoring spaces) and star nesting ≤ 3.
-
-EXAMPLES OF SUCCESSFUL PATTERNS
-- Mandatory prefix plus repeated fixed 5-length block (covers singleton "c" via star):
-  c ((a + c) (a + b + c) a (b + c) c)*
-- Runs of a’s separated by single b’s, ending in b; epsilon also accepted:
-  epsilon + a a* (b a a*)* b
-- Classic internal vs final block restriction shape:
-  (b + c) ((a + b + c) a b c (a b + c b + a c + c c))* (a + b + c) (a b + c b)
 
 OUTPUT FORMAT
 - First, provide 1–3 concise sentences explaining the observed structure (mandatory prefix/set, block size/pattern, modular length, final-block restriction, epsilon/singleton handling).
@@ -127,9 +113,9 @@ Training Data (Each line has one input-output pair separated by comma):
 regularization = """
 CONSTRAINTS
 - Prefer simpler, more general regexes while staying consistent with all datapoints.
-- Total regex length (ignoring spaces) must be ≤ 50 characters.
-- Nesting depth of Kleene stars must be ≤ 3.
-- Use only symbols that appear in the training data (a, b, c, epsilon).
+- Total regex length (ignoring spaces) must be ≤ 40 characters.
+- Nesting depth of Kleene stars must be ≤ 2.
+- Use only symbols that appear in the training data (eg. a, b, c, epsilon).
 
 """
 
@@ -202,7 +188,7 @@ if __name__ == "__main__":
     parser.add_argument("--regex", type=str, default="(a(b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*")           # (a(a)*b)* or (a b + b a) (a + b b + c)* (a c + b a)
     parser.add_argument("--max_length", type=int, default=32)
     parser.add_argument("--eval_max_length", type=int, default=32)
-    parser.add_argument("--mkey", type=str, default="gpt-5.1")
+    parser.add_argument("--mkey", type=str, default="gpt5")
     parser.add_argument("--tot_train_size", type=int, default=384)
     parser.add_argument("--start_size", type=int, default=3)
     parser.add_argument("--scale_factor", type=float, default=2.0)
