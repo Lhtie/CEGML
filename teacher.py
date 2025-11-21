@@ -88,7 +88,7 @@ class Teacher:
         dfa_gt, fst_gt, sigma = self.task.regex_to_pynini_via_pyformlang(regex_gt)
         dfa_gen, fst_gen, _ = self.task.regex_to_pynini_via_pyformlang(regex_gen, sigma)
 
-        rate = self.task.diff_ratio(fst_gt, fst_gen, sigma)
+        rate = self.task.diff_ratio(fst_gt, fst_gen, sigma, k=self.task.max_length)
         n = np.ceil(bs * rate / 2).astype(int)
 
         ce_x = self.task.k_witnesses(fst_gt, fst_gen, sigma, k=n) + \

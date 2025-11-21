@@ -256,7 +256,6 @@ if __name__ == "__main__":
     eval_labels = data["eval_labels"]
     teacher = Teacher(task)
 
-    
     msgdict, finish_states = {}, {}
     msgdict["summary"] = None
     for runid in range(args.rerun):
