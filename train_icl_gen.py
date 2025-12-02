@@ -113,8 +113,8 @@ Training Data (Each line has one input-output pair separated by comma):
 regularization = """
 CONSTRAINTS
 - Prefer simpler, more general regexes while staying consistent with all datapoints.
-- Total regex length (ignoring spaces) must be ≤ 40 characters.
-- Nesting depth of Kleene stars must be ≤ 2.
+- Total regex length (ignoring spaces) must be ≤ 50 characters.
+- Nesting depth of Kleene stars must be ≤ 3.
 - Use only symbols that appear in the training data (eg. a, b, c, epsilon).
 
 """

@@ -18,10 +18,12 @@ regex_list_train = [
 
 regex_list_test = [
     "((a+b)c(a+b))*",                           # 3 states
+    "((a* b)* c)*",                             # 3 states
     "((a a)*+(b b)*+(c c)*)*",                  # 4 states
     "(b(b+c))* a* (cc)*",                       # 4 states
     "((a+b)(b+c)(a+c)a(b+c)(a+b+c))*",          # 6 states
     "(c b(b+a c)a b)* (a+(b+c)*a)*",            # 8 states
+    "((a*(b+c))*c + c((a+c)*b)*)* a"            # 8 states
 ]
 
 if __name__ == "__main__":
