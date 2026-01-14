@@ -202,12 +202,15 @@ def enum_regexes(max_n: int, max_k: int, sigma: Tuple[str, ...]):
             for m in range(3, 11):
                 regex_list[d][m] = regex_list[d].get(m, []) + [r for r, state_num in s if state_num == m]
 
+    # for d in regex_list:
+    #     print(f"Star depth: {d}")
+    #     for m in regex_list[d]:
+    #         print(f"  Number of states: {m}")
+    #         for rx in regex_list[d][m][:5]:
+    #             print(f"    {rx}")
+
     for d in regex_list:
-        print(f"Star depth: {d}")
-        for m in regex_list[d]:
-            print(f"  Number of states: {m}")
-            for rx in regex_list[d][m][:5]:
-                print(f"    {rx}")
+        print(f"{d}\t{'\t'.join([('\\n').join(regex_list[d][m][:5]) for m in regex_list[d]])}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
