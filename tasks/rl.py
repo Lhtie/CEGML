@@ -3,31 +3,14 @@ import random
 import pynini
 import numpy as np
 
-from pyformlang.regular_expression import Regex
+from pyformlang.regular_expression import Regex, PythonRegex
 from collections import deque
 from pyformlang.finite_automaton import State, Symbol, DeterministicFiniteAutomaton
 
-class SimplyRegularLanguage:
+class RegularLanguage:
     def __init__(self, regex_str, max_length):
         self.regex_str = regex_str
         self.max_length = max_length
-
-        self.regex = Regex(regex_str)
-
-        self.nfa = self.regex.to_epsilon_nfa()
-        self.dfa = self.nfa.to_deterministic().minimize()
-        self.num_alphabets = len(self.dfa.symbols)
-        self.num_categories = 2     # positive | negative
-
-    def to_tensor(self, batched_str):
-        lengths = torch.tensor([len(s) for s in batched_str], dtype=torch.long)
-        max_length = lengths.max().item()
-        tensor = torch.zeros((len(batched_str), max_length + 1, self.num_alphabets), dtype=torch.float)
-        for i, s in enumerate(batched_str):
-            for j, c in enumerate(s):
-                tensor[i, j, ord(c) - ord('a')] = 1
-            tensor[i, len(s), :] = 1
-        return tensor, lengths
     
     def _generate_string_to_state(self, dfa, target_state, max_depth):
         strings, labels = [], []
@@ -62,48 +45,21 @@ class SimplyRegularLanguage:
         assert len(strings) > 0, "Cannot generate string to target state"
         return random.choice(strings)
     
-    def generate_random_strings_uniform(self, m, n):
+    def generate_random_strings_balanced(self, m, n, rate=0.5):
         strings = []
-        alphabet = [chr(c + ord('a')) for c in range(self.num_alphabets)]
-        for _ in range(m):
-            length = random.randint(1, n)
-            s = ''.join(random.choices(alphabet, k=length))
-            strings.append(s)
-        return strings
-
-    def generate_random_strings_beta(self, m, n, alpha=None):
-        alphabet = [chr(ord('a') + i) for i in range(self.num_alphabets)]
-        if isinstance(alpha, (int, float)) or alpha is None:
-            alpha = [alpha if alpha else 1.0] * self.num_alphabets
-        strings = []
-
-        for _ in range(m):
-            probs = np.random.dirichlet(alpha)
-            
-            indices = np.random.choice(self.num_alphabets, size=n, p=probs)
-            strings.append(''.join(alphabet[i] for i in indices))
-        return strings
-    
-    def generate_random_strings_balanced(self, m, n, rate=0.5, len_gen=None):
-        strings = []
-        alphabet = [chr(c + ord('a')) for c in range(self.num_alphabets)]
         for _ in range(m):
             accepted = random.random() < rate
             if accepted:
-                while True:
-                    try:
-                        s = self._generate_string_to_state(self.dfa, random.choice(list(self.dfa.final_states)), n)
-                        break
-                    except AssertionError:
-                        continue
-                strings.append(s)
+                target_state = random.choice(list(self.dfa.final_states))
             else:
-                length = random.randint(1, n)
-                while True:
-                    s = ''.join(random.choices(alphabet, k=length))
-                    if not self.accepts(s):
-                        strings.append(s)
-                        break
+                target_state = random.choice(list(self.dfa.states - self.dfa.final_states))
+            while True:
+                try:
+                    s = self._generate_string_to_state(self.dfa, target_state, n)
+                    break
+                except AssertionError:
+                    continue
+            strings.append(s)
         return strings
 
     def accepts(self, str):
@@ -130,15 +86,6 @@ class SimplyRegularLanguage:
             f.add_arc(idmap[q], pynini.Arc(il, il, pynini.Weight.one(f.weight_type()), idmap[t]))
         f.set_input_symbols(sigma); f.set_output_symbols(sigma)
         return pynini.minimize(pynini.determinize(f)).optimize()
-
-    def regex_to_pynini_via_pyformlang(self, rx: str, sigma=None):
-        re = Regex(rx)
-        nfa = re.to_epsilon_nfa()
-        dfa = nfa.to_deterministic().minimize()
-        if sigma is None:
-            sigma = self.sigma_from_chars([s.value for s in dfa.symbols])
-        fst = self.dfa_to_pynini_fst(dfa, sigma)
-        return dfa, fst, sigma
 
     def equivalent_and_witness(self, A: pynini.Fst, B: pynini.Fst, sigma: pynini.SymbolTable):
         """
@@ -224,3 +171,75 @@ class SimplyRegularLanguage:
             diff += self.count_strings_of_length(symdiff, sigma, length)
             
         return diff / total if total > 0 else 0.0
+    
+class SimplyRegularLanguage(RegularLanguage):
+    def __init__(self, regex_str, max_length):
+        super().__init__(regex_str, max_length)
+
+        self.regex = Regex(regex_str)
+
+        self.nfa = self.regex.to_epsilon_nfa()
+        self.dfa = self.nfa.to_deterministic().minimize()
+        self.num_alphabets = len(self.dfa.symbols)
+        self.num_categories = 2     # positive | negative
+
+    def to_tensor(self, batched_str):
+        lengths = torch.tensor([len(s) for s in batched_str], dtype=torch.long)
+        max_length = lengths.max().item()
+        tensor = torch.zeros((len(batched_str), max_length + 1, self.num_alphabets), dtype=torch.float)
+        for i, s in enumerate(batched_str):
+            for j, c in enumerate(s):
+                tensor[i, j, ord(c) - ord('a')] = 1
+            tensor[i, len(s), :] = 1
+        return tensor, lengths
+    
+    def generate_random_strings_uniform(self, m, n):
+        strings = []
+        alphabet = [chr(c + ord('a')) for c in range(self.num_alphabets)]
+        for _ in range(m):
+            length = random.randint(1, n)
+            s = ''.join(random.choices(alphabet, k=length))
+            strings.append(s)
+        return strings
+
+    def generate_random_strings_beta(self, m, n, alpha=None):
+        alphabet = [chr(ord('a') + i) for i in range(self.num_alphabets)]
+        if isinstance(alpha, (int, float)) or alpha is None:
+            alpha = [alpha if alpha else 1.0] * self.num_alphabets
+        strings = []
+
+        for _ in range(m):
+            probs = np.random.dirichlet(alpha)
+            
+            indices = np.random.choice(self.num_alphabets, size=n, p=probs)
+            strings.append(''.join(alphabet[i] for i in indices))
+        return strings
+    
+    def regex_to_pynini_via_pyformlang(self, rx: str, sigma=None):
+        re = Regex(rx)
+        nfa = re.to_epsilon_nfa()
+        dfa = nfa.to_deterministic().minimize()
+        if sigma is None:
+            sigma = self.sigma_from_chars([s.value for s in dfa.symbols])
+        fst = self.dfa_to_pynini_fst(dfa, sigma)
+        return dfa, fst, sigma
+    
+class PythonRegularLanguage(RegularLanguage):
+    def __init__(self, regex_str, max_length):
+        super().__init__(regex_str, max_length)
+
+        self.regex = PythonRegex(regex_str)
+
+        self.nfa = self.regex.to_epsilon_nfa()
+        self.dfa = self.nfa.to_deterministic().minimize()
+        self.num_alphabets = len(self.dfa.symbols)
+        self.num_categories = 2     # positive | negative
+    
+    def regex_to_pynini_via_pyformlang(self, rx: str, sigma=None):
+        re = PythonRegex(rx)
+        nfa = re.to_epsilon_nfa()
+        dfa = nfa.to_deterministic().minimize()
+        if sigma is None:
+            sigma = self.sigma_from_chars([s.value for s in dfa.symbols])
+        fst = self.dfa_to_pynini_fst(dfa, sigma)
+        return dfa, fst, sigma

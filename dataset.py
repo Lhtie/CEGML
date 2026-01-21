@@ -7,7 +7,7 @@ import numpy as np
 from tqdm import tqdm
 from typing import Iterable, Set, Tuple
 
-from tasks.rl import SimplyRegularLanguage
+from tasks.rl import SimplyRegularLanguage, PythonRegularLanguage
 
 regex_list_train = [
     "(a(a)*b)*",                                # 2 states
@@ -33,6 +33,34 @@ def generate_dataset(args):
     for r in regex_list_test:
         t = SimplyRegularLanguage(r, args.max_length)
         print(f"{r}: {len(t.dfa.states)}")
+
+    train_ex = task.generate_random_strings_balanced(
+        m=args.tot_train_size, 
+        n=args.max_length
+    )
+    train_labels = [1 if task.accepts(x) else 0 for x in train_ex]
+
+    eval_ex = task.generate_random_strings_balanced(
+        m=args.eval_size, 
+        n=args.eval_max_length
+    )
+    eval_labels = [1 if task.accepts(x) else 0 for x in eval_ex]
+
+    os.makedirs("datasets", exist_ok=True)
+    with open(f"datasets/regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json", "w") as f:
+        json.dump({
+            "train_ex": train_ex,
+            "train_labels": train_labels,
+            "eval_ex": eval_ex,
+            "eval_labels": eval_labels
+        }, f, indent=4)
+
+def generate_dataset_pyrx(args):
+    task = PythonRegularLanguage(args.regex, args.max_length)
+
+    # for r in regex_list_test:
+    #     t = PythonRegularLanguage(r, args.max_length)
+    #     print(f"{r}: {len(t.dfa.states)}")
 
     train_ex = task.generate_random_strings_balanced(
         m=args.tot_train_size, 
@@ -230,6 +258,7 @@ if __name__ == "__main__":
     # nl_rx_turk()
 
     # generate_dataset(args)
+    generate_dataset_pyrx(args)
 
-    enum_regexes(max_n=25, max_k=4, sigma=('a', 'b', 'c'))
+    # enum_regexes(max_n=25, max_k=4, sigma=('a', 'b', 'c'))
     
