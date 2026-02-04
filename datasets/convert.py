@@ -5,103 +5,123 @@ import re
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from tasks.rl import PythonRegularLanguage
+from tasks.rl import NLRXRegularLanguage
+from tasks.utils import split_regex_into_atoms
 
-def split_regex_into_atoms(regex):
+def _parse_unbounded_quant(q):
+    m = re.fullmatch(r"\{\s*(\d+)\s*,\s*\}", q or "")
+    return int(m.group(1)) if m else None
+
+def normalize_unbounded_quant(node):
     """
-    Simple atom splitter.
-    - Treat (), [] blocks as atoms (supports nesting for () only).
-    - Treat escapes like "\\b" as atoms.
-    - Attach quantifiers (* + ? {m,n}) to the previous atom.
-    - Operators "|", "&", "~" are standalone.
+    Transform {n,} into equivalent {n} + * concatenation in the tree.
+    Returns a new node tree (does not mutate input).
     """
-    atoms, i, n = [], 0, len(regex)
+    def clone_base(n0):
+        if n0["type"] == "atom":
+            return {"type": "atom", "value": n0["value"], "quant": "", "negated": False}
+        return {
+            "type": "group",
+            "children": [normalize_unbounded_quant(c) for c in n0.get("children", [])],
+            "ops": list(n0.get("ops", [])),
+            "quant": "",
+            "negated": False,
+        }
 
-    def take_quant(i0):
-        if i0 < n and regex[i0] in {"*", "+", "?"}:
-            return regex[i0], i0 + 1
-        if i0 < n and regex[i0] == "{":
-            j = i0 + 1
-            while j < n and regex[j] != "}":
-                j += 1
-            return regex[i0:j + 1], min(j + 1, n)
-        return "", i0
+    num = _parse_unbounded_quant(node.get("quant", ""))
+    base = clone_base(node)
+    if num is None:
+        base["quant"] = node.get("quant", "")
+        base["negated"] = node.get("negated", False)
+        return base
+    if num == 0:
+        base["quant"] = "*"
+        base["negated"] = node.get("negated", False)
+        return base
 
-    while i < n:
-        ch = regex[i]
-        if ch in {"|", "&", "~"}:
-            atoms.append(ch)
-            i += 1
-            continue
+    fixed = dict(base, quant="{" + str(num) + "}")
+    repeat = dict(base, quant="*")
+    return {
+        "type": "group",
+        "children": [fixed, repeat],
+        "ops": ["."],
+        "quant": "",
+        "negated": node.get("negated", False),
+    }
 
-        if ch == "[":
-            j = i + 1
-            while j < n:
-                if regex[j] == "\\" and j + 1 < n:
-                    j += 2
-                elif regex[j] == "]":
-                    j += 1
-                    break
-                else:
-                    j += 1
-            atom = regex[i:j]
-            q, i = take_quant(j)
-            atoms.append(atom + q)
-            continue
+def restrict_alphabet(node, alphabet):
+    """
+    Restrict atoms to given alphabet by replacing .* and [^...] with union of all alphabet symbols.
+    Returns a new node tree (does not mutate input).
+    """
+    def make_union_group(alphabet, q, neg):
+        return {
+            "type": "atom",
+            "value": f"[{''.join(alphabet)}]",
+            "quant": q,
+            "negated": neg,
+        }
 
-        if ch == "(":
-            depth, j = 1, i + 1
-            while j < n and depth > 0:
-                if regex[j] == "\\" and j + 1 < n:
-                    j += 2
-                elif regex[j] == "(":
-                    depth += 1
-                    j += 1
-                elif regex[j] == ")":
-                    depth -= 1
-                    j += 1
-                else:
-                    j += 1
-            inner = regex[i + 1:j - 1]
-            atoms.extend(split_regex_into_atoms(inner))
-            q, i = take_quant(j)
-            if q:
-                atoms.append(q)
-            continue
+    if node["type"] == "atom":
+        val = node["value"]
+        q = node.get("quant", "")
+        neg = node.get("negated", False)
+        if val == ".":
+            return make_union_group(alphabet, q, neg)
+        if val.startswith("[^"):
+            val = val[2:-1]
+            return make_union_group([a for a in alphabet if a not in val], q, neg)
+        if not val.startswith("["):
+            if val == "\\b":
+                val = ""
+            elif not re.fullmatch(rf"[{''.join(alphabet)}]", val):
+                val = "#"
+        return {"type": "atom", "value": val, "quant": q, "negated": neg}
 
-        if ch == "\\" and i + 1 < n:
-            atom = regex[i:i + 2]
-            q, i = take_quant(i + 2)
-            atoms.append(atom + q)
-            continue
+    return {
+        "type": "group",
+        "children": [restrict_alphabet(c, alphabet) for c in node.get("children", [])],
+        "ops": list(node.get("ops", [])),
+        "quant": node.get("quant", ""),
+        "negated": node.get("negated", False),
+    }
 
-        atom = ch
-        q, i = take_quant(i + 1)
-        atoms.append(atom + q)
+def tree_to_regex(node, par):
+    """
+    Serialize tree back to regex string. Uses "." as implicit concat.
+    """
+    neg = node.get("negated", False)
+    if node["type"] == "atom":
+        prefix = "~" if neg else ""
+        return prefix + node["value"] + node.get("quant", "")
 
-    return atoms
+    children = node.get("children", [])
+    ops = node.get("ops", [])
+
+    parts = []
+    for idx, child in enumerate(children):
+        child_rx = tree_to_regex(child, node)
+        parts.append(child_rx)
+        if idx < len(ops) and ops[idx] != ".":
+            parts.append(ops[idx])
+
+    inner = "".join(parts) if par is None else "(" + "".join(parts) + ")"
+    if neg:
+        inner = "~" + inner
+    return inner + node.get("quant", "")
 
 def convert_nlrx_to_pyrx(nlrx_lines):
     alphabet = ["A-Z", "a-z", "0-9", "#"]
     
     pyrx_lines = []
     for line in nlrx_lines:
-        if line.startswith("~"):
-            match = re.search(r"~\((.*)\)", line)
-            assert match is not None, f"Failed to eliminate overall ~: {line}"
-            line = match.group(1)
-        assert "~" not in line, f"Op ~ remains: {line}"
+        tree = split_regex_into_atoms(line)
+        tree = normalize_unbounded_quant(tree)
+        tree = restrict_alphabet(tree, alphabet)
+        line = tree_to_regex(tree, None)
         
-        if line.startswith("\.\*") and line.endswith("\.\*"):
-            line = line[2:-2]
-            
-        line = line.replace("\\b", "#")
-        
-        while True:
-            match = re.search(r"({[0-9]+,\s*})", line)
-            if match is None: break
-            group = match.group(1)
-            
+        pyrx_lines.append(line)
+    return pyrx_lines
 
 if __name__ == "__main__":
     with open(os.path.join(os.path.dirname(__file__), "KB13.txt"), "r") as f:
@@ -109,3 +129,7 @@ if __name__ == "__main__":
         nlrx_lines = [line.strip() for line in nlrx_lines]
     
     pyrx_lines = convert_nlrx_to_pyrx(nlrx_lines)
+
+    with open(os.path.join(os.path.dirname(__file__), "KB13_pyrx.txt"), "w") as f:
+        f.write("\n".join(pyrx_lines))
+        

@@ -102,6 +102,26 @@ def nl_rx_turk():
         print(f"Regexes with {state_num} states:")
         for rx in bins[state_num]:
             print(f"  {rx}")
+            
+def KB13():
+    from tasks.rl import NLRXRegularLanguage
+    from tqdm import tqdm
+
+    bins = {}
+    with open("datasets/KB13_pyrx.txt", "r") as f:
+        lines = f.readlines()
+        for rx in tqdm(lines[:350]):
+            pyrx = NLRXRegularLanguage(rx.strip(), max_length=32, alphabet="[A-Za-z0-9#]")
+            dfa = pyrx.dfa
+            bins[len(dfa.states)] = bins.get(len(dfa.states), []) + [rx.strip()]
+
+    bins = dict(sorted(bins.items(), key=lambda x: x[0]))
+
+    print("Available number of states: ", list(bins.keys()))
+    for state_num in bins:
+        print(f"Regexes with {state_num} states:")
+        for rx in bins[state_num]:
+            print(f"  {rx}")
 
 def enum_regexes(max_n: int, max_k: int, sigma: Tuple[str, ...]):
     from dataclasses import dataclass
@@ -256,9 +276,10 @@ if __name__ == "__main__":
     torch.cuda.manual_seed(args.seed)
 
     # nl_rx_turk()
+    KB13()
 
     # generate_dataset(args)
-    generate_dataset_pyrx(args)
+    # generate_dataset_pyrx(args)
 
     # enum_regexes(max_n=25, max_k=4, sigma=('a', 'b', 'c'))
     
