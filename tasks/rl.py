@@ -119,7 +119,7 @@ class RegularLanguage:
         sp.set_input_symbols(sigma)
         sp.set_output_symbols(sigma)
         s = pynini.shortestpath(sp).string(token_type=sigma)  # or rewrite.lattice_to_string(sp)
-        return False, s
+        return False, s.replace(" ", "")  # remove spaces from witness string
     
     def k_witnesses(self, A: pynini.Fst, B: pynini.Fst, sigma: pynini.SymbolTable, k=10):
         """Return up to k shortest disagreement strings."""
@@ -248,7 +248,7 @@ class PythonRegularLanguage(RegularLanguage):
         self.num_alphabets = len(self.dfa.symbols)
         self.num_categories = 2     # positive | negative
     
-    def regex_to_pynini_via_pyformlang(self, rx: str, sigma=None):
+    def regex_to_pynini_via_pyformlang(self, rx: str, sigma: pynini.SymbolTable=None):
         re = PythonRegex(rx)
         nfa = re.to_epsilon_nfa()
         dfa = nfa.to_deterministic().minimize()
@@ -274,10 +274,11 @@ class ExtRegularLanguage(RegularLanguage):
         self.num_alphabets = len(sigma)
         self.num_categories = 2
         
-    def regex_to_pynini_via_pyformlang(self, rx: str, sigma=None):
+    def regex_to_pynini_via_pyformlang(self, rx: str, sigma: pynini.SymbolTable=None):
         regex_tree = split_regex_into_atoms(rx)
-        if sigma is None: sigma = self.sigma
-        dfa = build_dfa(regex_tree, sigma)
+        dfa = build_dfa(regex_tree, self.sigma)
+        if sigma is None:
+            sigma = self.sigma_from_chars([s.value for s in self.sigma])
         fst = self.dfa_to_pynini_fst(dfa, sigma)
         return dfa, fst, sigma
 

@@ -65,7 +65,7 @@ Core operators (* are extended operators beyond PythonRegex)
 - *Conjunction / intersection: &
   Semantics: L(R1 & R2) = L(R1) ∩ L(R2)
 - *Negation / complement: ~(R)
-  Semantics: L(~(R)) = Σ* \ L(R)
+  Semantics: L(~(R)) = Σ* \\ L(R)
   Negation must always be written with parentheses: ~( ... )
 Quantifiers
 Quantifiers apply to the immediately preceding atom or parenthesized group.
@@ -234,7 +234,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    task = ExtRegularLanguage(args.regex, args.max_length, sigma=sigma)
+    task = ExtRegularLanguage(args.regex, args.max_length, alphabet=sigma)
     mkey = args.mkey
     if mkey in modelpaths:
         mpath = modelpaths[mkey]
@@ -326,7 +326,8 @@ if __name__ == "__main__":
             for i in range(args.retries):
                 prompt = prompt_template.format(
                     regularization if args.use_reg else "",
-                    train_p
+                    train_p,
+                    sigma=sigma
                 )
                 if mkey.startswith(("gpt3", "gpt4")):
                     max_token_len = max(max_token_len, tokens_of_text(tokenizer, prompt))
