@@ -12,10 +12,11 @@ from time import sleep
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from modeling.RNN import RNN
-from tasks.rl import PythonRegularLanguage
+from tasks.rl import PythonRegularLanguage, ExtRegularLanguage
 from learner import Learner
 from teacher import Teacher
 from curve import plot_loss_curve, plot_accuracy_curve
+from dataset import generate_dataset
 from keysecrets import api_key
 
 device_map = "cuda" if torch.cuda.is_available() else "cpu"
@@ -32,30 +33,58 @@ modelpaths = {
         "gpt5":         "gpt-5"
 }
 
+sigma = "[A-Za-z0-9#]"
 prompt_template = """TASK
-You will be given labeled strings and must infer a single regular language that matches all positives (label 1) and rejects all negatives (label 0). Output a concise regex in pyformlang.regular_expression.PythonRegex syntax.
+You will be given labeled strings and must infer a single regular language that matches all positives (label 1) and rejects all negatives (label 0). Output a concise regex in our specified syntax (extended from pyformlang.regular_expression.PythonRegex).
 
 INPUT FORMAT
 - You receive a block titled “Training Data (Each line has one input-output pair separated by comma):”.
 - Each line is "<string>, <label>" where label ∈ {{1, 0}}. The string may be empty; an empty string appears as nothing before the comma (", 1") and represents epsilon.
-- The alphabet is exactly the set of characters appearing in the data. Do not introduce other symbols.
+- The alphabet is fixed. Do not introduce other symbols.
 
-PYTHONREGEX SYNTAX (pyformlang.regular_expression.PythonRegex)
+EXT REGEX SYNTAX (Extended PythonRegex)
+
+Alphabet
+- The alphabet is fixed: Σ = {sigma}
+- No other characters may appear anywhere in the regex.
+- No escape sequences are supported. Do not use '\\' at all.
+Atomic forms
+1) Literal character: Any single symbol in Σ
+2) Character class:
+   - Syntax: [ ... ]
+   - Contents may use only:
+     * ranges like A-Z, 0-9
+     * an individual literal symbol
+Core operators (* are extended operators beyond PythonRegex)
+- Concatenation: implicit by adjacency
+  Example: ab means 'a' followed by 'b'
 - Union (OR): |
-- Concatenation: implicit (e.g., "ab" means a followed by b)
-- Kleene star: *
-- One or more: +
-- Optional: ?
-- Grouping: parentheses (...)
-- Character classes: [abc], [a-z], [A-Z]
-- Wildcard: . (matches any single symbol in the alphabet)
-- Anchors (^, $) and lookarounds are NOT allowed.
-- Backreferences and named groups are NOT allowed.
-- Use only regular constructs supported by automata conversion.
-- Epsilon handling:
-  - Prefer using existing operators to allow epsilon (e.g., x*).
-  - Use an explicit empty alternative only if necessary: (a|) to include epsilon.
-  - Do NOT invent special epsilon symbols.
+  Example: a|b means 'a' or 'b'
+- Grouping: ( ... )
+  Parentheses define scope and precedence.
+- *Conjunction / intersection: &
+  Semantics: L(R1 & R2) = L(R1) ∩ L(R2)
+- *Negation / complement: ~(R)
+  Semantics: L(~(R)) = Σ* \ L(R)
+  Negation must always be written with parentheses: ~( ... )
+Quantifiers
+Quantifiers apply to the immediately preceding atom or parenthesized group.
+- * : zero or more
+- + : one or more
+- ? : zero or one
+- {{n}} : exactly n repetitions (n is a nonnegative integer)
+- {{n,m}}: between n and m repetitions inclusive (0 <= n <= m)
+- {{n,}} : at least n repetitions, equivalent to “(E){{n}}(E)*”
+Associativity
+- Concatenation, &, and | are left-associative.
+- Parenthesize whenever there is ambiguity.
+Priority (from highest to lowest): Quantifiers, ~, Concatenation, &, |
+Prohibited constructs (must not appear)
+- Do not use '.' (dot). Use [A-Za-z0-9#] explicitly when you need Σ.
+- Do not use negated character classes [^...].
+- Do not use anchors ^ or $.
+- Do not use word boundary \\b.
+- Do not use lookarounds or backreferences.
 {0}
 INFERENCE STRATEGY
 
@@ -74,10 +103,8 @@ INFERENCE STRATEGY
    - If a singleton positive exists (example: "b"), include it using union only if it cannot be captured via star behavior.
 
 3) Union design: star-of-union vs union-of-stars
-   - If block types mix inside strings:
-       (A|B|C)*
-   - If each string repeats exactly one block type:
-       A*|B*|C*
+   - If block types mix inside strings: (A|B|C)*
+   - If each string repeats exactly one block type: A*|B*|C*
 
 4) Compactness tactics:
    - Factor common prefixes/suffixes.
@@ -92,7 +119,6 @@ INFERENCE STRATEGY
    - Only use empty alternation (|) when unavoidable.
 
 6) Avoid over-generalization:
-   - Do NOT use ".*" unless all positives support arbitrary internal symbols.
    - Do NOT allow patterns contradicted by negatives.
 
 7) Quality checks before finalizing:
@@ -104,7 +130,7 @@ INFERENCE STRATEGY
 OUTPUT FORMAT
 - First, provide 1–3 concise sentences explaining the observed structure (mandatory prefix/set, block size/pattern, modular length, final-block restriction, epsilon/singleton handling).
 - Then output ONLY the final regex wrapped in <ans> and </ans>, e.g.:
-  <ans>(a*c | b)*</ans>
+  <ans>(a*(c)|(b))*</ans>
 
 Training Data (Each line has one input-output pair separated by comma):
 {1}
@@ -114,7 +140,7 @@ CONSTRAINTS
 - Prefer simpler, more general regexes while staying consistent with all datapoints.
 - Total regex length (ignoring spaces) must be ≤ 50 characters.
 - Nesting depth of Kleene stars (*, +, ?) must be ≤ 3.
-- Use only symbols that appear in the training data (except metacharacters such as (), |, *, +, ?, []).
+- Use only symbols that appear in the alphabet (except metacharacters such as (), |, *, +, ?, []).
 
 """
 
@@ -184,11 +210,12 @@ def savejson(ctx, path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--regex", type=str, default="([0-9]).*(([A-Za-z])&([a-z])).*")
+    parser.add_argument("--regex", type=str, default="[A-Za-z0-9#]*z[A-Za-z]*[A-Za-z0-9#]*")
     parser.add_argument("--max_length", type=int, default=32)
     parser.add_argument("--eval_max_length", type=int, default=32)
     parser.add_argument("--mkey", type=str, default="gpt5")
     parser.add_argument("--tot_train_size", type=int, default=384)
+    parser.add_argument("--eval_size", type=int, default=32)
     parser.add_argument("--start_size", type=int, default=3)
     parser.add_argument("--scale_factor", type=float, default=2.0)
     parser.add_argument("--seed", type=int, default=43)
@@ -207,7 +234,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    task = PythonRegularLanguage(args.regex, args.max_length)
+    task = ExtRegularLanguage(args.regex, args.max_length, sigma=sigma)
     mkey = args.mkey
     if mkey in modelpaths:
         mpath = modelpaths[mkey]
@@ -240,17 +267,21 @@ if __name__ == "__main__":
         model.eval()
 
     if not args.use_ce:
-        config_name = f"logs/opt_prompt/icl_gen_pyrx/model={args.mkey}/std/"
+        config_name = f"logs/opt_prompt/icl_gen_extrx/model={args.mkey}/std/"
         config_name += "reg/" if args.use_reg else "noreg/"
         config_name += f"msgdict_regex={args.regex}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}.json"
     else:
-        config_name = f"logs/opt_prompt/icl_gen_pyrx/model={args.mkey}/ce/"
+        config_name = f"logs/opt_prompt/icl_gen_extrx/model={args.mkey}/ce/"
         config_name += "reg/" if args.use_reg else "noreg/"
         config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs}_ceBatch={args.ce_batch_size}.json"
+        
     dataset = f"datasets/regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
+    if not os.path.exists(dataset):
+        generate_dataset(args, task_type="extrx")
+        
     with open(dataset, "r") as f:
         data = json.load(f)
-    dfa_gt, fst_gt, sigma = task.regex_to_pynini_via_pyformlang(args.regex)
+    dfa_gt, fst_gt, _ = task.regex_to_pynini_via_pyformlang(args.regex)
     eval_ex = data["eval_ex"]
     eval_labels = data["eval_labels"]
     teacher = Teacher(task)
@@ -311,7 +342,7 @@ if __name__ == "__main__":
                 })
 
                 try:
-                    dfa_pred, fst_pred, _ = task.regex_to_pynini_via_pyformlang(pred, sigma)
+                    dfa_pred, fst_pred, sigma = task.regex_to_pynini_via_pyformlang(pred)
                     eq, witness = task.equivalent_and_witness(fst_gt, fst_pred, sigma)
                     acc = max(acc, int(eq))
                     msgs[-1]["Equivalent"] = eq

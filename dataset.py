@@ -7,7 +7,6 @@ import numpy as np
 from tqdm import tqdm
 from typing import Iterable, Set, Tuple
 
-from tasks.rl import SimplyRegularLanguage, PythonRegularLanguage
 
 regex_list_train = [
     "(a(a)*b)*",                                # 2 states
@@ -27,40 +26,17 @@ regex_list_test = [
     "((a*(b+c))*c + c((a+c)*b)*)* a"            # 8 states
 ]
 
-def generate_dataset(args):
-    task = SimplyRegularLanguage(args.regex, args.max_length)
-
-    for r in regex_list_test:
-        t = SimplyRegularLanguage(r, args.max_length)
-        print(f"{r}: {len(t.dfa.states)}")
-
-    train_ex = task.generate_random_strings_balanced(
-        m=args.tot_train_size, 
-        n=args.max_length
-    )
-    train_labels = [1 if task.accepts(x) else 0 for x in train_ex]
-
-    eval_ex = task.generate_random_strings_balanced(
-        m=args.eval_size, 
-        n=args.eval_max_length
-    )
-    eval_labels = [1 if task.accepts(x) else 0 for x in eval_ex]
-
-    os.makedirs("datasets", exist_ok=True)
-    with open(f"datasets/regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json", "w") as f:
-        json.dump({
-            "train_ex": train_ex,
-            "train_labels": train_labels,
-            "eval_ex": eval_ex,
-            "eval_labels": eval_labels
-        }, f, indent=4)
-
-def generate_dataset_pyrx(args):
-    task = PythonRegularLanguage(args.regex, args.max_length)
-
-    # for r in regex_list_test:
-    #     t = PythonRegularLanguage(r, args.max_length)
-    #     print(f"{r}: {len(t.dfa.states)}")
+def generate_dataset(args, task_type="simplyrx"):
+    from tasks.rl import SimplyRegularLanguage, PythonRegularLanguage, ExtRegularLanguage
+    
+    if task_type == "simplyrx":
+        task = SimplyRegularLanguage(args.regex, args.max_length)
+    elif task_type == "pythonrx":
+        task = PythonRegularLanguage(args.regex, args.max_length)
+    elif task_type == "extrx":
+        task = ExtRegularLanguage(args.regex, args.max_length)
+    else:
+        raise ValueError(f"Unknown task type: {task_type}")
 
     train_ex = task.generate_random_strings_balanced(
         m=args.tot_train_size, 
@@ -104,14 +80,14 @@ def nl_rx_turk():
             print(f"  {rx}")
             
 def KB13():
-    from tasks.rl import NLRXRegularLanguage
+    from tasks.rl import ExtRegularLanguage
     from tqdm import tqdm
 
     bins = {}
     with open("datasets/KB13_pyrx.txt", "r") as f:
         lines = f.readlines()
         for rx in tqdm(lines[:350]):
-            pyrx = NLRXRegularLanguage(rx.strip(), max_length=32, alphabet="[A-Za-z0-9#]")
+            pyrx = ExtRegularLanguage(rx.strip(), max_length=32, alphabet="[A-Za-z0-9#]")
             dfa = pyrx.dfa
             bins[len(dfa.states)] = bins.get(len(dfa.states), []) + [rx.strip()]
 
@@ -277,9 +253,7 @@ if __name__ == "__main__":
 
     # nl_rx_turk()
     KB13()
-
-    # generate_dataset(args)
-    # generate_dataset_pyrx(args)
-
     # enum_regexes(max_n=25, max_k=4, sigma=('a', 'b', 'c'))
+
+    # generate_dataset(args, task_type="simplyrx")
     

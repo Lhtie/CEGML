@@ -5,8 +5,7 @@ import re
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from tasks.rl import NLRXRegularLanguage
-from tasks.utils import split_regex_into_atoms
+from tasks.utils import tree_to_regex, split_regex_into_atoms
 
 def _parse_unbounded_quant(q):
     m = re.fullmatch(r"\{\s*(\d+)\s*,\s*\}", q or "")
@@ -86,37 +85,13 @@ def restrict_alphabet(node, alphabet):
         "negated": node.get("negated", False),
     }
 
-def tree_to_regex(node, par):
-    """
-    Serialize tree back to regex string. Uses "." as implicit concat.
-    """
-    neg = node.get("negated", False)
-    if node["type"] == "atom":
-        prefix = "~" if neg else ""
-        return prefix + node["value"] + node.get("quant", "")
-
-    children = node.get("children", [])
-    ops = node.get("ops", [])
-
-    parts = []
-    for idx, child in enumerate(children):
-        child_rx = tree_to_regex(child, node)
-        parts.append(child_rx)
-        if idx < len(ops) and ops[idx] != ".":
-            parts.append(ops[idx])
-
-    inner = "".join(parts) if par is None else "(" + "".join(parts) + ")"
-    if neg:
-        inner = "~" + inner
-    return inner + node.get("quant", "")
-
 def convert_nlrx_to_pyrx(nlrx_lines):
     alphabet = ["A-Z", "a-z", "0-9", "#"]
     
     pyrx_lines = []
     for line in nlrx_lines:
         tree = split_regex_into_atoms(line)
-        tree = normalize_unbounded_quant(tree)
+        # tree = normalize_unbounded_quant(tree)
         tree = restrict_alphabet(tree, alphabet)
         line = tree_to_regex(tree, None)
         
