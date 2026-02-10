@@ -264,10 +264,4 @@ if __name__ == "__main__":
     # KB13()
     # enum_regexes(max_n=25, max_k=4, sigma=('a', 'b', 'c'))
 
-<<<<<<< HEAD
-    # generate_dataset(args, task_type="simplyrx")
-    
-=======
     generate_dataset(args, task_type="extrx")
-    
->>>>>>> 269d3e7 (upd dataset)
