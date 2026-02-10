@@ -37,27 +37,35 @@ def generate_dataset(args, task_type="simplyrx"):
         task = ExtRegularLanguage(args.regex, args.max_length)
     else:
         raise ValueError(f"Unknown task type: {task_type}")
-
-    train_ex = task.generate_random_strings_balanced(
-        m=args.tot_train_size, 
-        n=args.max_length
-    )
-    train_labels = [1 if task.accepts(x) else 0 for x in train_ex]
-
-    eval_ex = task.generate_random_strings_balanced(
-        m=args.eval_size, 
-        n=args.eval_max_length
-    )
-    eval_labels = [1 if task.accepts(x) else 0 for x in eval_ex]
-
+    
     os.makedirs("datasets", exist_ok=True)
-    with open(f"datasets/regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json", "w") as f:
-        json.dump({
-            "train_ex": train_ex,
-            "train_labels": train_labels,
-            "eval_ex": eval_ex,
-            "eval_labels": eval_labels
-        }, f, indent=4)
+    datasets = f"datasets/regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
+    if os.path.exists(datasets):
+        with open(datasets, "r") as f:
+            data = json.load(f)
+        tot_train_size_existing = len(data["train_ex"])
+        eval_size_existing = len(data["eval_ex"])
+    else:
+        tot_train_size_existing = 0
+        eval_size_existing = 0
+        data = dict(train_ex=[], train_labels=[], eval_ex=[], eval_labels=[])
+
+    if args.tot_train_size > tot_train_size_existing:
+        data["train_ex"] += task.generate_random_strings_balanced(
+            m=args.tot_train_size - tot_train_size_existing, 
+            n=args.max_length
+        )
+    data["train_labels"] = [1 if task.accepts(x) else 0 for x in data["train_ex"]]
+
+    if args.eval_size > eval_size_existing:
+        data["eval_ex"] += task.generate_random_strings_balanced(
+            m=args.eval_size - eval_size_existing, 
+            n=args.eval_max_length 
+        )
+    data["eval_labels"] = [1 if task.accepts(x) else 0 for x in data["eval_ex"]]
+
+    with open(datasets, "w") as f:
+        json.dump(data, f, indent=4)
 
 def nl_rx_turk():
     from pyformlang.regular_expression import PythonRegex
@@ -253,8 +261,13 @@ if __name__ == "__main__":
     torch.cuda.manual_seed(args.seed)
 
     # nl_rx_turk()
-    KB13()
+    # KB13()
     # enum_regexes(max_n=25, max_k=4, sigma=('a', 'b', 'c'))
 
+<<<<<<< HEAD
     # generate_dataset(args, task_type="simplyrx")
     
+=======
+    generate_dataset(args, task_type="extrx")
+    
+>>>>>>> 269d3e7 (upd dataset)

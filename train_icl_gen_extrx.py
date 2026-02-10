@@ -276,8 +276,7 @@ if __name__ == "__main__":
         config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs}_ceBatch={args.ce_batch_size}.json"
         
     dataset = f"datasets/regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
-    if not os.path.exists(dataset):
-        generate_dataset(args, task_type="extrx")
+    generate_dataset(args, task_type="extrx")
         
     with open(dataset, "r") as f:
         data = json.load(f)
