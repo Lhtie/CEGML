@@ -11,14 +11,14 @@ from pyformlang.finite_automaton import Symbol, DeterministicFiniteAutomaton
 import sys, os
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from tasks.utils import split_regex_into_atoms, expand_char_class
-from tasks.utils import collect_sigma, build_dfa, tree_to_regex
+from tasks.utils import collect_sigma, build_dfa, tree_to_regex, _complement_dfa
 
 class RegularLanguage:
     def __init__(self, regex_str, max_length):
         self.regex_str = regex_str
         self.max_length = max_length
     
-    def _generate_string_to_state(self, dfa, target_state, max_depth):
+    def _generate_string_to_state(self, dfa, target_states, max_depth):
         strings, labels = [], []
         visited = set()
 
@@ -30,7 +30,7 @@ class RegularLanguage:
             current_state, path, depth = queue.popleft()
             if depth > max_depth:
                 continue
-            if current_state == target_state:
+            if current_state in target_states:
                 string = "".join(path)
                 strings.append(string)
                 labels.append(int(current_state in dfa.final_states))
@@ -59,19 +59,28 @@ class RegularLanguage:
         return random.choice(strings)
     
     def generate_random_strings_balanced(self, m, n, rate=0.5):
+        if not hasattr(self, "complement_dfa") or self.complement_dfa is None:
+            sigma = self.sigma if hasattr(self, "sigma") else self.dfa.symbols
+            self.complement_dfa = _complement_dfa(self.dfa, sigma).minimize()
+
         strings = []
         for _ in range(m):
             accepted = random.random() < rate
-            if accepted:
-                target_state = random.choice(list(self.dfa.final_states))
-            else:
-                target_state = random.choice(list(self.dfa.states - self.dfa.final_states))
-            while True:
+            source_dfa = self.dfa if accepted else self.complement_dfa
+            target_states = list(source_dfa.final_states)
+            if not target_states:
+                raise ValueError("Source DFA has no final states for sampling")
+
+            attempts = 0
+            while attempts < 256:
                 try:
-                    s = self._generate_string_to_state(self.dfa, target_state, n)
+                    s = self._generate_string_to_state(source_dfa, target_states, n)
                     break
                 except AssertionError:
+                    attempts += 1
                     continue
+            if attempts >= 256:
+                raise RuntimeError("Failed to sample string from DFA within attempt budget")
             strings.append(s)
         return strings
 

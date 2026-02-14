@@ -3,6 +3,7 @@ import argparse
 import random
 import os
 import json
+import csv
 import numpy as np
 from tqdm import tqdm
 from typing import Iterable, Set, Tuple
@@ -26,20 +27,23 @@ regex_list_test = [
     "((a*(b+c))*c + c((a+c)*b)*)* a"            # 8 states
 ]
 
-def generate_dataset(args, task_type="simplyrx"):
+def generate_dataset(args):
     from tasks.rl import SimplyRegularLanguage, PythonRegularLanguage, ExtRegularLanguage
     
-    if task_type == "simplyrx":
+    if args.task_type == "simplyrx":
         task = SimplyRegularLanguage(args.regex, args.max_length)
-    elif task_type == "pythonrx":
+    elif args.task_type == "pythonrx":
         task = PythonRegularLanguage(args.regex, args.max_length)
-    elif task_type == "extrx":
+    elif args.task_type == "extrx":
         task = ExtRegularLanguage(args.regex, args.max_length)
     else:
-        raise ValueError(f"Unknown task type: {task_type}")
+        raise ValueError(f"Unknown task type: {args.task_type}")
     
-    os.makedirs("datasets", exist_ok=True)
-    datasets = f"datasets/regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
+    os.makedirs(args.outdir, exist_ok=True)
+    datasets = os.path.join(
+        args.outdir, 
+        f"regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
+    )
     if os.path.exists(datasets):
         with open(datasets, "r") as f:
             data = json.load(f)
@@ -107,7 +111,7 @@ def KB13():
         for rx in bins[state_num]:
             print(f"  {rx}")
 
-def enum_regexes(max_n: int, max_k: int, sigma: Tuple[str, ...]):
+def enum_regexes(max_n: int, max_k: int, sigma: Tuple[str, ...], outdir: str = "datasets"):
     from dataclasses import dataclass
     from functools import lru_cache
     from itertools import product
@@ -136,7 +140,11 @@ def enum_regexes(max_n: int, max_k: int, sigma: Tuple[str, ...]):
         if isinstance(r, Concat) or isinstance(r, Union):
             return max(star_depth(r.a), star_depth(r.b))
         if isinstance(r, Star):
-            return 1 + star_depth(r.a)
+            # Collapse repeated stars: ((...(x)*)*)* == x*
+            inner = r.a
+            while isinstance(inner, Star):
+                inner = inner.a
+            return 1 + star_depth(inner)
         raise TypeError(r)
 
     def size(r) -> int:
@@ -159,8 +167,10 @@ def enum_regexes(max_n: int, max_k: int, sigma: Tuple[str, ...]):
         if isinstance(r, Sym):
             return r.s
         if isinstance(r, Star):
-            inner = to_str(r.a)
-            return f"({inner})*"
+            inner = r.a
+            while isinstance(inner, Star):
+                inner = inner.a
+            return f"({to_str(inner)})*"
         if isinstance(r, Concat):
             return f"({to_str(r.a)} {to_str(r.b)})"
         if isinstance(r, Union):
@@ -241,18 +251,33 @@ def enum_regexes(max_n: int, max_k: int, sigma: Tuple[str, ...]):
     #         for rx in regex_list[d][m][:5]:
     #             print(f"    {rx}")
 
-    for d in regex_list:
-        rows = ["\n".join(regex_list[d][m][:5]) for m in regex_list[d]]
-        print(f"{d}\t" + "\t".join(rows))
+    rows_out = []
+    header = ["Star depth"] + [f"#States={m}" for m in range(3, 11)]
+    rows_out.append(header)
+    for d in sorted(regex_list.keys()):
+        row = [str(d)]
+        for m in range(3, 11):
+            cell = "\n".join(regex_list[d].get(m, [])[:5])
+            row.append(cell)
+        rows_out.append(row)
+
+    os.makedirs(outdir, exist_ok=True)
+    out_csv = os.path.join(outdir, "enum_regexes.csv")
+    with open(out_csv, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerows(rows_out)
+    print(f"Wrote CSV to: {out_csv}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--regex", type=str, default="(a(b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*")
+    parser.add_argument("--task_type", type=str, default="simplyrx")
     parser.add_argument("--max_length", type=int, default=32)
     parser.add_argument("--eval_max_length", type=int, default=32)
     parser.add_argument("--tot_train_size", type=int, default=1280)
     parser.add_argument("--eval_size", type=int, default=32)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--outdir", type=str, default="datasets")
     args = parser.parse_args()
 
     np.random.seed(args.seed)
@@ -262,6 +287,6 @@ if __name__ == "__main__":
 
     # nl_rx_turk()
     # KB13()
-    # enum_regexes(max_n=25, max_k=4, sigma=('a', 'b', 'c'))
+    # enum_regexes(max_n=25, max_k=4, sigma=('a', 'b', 'c'), outdir=args.outdir)
 
-    generate_dataset(args, task_type="extrx")
+    generate_dataset(args)

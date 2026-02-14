@@ -227,6 +227,8 @@ if __name__ == "__main__":
     parser.add_argument("--ce_epochs", type=int, default=8)
     parser.add_argument("--ce_start_size", type=int, default=8)
     parser.add_argument("--ce_batch_size", type=int, default=128)
+    parser.add_argument("--indir", type=str, default="datasets")
+    parser.add_argument("--outdir", type=str, default="logs/opt_prompt/icl_gen_extrx")
     args = parser.parse_args()
 
     np.random.seed(args.seed)
@@ -267,15 +269,15 @@ if __name__ == "__main__":
         model.eval()
 
     if not args.use_ce:
-        config_name = f"logs/opt_prompt/icl_gen_extrx/model={args.mkey}/std/"
+        config_name = os.path.join(args.outdir, f"model={args.mkey}/std/")
         config_name += "reg/" if args.use_reg else "noreg/"
         config_name += f"msgdict_regex={args.regex}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}.json"
     else:
-        config_name = f"logs/opt_prompt/icl_gen_extrx/model={args.mkey}/ce/"
+        config_name = os.path.join(args.outdir, f"model={args.mkey}/ce/")
         config_name += "reg/" if args.use_reg else "noreg/"
         config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs}_ceBatch={args.ce_batch_size}.json"
         
-    dataset = f"datasets/regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
+    dataset = os.path.join(args.indir, f"regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json")
     generate_dataset(args, task_type="extrx")
         
     with open(dataset, "r") as f:
