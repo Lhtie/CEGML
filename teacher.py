@@ -91,8 +91,8 @@ class Teacher:
         rate = self.task.diff_ratio(fst_gt, fst_gen, sigma, k=self.task.max_length)
         n = np.ceil(bs * rate / 2).astype(int)
 
-        ce_x = self.task.k_witnesses(fst_gt, fst_gen, sigma, k=n) + \
-                self.task.k_witnesses(fst_gen, fst_gt, sigma, k=n)
+        ce_x = self.task.k_witnesses(dfa_gt, dfa_gen, k=n) + \
+                self.task.k_witnesses(dfa_gen, dfa_gt, k=n)
         ce_y = [int(self.task.accepts(x)) for x in ce_x]
         return ce_x, ce_y
     
@@ -124,4 +124,3 @@ class Teacher:
         pred = classifier(inputs, batch_size)
         acc = sum([int(x == y) for x, y in zip(pred, labels)]) / len(pred)
         return acc
-

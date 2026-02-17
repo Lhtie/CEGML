@@ -27,21 +27,21 @@ regex_list_test = [
     "((a*(b+c))*c + c((a+c)*b)*)* a"            # 8 states
 ]
 
-def generate_dataset(args):
+def generate_dataset(args, task_type="simplyrx", outdir="datasets"):
     from tasks.rl import SimplyRegularLanguage, PythonRegularLanguage, ExtRegularLanguage
     
-    if args.task_type == "simplyrx":
+    if task_type == "simplyrx":
         task = SimplyRegularLanguage(args.regex, args.max_length)
-    elif args.task_type == "pythonrx":
+    elif task_type == "pythonrx":
         task = PythonRegularLanguage(args.regex, args.max_length)
-    elif args.task_type == "extrx":
+    elif task_type == "extrx":
         task = ExtRegularLanguage(args.regex, args.max_length)
     else:
-        raise ValueError(f"Unknown task type: {args.task_type}")
+        raise ValueError(f"Unknown task type: {task_type}")
     
-    os.makedirs(args.outdir, exist_ok=True)
+    os.makedirs(outdir, exist_ok=True)
     datasets = os.path.join(
-        args.outdir, 
+        outdir, 
         f"regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
     )
     if os.path.exists(datasets):
@@ -289,4 +289,4 @@ if __name__ == "__main__":
     # KB13()
     # enum_regexes(max_n=25, max_k=4, sigma=('a', 'b', 'c'), outdir=args.outdir)
 
-    generate_dataset(args)
+    generate_dataset(args, task_type=args.task_type, outdir=args.outdir)

@@ -16,6 +16,7 @@ from tasks.rl import SimplyRegularLanguage
 from learner import Learner
 from teacher import Teacher
 from curve import plot_loss_curve, plot_accuracy_curve
+from dataset import generate_dataset
 from keysecrets import api_key
 
 device_map = "cuda" if torch.cuda.is_available() else "cpu"
@@ -129,8 +130,10 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=43)
     parser.add_argument("--temp", type=float, default=0.0)
     parser.add_argument("--retries", type=int, default=3)
-    parser.add_arugment("--use_reg", default=False, action="store_true")
+    parser.add_argument("--use_reg", default=False, action="store_true")
     parser.add_argument("--use_ce", default=False, action="store_true")
+    parser.add_argument("--indir", type=str, default="datasets/")
+    parser.add_argument("--outdir", type=str, default="logs/icl/")
     args = parser.parse_args()
 
     np.random.seed(args.seed)
@@ -170,11 +173,13 @@ if __name__ == "__main__":
         )
         model.eval()
 
-    config_name = f"logs/icl/model={args.mkey}/"
+    config_name = os.path.join(args.outdir, f"model={args.mkey}/")
     config_name += "ce/" if args.use_ce else "std/"
     config_name += "reg/" if args.use_reg else "noreg/"
     config_name += f"msgdict_regex={args.regex}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}_totEval={args.eval_size}_evalBatch={args.eval_batch_size}.json"
-    dataset = f"dataset/regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json"
+    
+    generate_dataset(args, task_type="simplyrx", outdir=args.indir)
+    dataset = os.path.join(args.indir, f"regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json")
     with open(dataset, "r") as f:
         data = json.load(f)
 

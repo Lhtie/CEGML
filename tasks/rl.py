@@ -130,29 +130,32 @@ class RegularLanguage:
         s = pynini.shortestpath(sp).string(token_type=sigma)  # or rewrite.lattice_to_string(sp)
         return False, s.replace(" ", "")  # remove spaces from witness string
     
-    def k_witnesses(self, A: pynini.Fst, B: pynini.Fst, sigma: pynini.SymbolTable, k=10):
-        """Return up to k shortest disagreement strings."""
-        symdiff = (pynini.difference(A, B)).optimize()
-
-        if symdiff.start() == pynini.NO_STATE_ID or symdiff.num_states() == 0:
+    def k_witnesses(self, dfa_a: DeterministicFiniteAutomaton, dfa_b: DeterministicFiniteAutomaton, k=10):
+        """Return up to k disagreement strings from L(dfa_a) \\ L(dfa_b) with diverse accept states."""
+        diff_dfa = dfa_a.get_difference(dfa_b).minimize()
+        final_states = list(diff_dfa.final_states)
+        if not final_states:
             return []
 
-        symdiff = pynini.project(symdiff, "input")
-        symdiff = pynini.rmepsilon(symdiff).optimize()
-        symdiff.set_input_symbols(sigma)
-        symdiff.set_output_symbols(sigma)
+        # Round-robin target final states to keep acceptance states as balanced as possible.
+        random.shuffle(final_states)
+        targets = [final_states[i % len(final_states)] for i in range(k)]
+        random.shuffle(targets)
 
-        # Extract strings
         out = []
-        for _ in range(k):
-            sp = pynini.shortestpath(symdiff).optimize()  # single shortest path
-            if sp.start() == pynini.NO_STATE_ID or sp.num_states() == 0:
-                break  # empty language
-            s = sp.string(token_type=sigma)             # shortest string
-            out.append(s.replace(" ", ""))              # remove spaces
-            # Remove that exact string from the language and continue
-            symdiff = pynini.project(symdiff, "input").optimize()
-            symdiff = pynini.difference(symdiff, pynini.accep(s, token_type=sigma)).optimize()
+        seen = set()
+        for target_state in targets:
+            attempts = 0
+            while attempts < 16:
+                try:
+                    s = self._generate_string_to_state(diff_dfa, [target_state], self.max_length)
+                except AssertionError:
+                    break
+                if s not in seen:
+                    seen.add(s)
+                    out.append(s)
+                    break
+                attempts += 1
         return out
     
     def count_strings_of_length(self, fst: pynini.Fst, sigma: pynini.SymbolTable, length: int) -> int:

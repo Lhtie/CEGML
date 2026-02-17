@@ -16,6 +16,7 @@ from tasks.rl import SimplyRegularLanguage
 from learner import Learner
 from teacher import Teacher
 from curve import plot_loss_curve, plot_accuracy_curve
+from dataset import generate_dataset
 from keysecrets import api_key
 
 device_map = "cuda" if torch.cuda.is_available() else "cpu"
@@ -250,9 +251,12 @@ if __name__ == "__main__":
         config_name = os.path.join(args.outdir, f"model={args.mkey}/ce/")
         config_name += "reg/" if args.use_reg else "noreg/"
         config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs}_ceBatch={args.ce_batch_size}.json"
+        
+    generate_dataset(args, task_type="simplyrx", outdir=args.indir)
     dataset = os.path.join(args.indir, f"regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json")
     with open(dataset, "r") as f:
         data = json.load(f)
+
     dfa_gt, fst_gt, sigma = task.regex_to_pynini_via_pyformlang(args.regex)
     eval_ex = data["eval_ex"]
     eval_labels = data["eval_labels"]

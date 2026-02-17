@@ -277,11 +277,11 @@ if __name__ == "__main__":
         config_name += "reg/" if args.use_reg else "noreg/"
         config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs}_ceBatch={args.ce_batch_size}.json"
         
-    dataset = os.path.join(args.indir, f"regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json")
-    generate_dataset(args, task_type="extrx")
-        
+    generate_dataset(args, task_type="extrx", outdir=args.indir)
+    dataset = os.path.join(args.indir, f"regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json")        
     with open(dataset, "r") as f:
         data = json.load(f)
+        
     dfa_gt, fst_gt, _ = task.regex_to_pynini_via_pyformlang(args.regex)
     eval_ex = data["eval_ex"]
     eval_labels = data["eval_labels"]
