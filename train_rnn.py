@@ -194,3 +194,4 @@ if __name__ == "__main__":
     plot_loss_curve(agg_losses, "loss_curves", "Overall_Train_Losses")
     plot_accuracy_curve(num_samples, accs, "accuracy_curves", 
                         f"Regex={args.regex}-mode={args.mode}-train_length={args.max_length}-test_length={args.test_max_length}-num_aug={args.num_train_str_per_ce}-aug_strategy={args.mode_train_str_from_ce}-epochs_per_round={args.epochs_per_round}")
+    

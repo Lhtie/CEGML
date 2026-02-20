@@ -4,14 +4,11 @@ import random
 import os
 import json
 import re
-import tiktoken
 import numpy as np
 from tqdm import tqdm
-from openai import OpenAI
-from time import sleep
-from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from modeling.RNN import RNN
+from modeling.llm import load_model_and_tokenizer, run_model
 from tasks.rl import SimplyRegularLanguage
 from learner import Learner
 from teacher import Teacher
@@ -21,17 +18,6 @@ from keysecrets import api_key
 
 device_map = "cuda" if torch.cuda.is_available() else "cpu"
 device = torch.device(device_map)
-modelpaths = {
-        "ds7":          "deepseek-ai/deepseek-llm-7b-chat",
-        "ds-chat":      "deepseek-chat",
-        "ds-reasoner":  "deepseek-reasoner",
-        "qw-dsr1":      "DeepSeek-R1-Distill-Qwen-32B",
-        "gm2.5":        "gemini-2.5-pro",
-        "cl35":         "claude-3-5",
-        "gpt3.5":       "gpt-3.5-turbo",
-        "gpt4":         "gpt-4o",
-        "gpt5":         "gpt-5",
-}
 
 prompt_template = """Task: Infer a single regular language (unknown but fixed) from labeled examples, then classify new strings against that same rule.
 {0}
@@ -57,43 +43,6 @@ eval_data_template = "{0}"
 
 def tokens_of_text(enc, text) -> int:
     return len(enc.encode(text, disallowed_special=()))
-
-def useAPI(mkey):
-    if mkey.startswith(("gpt", "ds", "gm", "cl")):
-        return True
-    return False
-
-def run(mkey, model, tokenizer, msg, temp=0.3):
-    msgdict = [{'role': 'user', 'content': msg}]
-    if useAPI(mkey):
-        inputs = msgdict
-    else:
-        inputs = tokenizer.apply_chat_template(
-                msgdict,
-                return_tensors="pt",
-                add_generation_prompt=True)
-        inputs = inputs.to(device)
-    
-    if useAPI(mkey):
-        sleep(1)
-        if mkey.startswith(("gpt5", "gpt-5")):
-            outputs = model(inputs, max_completion_tokens=32768)
-        else:
-            outputs = model(inputs, max_tokens=8192, temperature=temp)
-        res = outputs.choices[0].message.content
-        print(f"usage: {outputs.usage}")
-    else:
-        outputs = model.generate(
-            inputs, 
-            max_new_tokens=32768,
-            do_sample=True,
-            pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=tokenizer.eos_token_id,
-            temperature=temp
-        ) # other params: https://huggingface.co/docs/transformers/v4.39.3/en/main_classes/text_generation
-        
-        res = tokenizer.decode(outputs[0][len(inputs[0]):], skip_special_tokens=True)
-    return res
 
 def extract_ans(res):
     match = re.search(r"<ans>\s*(\[.*?\])\s*</ans>", res, re.DOTALL)
@@ -142,36 +91,7 @@ if __name__ == "__main__":
     torch.cuda.manual_seed(args.seed)
 
     task = SimplyRegularLanguage(args.regex, args.max_length)
-    mkey = args.mkey
-    if mkey in modelpaths:
-        mpath = modelpaths[mkey]
-    else: mpath = mkey
-    if useAPI(args.mkey):
-        tokenizer = None
-        if mkey.startswith("gpt"):
-            oai_client = OpenAI(api_key=api_key)
-            if mkey.startswith(("gpt3", "gpt4")):
-                tokenizer = tiktoken.encoding_for_model(mpath)
-        elif mkey.startswith("ds"):
-            oai_client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-        elif mkey.startswith("gm"):
-            oai_client = OpenAI(api_key=api_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
-        elif mkey.startswith("cl"):
-            oai_client = OpenAI(api_key=api_key, base_url="https://api.anthropic.com/v1")
-        model = lambda msgdict, **k : oai_client.chat.completions.create(
-                messages = msgdict,
-                model = mpath,
-                **k
-        )
-        devices = None
-    else:
-        tokenizer = AutoTokenizer.from_pretrained(mpath)
-        model = AutoModelForCausalLM.from_pretrained(
-            mpath,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-        )
-        model.eval()
+    model, tokenizer = load_model_and_tokenizer(args.mkey, api_key)
 
     config_name = os.path.join(args.outdir, f"model={args.mkey}/")
     config_name += "ce/" if args.use_ce else "std/"
@@ -200,7 +120,7 @@ if __name__ == "__main__":
             eval_p = "\n".join([eval_data_template.format(ex) for ex in train_ex])
 
             prompt = prompt_template.format(train_p, eval_p)
-            response = run(mkey, model, tokenizer, prompt, args.temp)
+            response = run_model(args.mkey, model, tokenizer, prompt, device=device, temp=args.temp)
             pred = extract_ans(response)
             ce_x, ce_y = [], []
             if pred is not None and len(pred) == len(train_labels):
@@ -222,7 +142,7 @@ if __name__ == "__main__":
         train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)])
 
         msgs = []
-        acc, max_token_len = 0, 0
+        acc = 0
         for i in tqdm(range(0, len(eval_ex), args.eval_batch_size)):
             j = min(i+args.eval_batch_size, len(eval_ex))
             eval_ex_batch = eval_ex[i:j]
@@ -233,14 +153,10 @@ if __name__ == "__main__":
                 regularization if args.use_reg else "",
                 train_p, eval_p
             )
-            if mkey.startswith(("gpt3", "gpt4")):
-                max_token_len = max(max_token_len, tokens_of_text(tokenizer, prompt))
-            elif args.mkey.startswith("ds"):
-                max_token_len = max(max_token_len, int(len(prompt) * 0.5))
 
             acc_retried = []
             for retry in range(args.retries):
-                response = run(mkey, model, tokenizer, prompt, args.temp)
+                response = run_model(args.mkey, model, tokenizer, prompt, device=device, temp=args.temp)
 
                 pred = extract_ans(response)
                 if pred is not None and len(pred) == len(eval_labels_batch):
@@ -270,7 +186,7 @@ if __name__ == "__main__":
 
         acc /= len(eval_ex)
         accs.append(acc)
-        print(f"Accuracy at epoch {epoch}: {acc}, total training samples: {len(agg_train_ex)}, token length: {max_token_len}")
+        print(f"Accuracy at epoch {epoch}: {acc}, total training samples: {len(agg_train_ex)}")
         
         msgdict[epoch] = {
             "Accuracy": acc,
