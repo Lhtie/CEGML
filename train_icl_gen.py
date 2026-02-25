@@ -240,6 +240,7 @@ def main(argv=None):
     parser.add_argument("--ce_epochs", type=int, default=8)
     parser.add_argument("--ce_start_size", type=int, default=8)
     parser.add_argument("--ce_batch_size", type=int, default=128)
+    parser.add_argument("--ce_clustered", default=False, action="store_true")
     parser.add_argument(
         "--guess_update_mode",
         type=str,
@@ -282,7 +283,7 @@ def main(argv=None):
         config_name = os.path.join(args.outdir, f"model={args.mkey}/ce/")
         config_name += "reg/" if args.use_reg else "noreg/"
         config_name += f"{args.guess_update_mode}/"
-        config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs}_ceBatch={args.ce_batch_size}.json"
+        config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs}_ceBatch={args.ce_batch_size}{'_clustered' if args.ce_clustered else ''}.json"
 
     generate_dataset(args, task_type=args.task_type, outdir=args.indir)
     dataset = os.path.join(
@@ -317,6 +318,7 @@ def main(argv=None):
                         bs=args.ce_batch_size,
                         regex_gt=args.regex,
                         regex_gen=learner.current_guess,
+                        clustered=args.ce_clustered,
                     )
                 agg_train_ex += ce_x
                 agg_train_labels += ce_y

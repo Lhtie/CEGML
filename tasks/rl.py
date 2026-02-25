@@ -12,13 +12,14 @@ import sys, os
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from tasks.utils import split_regex_into_atoms, expand_char_class
 from tasks.utils import collect_sigma, build_dfa, tree_to_regex, _complement_dfa
+from tasks.utils import dfa_edge_char_class
 
 class RegularLanguage:
     def __init__(self, regex_str, max_length):
         self.regex_str = regex_str
         self.max_length = max_length
     
-    def _generate_string_to_state(self, dfa, target_states, max_depth):
+    def _generate_string_to_state(self, dfa, target_states, max_depth, clustered: bool=False):
         strings, labels = [], []
         visited = set()
 
@@ -37,7 +38,7 @@ class RegularLanguage:
             elif current_state == None:
                 continue
 
-            # Group outgoing symbols by next-state, then pick one random symbol per next-state.
+            # Group outgoing symbols by next-state.
             next_state_to_symbols = {}
             for symbol in alphabet:
                 next_states = dfa._transition_function(current_state, symbol)
@@ -49,11 +50,14 @@ class RegularLanguage:
             next_states = list(next_state_to_symbols.keys())
             random.shuffle(next_states)
             for next_state in next_states:
-                symbol = random.choice(next_state_to_symbols[next_state])
-                step = len(symbol.value)
-                if (next_state, depth + step) not in visited:
-                    queue.append((next_state, path + [symbol.value], depth + step))
-                    visited.add((next_state, depth + step))
+                if clustered:
+                    token = dfa_edge_char_class(dfa, current_state, next_state)
+                else:
+                    symbol = random.choice(next_state_to_symbols[next_state])
+                    token = symbol.value
+                if (next_state, depth + 1) not in visited:
+                    queue.append((next_state, path + [token], depth + 1))
+                    visited.add((next_state, depth + 1))
 
         assert len(strings) > 0, "Cannot generate string to target state"
         return random.choice(strings)
@@ -130,7 +134,8 @@ class RegularLanguage:
         s = pynini.shortestpath(sp).string(token_type=sigma)  # or rewrite.lattice_to_string(sp)
         return False, s.replace(" ", "")  # remove spaces from witness string
     
-    def k_witnesses(self, dfa_a: DeterministicFiniteAutomaton, dfa_b: DeterministicFiniteAutomaton, k=10):
+    def k_witnesses(self, dfa_a: DeterministicFiniteAutomaton, dfa_b: DeterministicFiniteAutomaton, 
+                    k: int=10, clustered: bool=False):
         """Return up to k disagreement strings from L(dfa_a) \\ L(dfa_b) with diverse accept states."""
         diff_dfa = dfa_a.get_difference(dfa_b).minimize()
         final_states = list(diff_dfa.final_states)
@@ -148,7 +153,9 @@ class RegularLanguage:
             attempts = 0
             while attempts < 16:
                 try:
-                    s = self._generate_string_to_state(diff_dfa, [target_state], self.max_length)
+                    s = self._generate_string_to_state(
+                        diff_dfa, [target_state], self.max_length, clustered=clustered
+                    )
                 except AssertionError:
                     break
                 if s not in seen:

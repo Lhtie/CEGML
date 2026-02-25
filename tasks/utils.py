@@ -21,6 +21,57 @@ def expand_char_class(s):
             i += 1
     return out
 
+def minimal_char_class(chars):
+    """
+    Build a compact character class token from a character set.
+    Returns:
+      - single character if len(chars) == 1
+      - bracket class like "[A-Za-z0-9#]" otherwise
+    """
+    chars = sorted(set(chars))
+    if not chars:
+        raise ValueError("Cannot build character class from empty charset")
+    if any(len(ch) != 1 for ch in chars):
+        raise ValueError("Character class only supports single-character symbols")
+    if len(chars) == 1:
+        return chars[0]
+
+    runs = []
+    i = 0
+    while i < len(chars):
+        j = i
+        while j + 1 < len(chars) and ord(chars[j + 1]) == ord(chars[j]) + 1:
+            j += 1
+        runs.append((chars[i], chars[j]))
+        i = j + 1
+
+    body_parts = []
+    for lo, hi in runs:
+        run_len = ord(hi) - ord(lo) + 1
+        if run_len >= 3:
+            body_parts.append(f"{lo}-{hi}")
+        else:
+            for code in range(ord(lo), ord(hi) + 1):
+                body_parts.append(chr(code))
+    return "[" + "".join(body_parts) + "]"
+
+def dfa_edge_char_class(dfa: DeterministicFiniteAutomaton, state_a, state_b):
+    """
+    Return minimal character token for all symbols that transition state_a -> state_b.
+    The token is either a single character or a bracket class.
+    """
+    chars = []
+    for symbol in dfa.symbols:
+        nxt = dfa._transition_function(state_a, symbol)
+        if len(nxt) == 0:
+            continue
+        if list(nxt)[0] == state_b:
+            token = symbol.value if hasattr(symbol, "value") else str(symbol)
+            chars.append(token)
+    if not chars:
+        raise ValueError(f"No symbol-carrying transition from state {state_a} to {state_b}")
+    return minimal_char_class(chars)
+
 def split_regex_into_atoms(regex):
     """
     Parse regex into a nesting tree by ().

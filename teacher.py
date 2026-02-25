@@ -84,15 +84,17 @@ class Teacher:
                 ce_y += [int(gt)] + y
         return ce_x, ce_y
     
-    def generate_counterexamples(self, bs, regex_gt, regex_gen):
+    def generate_counterexamples(self, bs, regex_gt, regex_gen, clustered=False):
         dfa_gt, fst_gt, sigma = self.task.regex_to_pynini_via_pyformlang(regex_gt)
         dfa_gen, fst_gen, _ = self.task.regex_to_pynini_via_pyformlang(regex_gen, sigma)
 
         rate = self.task.diff_ratio(fst_gt, fst_gen, sigma, k=self.task.max_length)
         n = np.ceil(bs * rate / 2).astype(int)
 
-        ce_x = self.task.k_witnesses(dfa_gt, dfa_gen, k=n) + \
-                self.task.k_witnesses(dfa_gen, dfa_gt, k=n)
+        ce_x = self.task.k_witnesses(dfa_gt, dfa_gen, n, clustered) + \
+                self.task.k_witnesses(dfa_gen, dfa_gt, n, clustered)
+        print(f"Generated {len(ce_x)} counterexamples with diff ratio {rate:.4f}")
+        print(f"Counterexamples: {ce_x}")
         ce_y = [int(self.task.accepts(x)) for x in ce_x]
         return ce_x, ce_y
     
