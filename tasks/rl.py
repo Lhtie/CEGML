@@ -181,18 +181,26 @@ class RegularLanguage:
     def diff_ratio(self, A: pynini.Fst, B: pynini.Fst, sigma: pynini.SymbolTable, k=8):
         """ Return ratio of disagreement strings of up to length k. """
         symdiff = (pynini.difference(A, B) | pynini.difference(B, A)).optimize()
+        union = (A | B).optimize()
         
         if symdiff.start() == pynini.NO_STATE_ID or symdiff.num_states() == 0:
             return 0.0
+        if union.start() == pynini.NO_STATE_ID or union.num_states() == 0:
+            return 0.0
         
-        symdiff = pynini.project(symdiff, "input")
-        symdiff = pynini.rmepsilon(symdiff).optimize()
-        symdiff.set_input_symbols(sigma)
-        symdiff.set_output_symbols(sigma)
+        def project_and_optimize(fst):
+            fst = pynini.project(fst, "input")
+            fst = pynini.rmepsilon(fst).optimize()
+            fst.set_input_symbols(sigma)
+            fst.set_output_symbols(sigma)
+            return fst
+        
+        symdiff = project_and_optimize(symdiff)
+        union = project_and_optimize(union)
 
         total, diff = 0, 0
         for length in range(0, k + 1):
-            total += sigma.num_symbols() ** length
+            total += self.count_strings_of_length(union, sigma, length)
             diff += self.count_strings_of_length(symdiff, sigma, length)
             
         return diff / total if total > 0 else 0.0
