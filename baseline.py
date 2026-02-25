@@ -4,9 +4,9 @@ import random
 import numpy as np
 from tqdm import tqdm
 
-from modeling.RNN import RNN
+from modeling.rnn import RNN
 from tasks.rl import SimplyRegularLanguage
-from learner import Learner
+from learner import LearnerForRNN
 from teacher import Teacher
 from curve import plot_accuracy_curve
 
@@ -41,7 +41,7 @@ if __name__ == "__main__":
         device=device
     )
     teacher = Teacher(task)
-    learner = Learner(model, task)
+    learner = LearnerForRNN(model, task)
 
     num_samples, accs = [], []
     num_train_samples = 0

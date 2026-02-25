@@ -7,11 +7,8 @@ import re
 import numpy as np
 from tqdm import tqdm
 
-from modeling.RNN import RNN
 from modeling.llm import is_vllm_model, load_model_and_tokenizer, run_model
 from tasks.rl import SimplyRegularLanguage
-from learner import Learner
-from teacher import Teacher
 from curve import plot_loss_curve, plot_accuracy_curve
 from dataset import generate_dataset
 from keysecrets import api_key
@@ -155,7 +152,7 @@ if __name__ == "__main__":
 
             acc_retried = []
             for retry in range(args.retries):
-                response = run_model(args.mkey, model, tokenizer, prompt, device=device, temp=args.temp)
+                response = run_model(args.mkey, model, tokenizer, prompt, temp=args.temp)
 
                 pred = extract_ans(response)
                 if pred is not None and len(pred) == len(eval_labels_batch):

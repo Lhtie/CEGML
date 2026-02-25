@@ -124,3 +124,34 @@ class Teacher:
         pred = classifier(inputs, batch_size)
         acc = sum([int(x == y) for x, y in zip(pred, labels)]) / len(pred)
         return acc
+
+    def judge_regex(
+        self, msg, fst_gt,
+        train_ex, train_labels, eval_ex, eval_labels,
+        sigma=None,
+    ):
+        pred = msg.get("Prediction")
+        try:
+            if sigma is None:
+                dfa_pred, fst_pred, sigma_cur = self.task.regex_to_pynini_via_pyformlang(pred)
+            else:
+                dfa_pred, fst_pred, sigma_cur = self.task.regex_to_pynini_via_pyformlang(pred, sigma)
+
+            eq, witness = self.task.equivalent_and_witness(fst_gt, fst_pred, sigma_cur)
+            diff_ratio = self.task.diff_ratio(
+                fst_gt, fst_pred, sigma_cur, k=self.task.max_length
+            )
+            msg["Equivalent"] = eq
+            msg["Witness"] = witness
+            msg["diffRatio"] = diff_ratio
+            msg["scoreTrainSet"] = sum(
+                [int(int(dfa_pred.accepts(ex)) == label) for ex, label in zip(train_ex, train_labels)]
+            ) / len(train_ex)
+            msg["scoreEvalSet"] = sum(
+                [int(int(dfa_pred.accepts(ex)) == label) for ex, label in zip(eval_ex, eval_labels)]
+            ) / len(eval_ex)
+        except Exception as e:
+            msg["Error"] = f"Error compiling regex: {e}"
+            print(msg["Error"])
+
+        return msg

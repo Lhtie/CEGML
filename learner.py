@@ -1,11 +1,14 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
+import random
+import math
 from sklearn.utils.class_weight import compute_class_weight
 
 from curve import plot_loss_curve
+from modeling.llm import is_vllm_model, is_api_model, run_model
 
-class Learner:
+class LearnerForRNN:
     def __init__(self, model, task):
         self.model = model
         self.task = task
@@ -166,3 +169,82 @@ class Learner:
             
             res += pred
         return res
+    
+class LearnerForICLGen:
+    def __init__(self, mkey, model, tokenizer, task):
+        self.mkey = mkey
+        self.model = model
+        self.tokenizer = tokenizer
+        self.task = task
+        self.current_guess = None
+        self.current_guess_diff_ratio = None
+        self.sa_step = 0
+        self.sa_init_temp = 0.2
+        self.sa_decay = 0.01
+
+    def reset_current_guess(self):
+        self.current_guess = None
+        self.current_guess_diff_ratio = None
+        self.sa_step = 0
+
+    def _sa_temperature(self):
+        return self.sa_init_temp / (1.0 + self.sa_decay * self.sa_step)
+
+    def set_current_guess(self, guess, diff_ratio=None):
+        self.current_guess = guess
+        self.current_guess_diff_ratio = diff_ratio
+
+    def update_current_guess(self, guess, diff_ratio=None, mode="sa_diff_ratio"):
+        if diff_ratio is None:
+            self.sa_step += 1
+            return False
+        
+        if self.current_guess is None or self.current_guess_diff_ratio is None:
+            self.current_guess = guess
+            self.current_guess_diff_ratio = diff_ratio
+            self.sa_step += 1
+            return True
+        
+        if mode == "legacy_best_eval":
+            self.sa_step += 1
+            if self.current_guess_diff_ratio > diff_ratio:
+                self.current_guess = guess
+                self.current_guess_diff_ratio = diff_ratio
+                return True
+            else: return False
+
+        delta = diff_ratio - self.current_guess_diff_ratio
+        if delta <= 0:
+            self.current_guess = guess
+            self.current_guess_diff_ratio = diff_ratio
+            self.sa_step += 1
+            return True
+
+        temp = self._sa_temperature()
+        accept_prob = math.exp(-delta / max(temp, 1e-8))
+        accepted = random.random() < accept_prob
+        if accepted:
+            self.current_guess = guess
+            self.current_guess_diff_ratio = diff_ratio
+        self.sa_step += 1
+        return accepted
+
+    def generate(
+        self, prompt_template, train_prompt, 
+        regularization_prompt="", 
+        prompt_format_kwargs=None,
+        temp=0.0, answer_extractor=None,
+    ):
+        fmt_kwargs = prompt_format_kwargs or {}
+        prompt = prompt_template.format(
+            regularization_prompt,
+            train_prompt,
+            **fmt_kwargs
+        )
+        response = run_model(self.mkey, self.model, self.tokenizer, prompt, temp=temp)
+        pred = answer_extractor(response) if answer_extractor is not None else response
+        return {
+            "Prompt": prompt,
+            "Response": response,
+            "Prediction": pred
+        }
