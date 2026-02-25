@@ -8,16 +8,13 @@ import numpy as np
 from tqdm import tqdm
 
 from modeling.RNN import RNN
-from modeling.llm import load_model_and_tokenizer, run_model
+from modeling.llm import is_vllm_model, load_model_and_tokenizer, run_model
 from tasks.rl import SimplyRegularLanguage
 from learner import Learner
 from teacher import Teacher
 from curve import plot_loss_curve, plot_accuracy_curve
 from dataset import generate_dataset
 from keysecrets import api_key
-
-device_map = "cuda" if torch.cuda.is_available() else "cpu"
-device = torch.device(device_map)
 
 # prompt_template = """Task: Infer a single regular language (unknown but fixed) from labeled examples, then directly output the infered regex string that is valid for pyformlang.regular_expression.Regex.
 # Syntax rules:
@@ -154,11 +151,13 @@ if __name__ == "__main__":
     parser.add_argument("--indir", type=str, default="datasets")
     parser.add_argument("--outdir", type=str, default="logs/opt_prompt/icl_gen")
     args = parser.parse_args()
+    use_vllm = is_vllm_model(args.mkey)
 
     np.random.seed(args.seed)
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
+    if not use_vllm and torch.cuda.is_available():
+        torch.cuda.manual_seed(args.seed)
 
     task = SimplyRegularLanguage(args.regex, args.max_length)
     model, tokenizer = load_model_and_tokenizer(args.mkey, api_key)
@@ -225,7 +224,7 @@ if __name__ == "__main__":
                     train_p
                 )
 
-                response = run_model(args.mkey, model, tokenizer, prompt, device=device, temp=args.temp)
+                response = run_model(args.mkey, model, tokenizer, prompt, temp=args.temp)
                 pred = extract_ans(response)
                 msgs.append({
                     "Prompt": prompt,

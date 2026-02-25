@@ -1,7 +1,10 @@
 from time import sleep
 
+import os
+import pathlib
 import torch
 import tiktoken
+
 from openai import OpenAI
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -32,19 +35,29 @@ def resolve_model_path(mkey):
 def load_model_and_tokenizer(mkey, api_key):
     mpath = resolve_model_path(mkey)
     if is_vllm_model(mkey):
+        os.environ.setdefault("USER", "chtc")
+        os.environ.setdefault("LOGNAME", os.environ["USER"])
+        os.environ.setdefault("USERNAME", os.environ["USER"])
+        os.environ.setdefault("TORCHINDUCTOR_CACHE_DIR", os.path.abspath("./.torchinductor"))
+        pathlib.Path(os.environ["TORCHINDUCTOR_CACHE_DIR"]).mkdir(parents=True, exist_ok=True)
+        
         try:
             from vllm import LLM
         except ImportError as e:
             raise ImportError("vllm is required for gpt-oss models") from e
 
         tokenizer = AutoTokenizer.from_pretrained(mpath)
-        model = LLM(
-            model=mpath,
-            tensor_parallel_size=2,
-            dtype="bfloat16",
-            max_model_len=32768,
-            trust_remote_code=True,
-        )
+        llm_kwargs = {
+            "model": mpath,
+            "tensor_parallel_size": 2,
+            "dtype": "bfloat16",
+            "max_model_len": 32768,
+            "hf_overrides": {
+                "dtype": "bfloat16",
+                "torch_dtype": "bfloat16",
+            },
+        }
+        model = LLM(**llm_kwargs)
         return model, tokenizer
 
     if is_api_model(mkey):
@@ -81,7 +94,10 @@ def load_model_and_tokenizer(mkey, api_key):
     model.eval()
     return model, tokenizer
 
-def run_model(mkey, model, tokenizer, msg, device, temp=0.3):
+def get_model_input_device(model):
+    return model.get_input_embeddings().weight.device
+
+def run_model(mkey, model, tokenizer, msg, temp=0.3):
     msgdict = [{"role": "user", "content": msg}]
     if is_vllm_model(mkey):
         prompt = tokenizer.apply_chat_template(
@@ -106,7 +122,7 @@ def run_model(mkey, model, tokenizer, msg, device, temp=0.3):
             return_tensors="pt",
             add_generation_prompt=True,
         )
-        inputs = inputs.to(device)
+        inputs = inputs.to(get_model_input_device(model))
 
     if is_api_model(mkey):
         sleep(1)

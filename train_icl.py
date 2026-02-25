@@ -8,16 +8,13 @@ import numpy as np
 from tqdm import tqdm
 
 from modeling.RNN import RNN
-from modeling.llm import load_model_and_tokenizer, run_model
+from modeling.llm import is_vllm_model, load_model_and_tokenizer, run_model
 from tasks.rl import SimplyRegularLanguage
 from learner import Learner
 from teacher import Teacher
 from curve import plot_loss_curve, plot_accuracy_curve
 from dataset import generate_dataset
 from keysecrets import api_key
-
-device_map = "cuda" if torch.cuda.is_available() else "cpu"
-device = torch.device(device_map)
 
 prompt_template = """Task: Infer a single regular language (unknown but fixed) from labeled examples, then classify new strings against that same rule.
 {0}
@@ -84,11 +81,13 @@ if __name__ == "__main__":
     parser.add_argument("--indir", type=str, default="datasets/")
     parser.add_argument("--outdir", type=str, default="logs/icl/")
     args = parser.parse_args()
+    use_vllm = is_vllm_model(args.mkey)
 
     np.random.seed(args.seed)
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
+    if not use_vllm and torch.cuda.is_available():
+        torch.cuda.manual_seed(args.seed)
 
     task = SimplyRegularLanguage(args.regex, args.max_length)
     model, tokenizer = load_model_and_tokenizer(args.mkey, api_key)
@@ -120,7 +119,7 @@ if __name__ == "__main__":
             eval_p = "\n".join([eval_data_template.format(ex) for ex in train_ex])
 
             prompt = prompt_template.format(train_p, eval_p)
-            response = run_model(args.mkey, model, tokenizer, prompt, device=device, temp=args.temp)
+            response = run_model(args.mkey, model, tokenizer, prompt, temp=args.temp)
             pred = extract_ans(response)
             ce_x, ce_y = [], []
             if pred is not None and len(pred) == len(train_labels):
