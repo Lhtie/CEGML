@@ -51,7 +51,7 @@ def load_model_and_tokenizer(mkey, api_key):
             "model": mpath,
             "tensor_parallel_size": 2,
             "dtype": "bfloat16",
-            "max_model_len": 32768,
+            "max_model_len": 65536,
             "hf_overrides": {
                 "dtype": "bfloat16",
                 "torch_dtype": "bfloat16",

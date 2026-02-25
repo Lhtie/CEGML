@@ -195,7 +195,7 @@ class LearnerForICLGen:
         self.current_guess_diff_ratio = diff_ratio
 
     def update_current_guess(self, guess, diff_ratio=None, mode="sa_diff_ratio"):
-        if diff_ratio is None:
+        if guess is None or diff_ratio is None:
             self.sa_step += 1
             return False
         

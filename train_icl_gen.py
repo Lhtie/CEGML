@@ -250,7 +250,7 @@ def main(argv=None):
     parser.add_argument("--outdir", type=str, default="logs/opt_prompt")
     args = parser.parse_args(argv)
     
-    args.outdir = os.path.join(args.outdir, args.guess_update_mode, f"icl_gen_{args.task_type}")
+    args.outdir = os.path.join(args.outdir, f"icl_gen_{args.task_type}")
     use_vllm = is_vllm_model(args.mkey)
 
     np.random.seed(args.seed)
@@ -281,6 +281,7 @@ def main(argv=None):
     else:
         config_name = os.path.join(args.outdir, f"model={args.mkey}/ce/")
         config_name += "reg/" if args.use_reg else "noreg/"
+        config_name += f"{args.guess_update_mode}/"
         config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs}_ceBatch={args.ce_batch_size}.json"
 
     generate_dataset(args, task_type=args.task_type, outdir=args.indir)
@@ -352,7 +353,6 @@ def main(argv=None):
                 )
                 if msg.get("Equivalent"):
                     acc = max(acc, 1)
-
                 _ = learner.update_current_guess(
                     msg["Prediction"], msg.get("diffRatio", None), args.guess_update_mode
                 )
