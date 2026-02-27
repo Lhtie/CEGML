@@ -85,7 +85,7 @@ INPUT FORMAT
 - You receive a block titled “Training Data (Each line has one input-output pair separated by comma):”.
 - Each line is "<string>, <label>" where label ∈ {{1, 0}}. The string may be empty; an empty string appears as nothing before the comma (", 1") and represents epsilon.
 - The alphabet is fixed. Do not introduce other symbols.
-
+{clustered_ce_instr}
 EXT REGEX SYNTAX (Extended PythonRegex)
 
 Alphabet
@@ -195,15 +195,21 @@ CONSTRAINTS
 - Total regex length (ignoring spaces) must be ≤ 50 characters.
 - Nesting depth of Kleene stars (*, +, ?) must be ≤ 3.
 - Use only symbols that appear in the alphabet (except metacharacters such as (), |, *, +, ?, []).
+"""
+
+EXTRX_CLUSTRED_CE_INSTR = """
+- The strings may contain grouped class of characters, e.g., [A-Z] for uppercase letters, [^0-9] for non-digits, etc.
+- Each character class only represent one possible character in the string, e.g., "a[A-Z]c" can represent "aBc" but not "aBCc".
 
 """
 
 train_data_template = "{0}, {1}"
 
 def extract_ans(res):
-    match = re.search(r"<ans>\s*(.*?)\s*</ans>", res, re.DOTALL)
-    if match:
-        return match.group(1)
+    if res is None: return None
+    matches = re.findall(r"<ans>\s*(.*?)\s*</ans>", res, re.DOTALL)
+    if matches:
+        return matches[-1]
     return None
 
 def log_scaling(total, start, scale_factor):
@@ -264,7 +270,10 @@ def main(argv=None):
         task = ExtRegularLanguage(args.regex, args.max_length, alphabet=EXTRX_SIGMA)
         prompt_template = EXTRX_PROMPT_TEMPLATE
         regularization = EXTRX_REGULARIZATION
-        prompt_kwargs = {"sigma": EXTRX_SIGMA}
+        prompt_kwargs = {
+            "sigma": EXTRX_SIGMA, 
+            "clustered_ce_instr": EXTRX_CLUSTRED_CE_INSTR if args.ce_clustered else ""
+        }
     else:
         task = SimplyRegularLanguage(args.regex, args.max_length)
         prompt_template = SIMPLE_PROMPT_TEMPLATE

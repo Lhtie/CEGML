@@ -3,7 +3,7 @@ import re
 
 from pyformlang.regular_expression import PythonRegex
 from collections import deque
-from pyformlang.finite_automaton import State, DeterministicFiniteAutomaton, EpsilonNFA, Epsilon
+from pyformlang.finite_automaton import State, Symbol, DeterministicFiniteAutomaton, EpsilonNFA, Epsilon
 
 def expand_char_class(s):
     # s the same form as "[A-Za-z0-9#]"
@@ -21,21 +21,16 @@ def expand_char_class(s):
             i += 1
     return out
 
-def minimal_char_class(chars):
-    """
-    Build a compact character class token from a character set.
-    Returns:
-      - single character if len(chars) == 1
-      - bracket class like "[A-Za-z0-9#]" otherwise
-    """
-    chars = sorted(set(chars))
-    if not chars:
-        raise ValueError("Cannot build character class from empty charset")
-    if any(len(ch) != 1 for ch in chars):
+def _to_single_char_set(chars, err_msg):
+    out = sorted(set(chars))
+    if not out:
+        raise ValueError(err_msg)
+    if any(len(ch) != 1 for ch in out):
         raise ValueError("Character class only supports single-character symbols")
-    if len(chars) == 1:
-        return chars[0]
+    return out
 
+def _class_body_from_sorted_chars(chars):
+    # Build compact class body such as "A-Za-z0-9#"
     runs = []
     i = 0
     while i < len(chars):
@@ -53,7 +48,35 @@ def minimal_char_class(chars):
         else:
             for code in range(ord(lo), ord(hi) + 1):
                 body_parts.append(chr(code))
-    return "[" + "".join(body_parts) + "]"
+    return "".join(body_parts)
+
+def minimal_char_class(chars, universe_chars=None):
+    """
+    Build a compact character class token from a character set.
+    Returns:
+      - single character if len(chars) == 1
+      - bracket class like "[A-Za-z0-9#]" otherwise
+    """
+    chars = _to_single_char_set(chars, "Cannot build character class from empty charset")
+    if len(chars) == 1:
+        return chars[0]
+
+    pos = "[" + _class_body_from_sorted_chars(chars) + "]"
+    if universe_chars is None:
+        return pos
+
+    universe = _to_single_char_set(universe_chars, "Cannot build complemented class without universe charset")
+    char_set = set(chars)
+    universe_set = set(universe)
+    if not char_set.issubset(universe_set):
+        return pos
+
+    comp = sorted(universe_set - char_set)
+    if not comp:
+        return pos
+
+    neg = "[^" + _class_body_from_sorted_chars(comp) + "]"
+    return neg if len(neg) < len(pos) else pos
 
 def dfa_edge_char_class(dfa: DeterministicFiniteAutomaton, state_a, state_b):
     """
@@ -61,16 +84,71 @@ def dfa_edge_char_class(dfa: DeterministicFiniteAutomaton, state_a, state_b):
     The token is either a single character or a bracket class.
     """
     chars = []
+    universe = []
     for symbol in dfa.symbols:
+        token = symbol.value if hasattr(symbol, "value") else str(symbol)
+        universe.append(token)
         nxt = dfa._transition_function(state_a, symbol)
         if len(nxt) == 0:
             continue
         if list(nxt)[0] == state_b:
-            token = symbol.value if hasattr(symbol, "value") else str(symbol)
             chars.append(token)
     if not chars:
         raise ValueError(f"No symbol-carrying transition from state {state_a} to {state_b}")
-    return minimal_char_class(chars)
+    return minimal_char_class(chars, universe_chars=universe)
+
+def _tokenize_ex(ex):
+    tokens = []
+    i = 0
+    n = len(ex)
+    while i < n:
+        if ex[i] == "[":
+            j = i + 1
+            while j < n and ex[j] != "]":
+                j += 1
+            if j >= n:
+                raise ValueError(f"Unmatched '[' in example: {ex}")
+            tokens.append(ex[i:j + 1])
+            i = j + 1
+        else:
+            tokens.append(ex[i])
+            i += 1
+    return tokens
+
+def dfa_accepts_ex(dfa: DeterministicFiniteAutomaton, ex):
+    """
+    Check acceptance of an example string where each position can be:
+      - a literal char, e.g. "a"
+      - a char class token, e.g. "[A-Z]" or "[^0-9]"
+    Semantics are universal over char classes: all expansions must be accepted.
+    """
+    universe_chars = _sigma_to_single_chars(dfa.symbols)
+
+    cur_states = {dfa.start_state}
+    for token in _tokenize_ex(ex):
+        if token.startswith("[") and token.endswith("]"):
+            if token.startswith("[^"):
+                excluded = set(expand_char_class("[" + token[2:]))
+                cands = [ch for ch in universe_chars if ch not in excluded]
+            else:
+                cands = expand_char_class(token)
+        else:
+            cands = [token]
+        if not cands:
+            return False
+        next_states = set()
+        saw_dead_branch = False
+        for st in cur_states:
+            for ch in cands:
+                nxt = dfa._transition_function(st, Symbol(ch))
+                if len(nxt) > 0:
+                    next_states.add(list(nxt)[0])
+                else:
+                    saw_dead_branch = True
+        if saw_dead_branch or not next_states:
+            return False
+        cur_states = next_states
+    return all(st in dfa.final_states for st in cur_states)
 
 def split_regex_into_atoms(regex):
     """
@@ -234,6 +312,39 @@ def _dfa_from_atom(atom_value: str):
     rx = PythonRegex(atom_value)
     nfa = rx.to_epsilon_nfa()
     return nfa.to_deterministic().minimize()
+
+def _sigma_to_single_chars(sigma):
+    chars = []
+    for sym in sigma:
+        ch = sym.value if hasattr(sym, "value") else str(sym)
+        if len(ch) != 1:
+            return None
+        chars.append(ch)
+    return sorted(set(chars))
+
+def _normalize_negated_char_class_atom(atom_value: str, sigma):
+    # Rewrite [^...] into an equivalent positive class over finite sigma.
+    if sigma is None:
+        return atom_value
+    if not (atom_value.startswith("[^") and atom_value.endswith("]")):
+        return atom_value
+
+    universe = _sigma_to_single_chars(sigma)
+    if not universe:
+        return atom_value
+
+    excluded = set(expand_char_class("[" + atom_value[2:]))
+    keep = [ch for ch in universe if ch not in excluded]
+    if not keep:
+        # Empty language atom under this sigma.
+        return None
+    return minimal_char_class(keep)
+
+def _dfa_empty():
+    dfa = DeterministicFiniteAutomaton()
+    s = State("empty")
+    dfa.add_start_state(s)
+    return dfa
 
 def _dfa_symbols(dfa):
     return set(dfa.symbols)
@@ -411,12 +522,13 @@ def build_dfa(node, sigma=None, debug=False):
         sigma = collect_sigma(node)
     
     if node["type"] == "atom":
-        dfa = _dfa_from_atom(node["value"])
+        atom_value = _normalize_negated_char_class_atom(node["value"], sigma)
+        dfa = _dfa_empty() if atom_value is None else _dfa_from_atom(atom_value)
         dfa = _apply_quant(dfa, node.get("quant", ""))
         if node.get("negated", False):
             dfa = _complement_dfa(dfa, sigma)
         if debug:
-            print(f"[atom] {node['value']}{node.get('quant','')} neg={node.get('negated',False)} -> {_dfa_summary(dfa)}")
+            print(f"[atom] {node['value']} -> {atom_value}{node.get('quant','')} neg={node.get('negated',False)} -> {_dfa_summary(dfa)}")
         return dfa
 
     children = node.get("children", [])

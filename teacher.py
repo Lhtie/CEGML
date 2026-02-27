@@ -2,6 +2,7 @@ import random
 import numpy as np
 from collections import deque
 from pyformlang.finite_automaton import State, Symbol, DeterministicFiniteAutomaton
+from tasks.utils import dfa_accepts_ex
 
 class Teacher:
     def __init__(self, task):
@@ -89,13 +90,18 @@ class Teacher:
         dfa_gen, fst_gen, _ = self.task.regex_to_pynini_via_pyformlang(regex_gen, sigma)
 
         rate = self.task.diff_ratio(fst_gt, fst_gen, sigma, k=self.task.max_length)
-        n = np.ceil(bs * rate / 2).astype(int)
-
-        ce_x = self.task.k_witnesses(dfa_gt, dfa_gen, n, clustered) + \
-                self.task.k_witnesses(dfa_gen, dfa_gt, n, clustered)
+        if clustered:
+            ce_pos = self.task.k_witnesses_traverse(dfa_gt, dfa_gen, bs)
+            ce_neg = self.task.k_witnesses_traverse(dfa_gen, dfa_gt, bs)
+        else:
+            n = np.ceil(bs * rate / 2).astype(int)
+            ce_pos = self.task.k_witnesses_sample(dfa_gt, dfa_gen, n)
+            ce_neg = self.task.k_witnesses_sample(dfa_gen, dfa_gt, n)
+            
+        ce_x = ce_pos + ce_neg
+        ce_y = [1] * len(ce_pos) + [0] * len(ce_neg)
         print(f"Generated {len(ce_x)} counterexamples with diff ratio {rate:.4f}")
         print(f"Counterexamples: {ce_x}")
-        ce_y = [int(self.task.accepts(x)) for x in ce_x]
         return ce_x, ce_y
     
     def generate_posexamples(self, n, seq_len):
@@ -147,10 +153,10 @@ class Teacher:
             msg["Witness"] = witness
             msg["diffRatio"] = diff_ratio
             msg["scoreTrainSet"] = sum(
-                [int(int(dfa_pred.accepts(ex)) == label) for ex, label in zip(train_ex, train_labels)]
+                [int(int(dfa_accepts_ex(dfa_pred, ex)) == label) for ex, label in zip(train_ex, train_labels)]
             ) / len(train_ex)
             msg["scoreEvalSet"] = sum(
-                [int(int(dfa_pred.accepts(ex)) == label) for ex, label in zip(eval_ex, eval_labels)]
+                [int(int(dfa_accepts_ex(dfa_pred, ex)) == label) for ex, label in zip(eval_ex, eval_labels)]
             ) / len(eval_ex)
         except Exception as e:
             msg["Error"] = f"Error compiling regex: {e}"

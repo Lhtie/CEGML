@@ -97,7 +97,7 @@ def load_model_and_tokenizer(mkey, api_key):
 def get_model_input_device(model):
     return model.get_input_embeddings().weight.device
 
-def run_model(mkey, model, tokenizer, msg, temp=0.3):
+def _run_model(mkey, model, tokenizer, msg, temp):
     msgdict = [{"role": "user", "content": msg}]
     if is_vllm_model(mkey):
         prompt = tokenizer.apply_chat_template(
@@ -143,3 +143,10 @@ def run_model(mkey, model, tokenizer, msg, temp=0.3):
         temperature=temp,
     )
     return tokenizer.decode(outputs[0][len(inputs[0]):], skip_special_tokens=True)
+
+def run_model(mkey, model, tokenizer, msg, temp=0.3):
+    try:
+        return _run_model(mkey, model, tokenizer, msg, temp)
+    except Exception as e:
+        print(f"Error running model: {e}")
+        return None

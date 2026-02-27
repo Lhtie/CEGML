@@ -12,7 +12,7 @@ import sys, os
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from tasks.utils import split_regex_into_atoms, expand_char_class
 from tasks.utils import collect_sigma, build_dfa, tree_to_regex, _complement_dfa
-from tasks.utils import dfa_edge_char_class
+from tasks.utils import dfa_edge_char_class, dfa_accepts_ex
 
 class RegularLanguage:
     def __init__(self, regex_str, max_length):
@@ -89,7 +89,7 @@ class RegularLanguage:
         return strings
 
     def accepts(self, str):
-        return self.dfa.accepts(str)
+        return dfa_accepts_ex(self.dfa, str)
     
     def sigma_from_chars(self, chars):
         st = pynini.SymbolTable()
@@ -134,7 +134,7 @@ class RegularLanguage:
         s = pynini.shortestpath(sp).string(token_type=sigma)  # or rewrite.lattice_to_string(sp)
         return False, s.replace(" ", "")  # remove spaces from witness string
     
-    def k_witnesses(self, dfa_a: DeterministicFiniteAutomaton, dfa_b: DeterministicFiniteAutomaton, 
+    def k_witnesses_sample(self, dfa_a: DeterministicFiniteAutomaton, dfa_b: DeterministicFiniteAutomaton, 
                     k: int=10, clustered: bool=False):
         """Return up to k disagreement strings from L(dfa_a) \\ L(dfa_b) with diverse accept states."""
         diff_dfa = dfa_a.get_difference(dfa_b).minimize()
@@ -164,6 +164,58 @@ class RegularLanguage:
                     break
                 attempts += 1
         return out
+    
+    def k_witnesses_traverse(self, dfa_a: DeterministicFiniteAutomaton, dfa_b: DeterministicFiniteAutomaton, k: int=10):
+        """Return up to k clustered strings from loop-free state paths to final states in L(dfa_a) \\ L(dfa_b)."""
+        diff_dfa = dfa_a.get_difference(dfa_b).minimize()
+        if not diff_dfa.final_states or diff_dfa.start_state is None:
+            return []
+
+        # Group by next-state only; multiple symbols on the same edge are merged
+        # into one char-class token.
+        next_state_cache = {}
+        token_cache = {}
+
+        def grouped_next_states(state):
+            if state in next_state_cache:
+                return next_state_cache[state]
+            outs = set()
+            for symbol in diff_dfa.symbols:
+                nxt = diff_dfa._transition_function(state, symbol)
+                if len(nxt) == 0:
+                    continue
+                outs.add(list(nxt)[0])
+            ordered = sorted(outs, key=lambda s: str(s))
+            next_state_cache[state] = ordered
+            return ordered
+
+        def edge_token(state_a, state_b):
+            key = (state_a, state_b)
+            if key not in token_cache:
+                token_cache[key] = dfa_edge_char_class(diff_dfa, state_a, state_b)
+            return token_cache[key]
+
+        witnesses = []
+        # Stack item: (state, token_path, visited_states)
+        stack = [(diff_dfa.start_state, [], {diff_dfa.start_state})]
+        while stack:
+            cur, token_path, visited_states = stack.pop()
+
+            if cur in diff_dfa.final_states:
+                witnesses.append("".join(token_path))
+                if len(witnesses) >= k:
+                    return witnesses
+
+            if len(token_path) >= self.max_length:
+                continue
+
+            # Expand loop-free paths only (no repeated states on current path).
+            for nxt in grouped_next_states(cur):
+                if nxt in visited_states:
+                    continue
+                token = edge_token(cur, nxt)
+                stack.append((nxt, token_path + [token], visited_states | {nxt}))
+        return witnesses
     
     def count_strings_of_length(self, fst: pynini.Fst, sigma: pynini.SymbolTable, length: int) -> int:
         """ Count number of strings of exactly given length accepted by fst. """

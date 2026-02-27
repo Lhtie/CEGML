@@ -39,9 +39,10 @@ def tokens_of_text(enc, text) -> int:
     return len(enc.encode(text, disallowed_special=()))
 
 def extract_ans(res):
-    match = re.search(r"<ans>\s*(\[.*?\])\s*</ans>", res, re.DOTALL)
-    if match:
-        ans_str = match.group(1)
+    if res is None: return None
+    matches = re.findall(r"<ans>\s*(\[.*?\])\s*</ans>", res, re.DOTALL)
+    if matches:
+        ans_str = matches[-1]
         try:
             ans = [int(x.strip()) for x in ans_str[1:-1].split(",")]
             return ans
