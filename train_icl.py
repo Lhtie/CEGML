@@ -8,10 +8,12 @@ import numpy as np
 from tqdm import tqdm
 
 from modeling.llm import is_vllm_model, load_model_and_tokenizer, run_model
-from tasks.rl import SimplyRegularLanguage
+from tasks.rl import SimplyRegularLanguage, ExtRegularLanguage
 from curve import plot_loss_curve, plot_accuracy_curve
 from dataset import generate_dataset
 from keysecrets import api_key
+
+EXTRX_SIGMA = "[A-Za-z0-9#]"
 
 prompt_template = """Task: Infer a single regular language (unknown but fixed) from labeled examples, then classify new strings against that same rule.
 {0}
@@ -19,16 +21,24 @@ Please answer 0/1 to each line of the evaluating data.
 You could think step by step, and finally output a list containing all the answers in order. (Please briefly explain your reasoning before the final answer)
 Please wrap your final answer in <ans> and </ans> tags, for example: ... <ans>[1, 0, ...]</ans>
 Training Data (Each line has one input-output pair separated by comma):
-{0}
+{1}
 
 Evaluating Data (Each line has one input string):
-{1}
+{2}
 """
-regularization = """Premises:
+simple_regularization = """Premises:
 - Prefer simpler regexes with fewer operators and literals while still consistent with the datapoints.
 - Concretely, the total lengths (ignore spaces) <= 50 characters
 - the depths of klene star nesting <= 3
 
+"""
+extrx_regularization = """Premises:
+- Prefer simpler regexes while still consistent with the datapoints.
+- Concretely, the total lengths (ignore spaces) <= 50 characters
+- the depths of regex operator nesting <= 3
+
+"""
+extrx_task_instr = f"""The alphabet is fixed: Σ = {EXTRX_SIGMA}. Do not introduce symbols outside Σ.
 """
 
 
@@ -62,7 +72,8 @@ def log_scaling(total, start, scale_factor):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--regex", type=str, default="(a(b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*")           # (a(a)*b)* or (a b + b a) (a + b b + c)* (a c + b a)
+    parser.add_argument("--task_type", type=str, default="simplyrx", choices=["simplyrx", "extrx"])
+    parser.add_argument("--regex", type=str, default="(a(b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*")
     parser.add_argument("--max_length", type=int, default=32)
     parser.add_argument("--eval_max_length", type=int, default=32)
     parser.add_argument("--mkey", type=str, default="gpt5")
@@ -77,7 +88,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_reg", default=False, action="store_true")
     parser.add_argument("--use_ce", default=False, action="store_true")
     parser.add_argument("--indir", type=str, default="datasets/")
-    parser.add_argument("--outdir", type=str, default="logs/icl/")
+    parser.add_argument("--outdir", type=str, default="logs/")
     args = parser.parse_args()
     use_vllm = is_vllm_model(args.mkey)
 
@@ -87,7 +98,17 @@ if __name__ == "__main__":
     if not use_vllm and torch.cuda.is_available():
         torch.cuda.manual_seed(args.seed)
 
-    task = SimplyRegularLanguage(args.regex, args.max_length)
+    args.outdir = os.path.join(args.outdir, f"icl_{args.task_type}")
+
+    if args.task_type == "extrx":
+        task = ExtRegularLanguage(args.regex, args.max_length, alphabet=EXTRX_SIGMA)
+        regularization = extrx_regularization
+        task_instr = extrx_task_instr
+    else:
+        task = SimplyRegularLanguage(args.regex, args.max_length)
+        regularization = simple_regularization
+        task_instr = ""
+
     model, tokenizer = load_model_and_tokenizer(args.mkey, api_key)
 
     config_name = os.path.join(args.outdir, f"model={args.mkey}/")
@@ -95,7 +116,7 @@ if __name__ == "__main__":
     config_name += "reg/" if args.use_reg else "noreg/"
     config_name += f"msgdict_regex={args.regex}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}_totEval={args.eval_size}_evalBatch={args.eval_batch_size}.json"
     
-    generate_dataset(args, task_type="simplyrx", outdir=args.indir)
+    generate_dataset(args, task_type=args.task_type, outdir=args.indir)
     dataset = os.path.join(args.indir, f"regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json")
     with open(dataset, "r") as f:
         data = json.load(f)
@@ -115,8 +136,12 @@ if __name__ == "__main__":
         if args.use_ce:
             train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)])
             eval_p = "\n".join([eval_data_template.format(ex) for ex in train_ex])
-
-            prompt = prompt_template.format(train_p, eval_p)
+            prompt_prefix = ""
+            if args.use_reg:
+                prompt_prefix += regularization
+            if task_instr:
+                prompt_prefix = f"{task_instr}\n{prompt_prefix}".strip()
+            prompt = prompt_template.format(prompt_prefix, train_p, eval_p)
             response = run_model(args.mkey, model, tokenizer, prompt, temp=args.temp)
             pred = extract_ans(response)
             ce_x, ce_y = [], []
@@ -146,10 +171,12 @@ if __name__ == "__main__":
             eval_labels_batch = eval_labels[i:j]
             eval_p = "\n".join([eval_data_template.format(ex) for ex in eval_ex_batch])
 
-            prompt = prompt_template.format(
-                regularization if args.use_reg else "",
-                train_p, eval_p
-            )
+            prompt_prefix = ""
+            if args.use_reg:
+                prompt_prefix += regularization
+            if task_instr:
+                prompt_prefix = f"{task_instr}\n{prompt_prefix}".strip()
+            prompt = prompt_template.format(prompt_prefix, train_p, eval_p)
 
             acc_retried = []
             for retry in range(args.retries):

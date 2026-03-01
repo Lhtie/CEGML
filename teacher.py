@@ -91,8 +91,8 @@ class Teacher:
 
         rate = self.task.diff_ratio(fst_gt, fst_gen, sigma, k=self.task.max_length)
         if clustered:
-            ce_pos = self.task.k_witnesses_traverse(dfa_gt, dfa_gen, bs)
-            ce_neg = self.task.k_witnesses_traverse(dfa_gen, dfa_gt, bs)
+            ce_pos = self.task.k_witnesses_traverse(dfa_gt, dfa_gen, bs // 2)
+            ce_neg = self.task.k_witnesses_traverse(dfa_gen, dfa_gt, bs // 2)
         else:
             n = np.ceil(bs * rate / 2).astype(int)
             ce_pos = self.task.k_witnesses_sample(dfa_gt, dfa_gen, n)
