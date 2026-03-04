@@ -311,7 +311,7 @@ def main(argv=None):
     else:
         config_name = os.path.join(args.outdir, f"model={args.mkey}/ce/")
         config_name += "reg/" if args.use_reg else "noreg/"
-        config_name += f"{args.guess_update_mode}/"
+        config_name += f"{args.reasoning_mode}/"
         config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs}_ceBatch={args.ce_batch_size}{'_clustered' if args.ce_clustered else ''}.json"
 
     generate_dataset(args, task_type=args.task_type, outdir=args.indir)
@@ -342,9 +342,9 @@ def main(argv=None):
             if args.use_ce:
                 if learner.current_guess is None:
                     train_ex = data["train_ex"][epoch * args.ce_start_size:(epoch + 1) * args.ce_start_size]
-                    train_label = data["train_labels"][epoch * args.ce_start_size:(epoch + 1) * args.ce_start_size]
+                    train_labels = data["train_labels"][epoch * args.ce_start_size:(epoch + 1) * args.ce_start_size]
                 else:
-                    train_ex, train_label = teacher.generate_counterexamples(
+                    train_ex, train_labels = teacher.generate_counterexamples(
                         bs=args.ce_batch_size,
                         regex_gt=args.regex,
                         regex_gen=learner.current_guess,
@@ -352,7 +352,7 @@ def main(argv=None):
                     )
                     if args.reasoning_mode == "agentic_reflection":
                         ce_lines = "\n".join(
-                            [train_data_template.format(ex, label) for ex, label in zip(train_ex, train_label)]
+                            [train_data_template.format(ex, label) for ex, label in zip(train_ex, train_labels)]
                         )
                         reflection_prompt = (
                             AGENTIC_REFLECTION_INSTR

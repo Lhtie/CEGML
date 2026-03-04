@@ -200,7 +200,7 @@ class LearnerForICLGen:
             self.current_guess_scoreEval = scoreEval
             return True
         
-        if self.current_guess_scoreEval > scoreEval:
+        if self.current_guess_scoreEval < scoreEval:
             self.current_guess = guess
             self.current_guess_reasoning = reasoning
             self.current_guess_scoreEval = scoreEval
