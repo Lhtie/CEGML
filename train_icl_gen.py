@@ -335,7 +335,6 @@ def main(argv=None):
         num_samples = log_scaling(args.tot_train_size, args.start_size, args.scale_factor)
         epochs = args.ce_epochs if args.use_ce else len(num_samples)
         msgdict[f"run-{runid}"] = {}
-        learner.reset_current_guess()
 
         for epoch in tqdm(range(epochs)):
             reflection_prompt = ""
@@ -376,6 +375,7 @@ def main(argv=None):
             )
 
             msgs, acc = [], 0
+            learner.reset_current_guess()
             for _ in range(args.retries):
                 reg_prompt = regularization if args.use_reg else ""
                 if args.use_ce and args.reasoning_mode == "agentic_reflection":
@@ -399,7 +399,7 @@ def main(argv=None):
                 )
                 if msg.get("Equivalent"):
                     acc = max(acc, 1)
-                _ = learner.update_current_guess(
+                learner.update_current_guess(
                     msg["Prediction"], 
                     msg["Reasoning"],
                     msg.get("scoreEvalSet", None)
