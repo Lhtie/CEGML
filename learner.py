@@ -177,63 +177,46 @@ class LearnerForICLGen:
         self.tokenizer = tokenizer
         self.task = task
         self.current_guess = None
-        self.current_guess_diff_ratio = None
-        self.sa_step = 0
-        self.sa_init_temp = 0.2
-        self.sa_decay = 0.01
+        self.current_guess_reasoning = None
+        self.current_guess_scoreEval = None
 
     def reset_current_guess(self):
         self.current_guess = None
-        self.current_guess_diff_ratio = None
-        self.sa_step = 0
+        self.current_guess_reasoning = None
+        self.current_guess_scoreEval = None
 
-    def _sa_temperature(self):
-        return self.sa_init_temp / (1.0 + self.sa_decay * self.sa_step)
-
-    def set_current_guess(self, guess, diff_ratio=None):
+    def set_current_guess(self, guess=None, reasoning=None, scoreEval=None):
         self.current_guess = guess
-        self.current_guess_diff_ratio = diff_ratio
+        self.current_guess_reasoning = reasoning
+        self.current_guess_scoreEval = scoreEval
 
-    def update_current_guess(self, guess, diff_ratio=None, mode="sa_diff_ratio"):
-        if guess is None or diff_ratio is None:
-            self.sa_step += 1
+    def update_current_guess(self, guess, reasoning, scoreEval):
+        if guess is None or reasoning is None or scoreEval is None:
             return False
         
-        if self.current_guess is None or self.current_guess_diff_ratio is None:
+        if self.current_guess is None or self.current_guess_reasoning is None:
             self.current_guess = guess
-            self.current_guess_diff_ratio = diff_ratio
-            self.sa_step += 1
+            self.current_guess_reasoning = reasoning
+            self.current_guess_scoreEval = scoreEval
             return True
         
-        if mode == "legacy_best_eval":
-            self.sa_step += 1
-            if self.current_guess_diff_ratio > diff_ratio:
-                self.current_guess = guess
-                self.current_guess_diff_ratio = diff_ratio
-                return True
-            else: return False
-
-        delta = diff_ratio - self.current_guess_diff_ratio
-        if delta <= 0:
+        if self.current_guess_scoreEval > scoreEval:
             self.current_guess = guess
-            self.current_guess_diff_ratio = diff_ratio
-            self.sa_step += 1
+            self.current_guess_reasoning = reasoning
+            self.current_guess_scoreEval = scoreEval
             return True
-
-        temp = self._sa_temperature()
-        accept_prob = math.exp(-delta / max(temp, 1e-8))
-        accepted = random.random() < accept_prob
-        if accepted:
-            self.current_guess = guess
-            self.current_guess_diff_ratio = diff_ratio
-        self.sa_step += 1
-        return accepted
+        else: 
+            return False
 
     def generate(
-        self, prompt_template, train_prompt, 
+        self, 
+        prompt_template, 
+        train_prompt, 
         regularization_prompt="", 
         prompt_format_kwargs=None,
-        temp=0.0, answer_extractor=None,
+        temp=0.0, 
+        answer_extractor=None,
+        reasoning_extractor=None,
     ):
         fmt_kwargs = prompt_format_kwargs or {}
         prompt = prompt_template.format(
@@ -243,8 +226,10 @@ class LearnerForICLGen:
         )
         response = run_model(self.mkey, self.model, self.tokenizer, prompt, temp=temp)
         pred = answer_extractor(response) if answer_extractor is not None else response
+        reasoning = reasoning_extractor(response) if reasoning_extractor is not None else None
         return {
             "Prompt": prompt,
             "Response": response,
-            "Prediction": pred
+            "Prediction": pred,
+            "Reasoning": reasoning,
         }

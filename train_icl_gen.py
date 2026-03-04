@@ -33,7 +33,7 @@ PYFORMLANG REGEX SYNTAX
   - To union sequences, group them: "(a b c + a c c)".
 - Epsilon handling: Use the literal epsilon when needed; prefer satisfying epsilon via an existing Kleene star rather than "epsilon + ...", unless epsilon is explicitly required at the top level.
 - Do NOT use: | . ? [] {{}} anchors/lookarounds, multi-character tokens, or any symbol not present in the training data.
-{0}
+
 INFERENCE STRATEGY
 1) Start/end constraints:
    - Check if all positives start with a specific letter or set (e.g., all non-empty positives start with c). If so, encode a mandatory prefix, e.g., "c ..." or "(b + c) ...".
@@ -68,8 +68,10 @@ INFERENCE STRATEGY
    - Sanity-check near-misses from negatives (e.g., wrong start letter, wrong modular length, incomplete final block, mixing vs non-mixing).
    - Re-check syntax: unions around multi-symbol sequences, spaces everywhere in concatenation, and only allowed symbols.
 
+{0}
 OUTPUT FORMAT
-- First, provide 1–3 concise sentences explaining the observed structure (mandatory prefix/set, block size/pattern, modular length, final-block restriction, epsilon/singleton handling).
+- First, provide 1-3 concise sentences explaining the observed structure (mandatory prefix/set, block size/pattern, modular length, final-block restriction, epsilon/singleton handling), wrapped in <reasoning> and </reasoning>, e.g.:
+  <reasoning>All positives start with c and then repeat 2-char blocks from a restricted set.</reasoning>
 - Then output ONLY the final regex wrapped in <ans> and </ans>, e.g.:
   <ans>(a a* b)*</ans>
 
@@ -129,7 +131,7 @@ Prohibited constructs (must not appear)
 - Do not use anchors ^ or $.
 - Do not use word boundary \\b.
 - Do not use lookarounds or backreferences.
-{0}
+
 INFERENCE STRATEGY
 
 1) Start/end constraints:
@@ -171,10 +173,12 @@ INFERENCE STRATEGY
    - Check boundary cases (short strings, empty string).
    - Re-check syntax correctness and grouping.
 
+{0}
 OUTPUT FORMAT
-- First, provide 1–3 concise sentences explaining the observed structure (mandatory prefix/set, block size/pattern, modular length, final-block restriction, epsilon/singleton handling).
+- First, provide 1-3 concise sentences explaining the observed structure (mandatory prefix/set, block size/pattern, modular length, final-block restriction, epsilon/singleton handling), wrapped in <reasoning> and </reasoning>, e.g.:
+  <reasoning>Accepted strings are length-5 alphanumerics that must not contain vowels.</reasoning>
 - Then output ONLY the final regex wrapped in <ans> and </ans>, e.g.:
-  <ans>(a*(c)|(b))*</ans>
+  <ans>(a*([A-Z])|(b))*</ans>
 
 Training Data (Each line has one input-output pair separated by comma):
 {1}
@@ -203,13 +207,29 @@ EXTRX_CLUSTRED_CE_INSTR = """
 
 """
 
+AGENTIC_REFLECTION_INSTR = """
+AGENTIC REFLECTION UPDATE
+- You will receive the previous attempt's reasoning and regex, plus new counterexamples.
+- First, briefly revise the previous reasoning to explain what failed and what should be changed.
+- Then output an updated regex consistent with all training data and the counterexamples.
+- Keep reasoning concise (1-3 sentences) and directly tied to the regex revision.
+
+"""
+
 train_data_template = "{0}, {1}"
 
 def extract_ans(res):
     if res is None: return None
-    matches = re.findall(r"<ans>\s*(.*?)\s*</ans>", res, re.DOTALL)
+    matches = re.search(r"(?:.*)<ans>\s*(.*?)\s*</ans>", res, re.DOTALL)
     if matches:
-        return matches[-1]
+        return matches.group(1)
+    return None
+
+def extract_reasoning(res):
+    if res is None: return None
+    matches = re.search(r"(?:.*)<reasoning>\s*(.*?)\s*</reasoning>", res, re.DOTALL)
+    if matches:
+        return matches.group(1)
     return None
 
 def log_scaling(total, start, scale_factor):
@@ -248,10 +268,10 @@ def main(argv=None):
     parser.add_argument("--ce_batch_size", type=int, default=128)
     parser.add_argument("--ce_clustered", default=False, action="store_true")
     parser.add_argument(
-        "--guess_update_mode",
+        "--reasoning_mode",
         type=str,
-        default="sa_diff_ratio",
-        choices=["legacy_best_eval", "sa_diff_ratio"],
+        default="agentic_reflection",
+        choices=["legacy_best_eval", "agentic_reflection"],
     )
     parser.add_argument("--indir", type=str, default="datasets")
     parser.add_argument("--outdir", type=str, default="logs/opt_prompt")
@@ -314,46 +334,61 @@ def main(argv=None):
         agg_train_ex, agg_train_labels = [], []
         num_samples = log_scaling(args.tot_train_size, args.start_size, args.scale_factor)
         epochs = args.ce_epochs if args.use_ce else len(num_samples)
-        learner.reset_current_guess()
         msgdict[f"run-{runid}"] = {}
+        learner.reset_current_guess()
 
         for epoch in tqdm(range(epochs)):
+            reflection_prompt = ""
             if args.use_ce:
                 if learner.current_guess is None:
-                    ce_x = data["train_ex"][epoch * args.ce_start_size:(epoch + 1) * args.ce_start_size]
-                    ce_y = data["train_labels"][epoch * args.ce_start_size:(epoch + 1) * args.ce_start_size]
+                    train_ex = data["train_ex"][epoch * args.ce_start_size:(epoch + 1) * args.ce_start_size]
+                    train_label = data["train_labels"][epoch * args.ce_start_size:(epoch + 1) * args.ce_start_size]
                 else:
-                    ce_x, ce_y = teacher.generate_counterexamples(
+                    train_ex, train_label = teacher.generate_counterexamples(
                         bs=args.ce_batch_size,
                         regex_gt=args.regex,
                         regex_gen=learner.current_guess,
                         clustered=args.ce_clustered,
                     )
-                agg_train_ex += ce_x
-                agg_train_labels += ce_y
+                    if args.reasoning_mode == "agentic_reflection":
+                        ce_lines = "\n".join(
+                            [train_data_template.format(ex, label) for ex, label in zip(train_ex, train_label)]
+                        )
+                        reflection_prompt = (
+                            AGENTIC_REFLECTION_INSTR
+                            + "Previous reasoning:\n"
+                            + (learner.current_guess_reasoning or "(none)")
+                            + "\nPrevious regex:\n"
+                            + (learner.current_guess or "(none)")
+                            + "\nNew counterexamples (string, label):\n"
+                            + ce_lines
+                            + "\n\n"
+                        )
             else:
-                l = len(agg_train_ex)
-                r = num_samples[epoch]
+                l, r = len(agg_train_ex), num_samples[epoch]
                 train_ex = data["train_ex"][l:r]
                 train_labels = data["train_labels"][l:r]
-                agg_train_ex += train_ex
-                agg_train_labels += train_labels
-
+                
+            agg_train_ex += train_ex
+            agg_train_labels += train_labels
             train_p = "\n".join(
                 [train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)]
             )
 
             msgs, acc = [], 0
             for _ in range(args.retries):
+                reg_prompt = regularization if args.use_reg else ""
+                if args.use_ce and args.reasoning_mode == "agentic_reflection":
+                    reg_prompt = reg_prompt + reflection_prompt
                 msg = learner.generate(
                     prompt_template=prompt_template,
                     train_prompt=train_p,
-                    regularization_prompt=regularization if args.use_reg else "",
+                    regularization_prompt=reg_prompt,
                     prompt_format_kwargs=prompt_kwargs,
                     temp=args.temp,
                     answer_extractor=extract_ans,
+                    reasoning_extractor=extract_reasoning,
                 )
-                msgs.append(msg)
                 msg = teacher.judge_regex(
                     msg=msg,
                     fst_gt=fst_gt,
@@ -365,9 +400,12 @@ def main(argv=None):
                 if msg.get("Equivalent"):
                     acc = max(acc, 1)
                 _ = learner.update_current_guess(
-                    msg["Prediction"], msg.get("diffRatio", None), args.guess_update_mode
+                    msg["Prediction"], 
+                    msg["Reasoning"],
+                    msg.get("scoreEvalSet", None)
                 )
 
+                msgs.append(msg)
                 msgdict[f"run-{runid}"][f"epoch-{epoch}"] = {"Logs": msgs}
                 savejson(msgdict, config_name)
 
@@ -378,6 +416,7 @@ def main(argv=None):
                 "Accuracy": acc,
                 "NumTrainingSamples": len(agg_train_ex),
                 "CurrentGuess": learner.current_guess,
+                "CurrentGuessReasoning": learner.current_guess_reasoning,
                 "Logs": msgs,
             }
             savejson(msgdict, config_name)
