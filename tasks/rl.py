@@ -272,6 +272,7 @@ class SimplyRegularLanguage(RegularLanguage):
 
         self.nfa = self.regex.to_epsilon_nfa()
         self.dfa = self.nfa.to_deterministic().minimize()
+        self.sigma = {Symbol(c.value) for c in self.dfa.symbols}
         self.num_alphabets = len(self.dfa.symbols)
         self.num_categories = 2     # positive | negative
 
@@ -312,7 +313,7 @@ class SimplyRegularLanguage(RegularLanguage):
         nfa = re.to_epsilon_nfa()
         dfa = nfa.to_deterministic().minimize()
         if sigma is None:
-            sigma = self.sigma_from_chars([s.value for s in dfa.symbols])
+            sigma = self.sigma_from_chars([s.value for s in self.sigma])
         fst = self.dfa_to_pynini_fst(dfa, sigma)
         return dfa, fst, sigma
     
@@ -324,6 +325,7 @@ class PythonRegularLanguage(RegularLanguage):
 
         self.nfa = self.regex.to_epsilon_nfa()
         self.dfa = self.nfa.to_deterministic().minimize()
+        self.sigma = {Symbol(c.value) for c in self.dfa.symbols}
         self.num_alphabets = len(self.dfa.symbols)
         self.num_categories = 2     # positive | negative
     
@@ -332,7 +334,7 @@ class PythonRegularLanguage(RegularLanguage):
         nfa = re.to_epsilon_nfa()
         dfa = nfa.to_deterministic().minimize()
         if sigma is None:
-            sigma = self.sigma_from_chars([s.value for s in dfa.symbols])
+            sigma = self.sigma_from_chars([s.value for s in self.sigma])
         fst = self.dfa_to_pynini_fst(dfa, sigma)
         return dfa, fst, sigma
     
