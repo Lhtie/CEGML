@@ -335,6 +335,7 @@ def main(argv=None):
         num_samples = log_scaling(args.tot_train_size, args.start_size, args.scale_factor)
         epochs = args.ce_epochs if args.use_ce else len(num_samples)
         msgdict[f"run-{runid}"] = {}
+        learner.reset_current_guess()
 
         for epoch in tqdm(range(epochs)):
             reflection_prompt = ""

@@ -1,7 +1,12 @@
-from time import sleep
-
 import os
 import pathlib
+os.environ.setdefault("USER", "chtc")
+os.environ.setdefault("LOGNAME", os.environ["USER"])
+os.environ.setdefault("USERNAME", os.environ["USER"])
+os.environ.setdefault("TORCHINDUCTOR_CACHE_DIR", os.path.abspath("./.torchinductor"))
+pathlib.Path(os.environ["TORCHINDUCTOR_CACHE_DIR"]).mkdir(parents=True, exist_ok=True)
+
+from time import sleep
 import torch
 import tiktoken
 
@@ -35,12 +40,6 @@ def resolve_model_path(mkey):
 def load_model_and_tokenizer(mkey, api_key):
     mpath = resolve_model_path(mkey)
     if is_vllm_model(mkey):
-        os.environ.setdefault("USER", "chtc")
-        os.environ.setdefault("LOGNAME", os.environ["USER"])
-        os.environ.setdefault("USERNAME", os.environ["USER"])
-        os.environ.setdefault("TORCHINDUCTOR_CACHE_DIR", os.path.abspath("./.torchinductor"))
-        pathlib.Path(os.environ["TORCHINDUCTOR_CACHE_DIR"]).mkdir(parents=True, exist_ok=True)
-        
         try:
             from vllm import LLM
         except ImportError as e:
