@@ -15,14 +15,14 @@ from curve import plot_loss_curve, plot_accuracy_curve
 from dataset import generate_dataset
 from keysecrets import api_key
 
-SIMPLE_PROMPT_TEMPLATE = """TASK
+SIMPLYRX_PROMPT_TEMPLATE = """TASK
 You will be given labeled strings and must infer a single regular language that matches all positives (label 1) and rejects all negatives (label 0). Output a concise regex in pyformlang.regular_expression.Regex syntax.
 
 INPUT FORMAT
 - You receive a block titled “Training Data (Each line has one input-output pair separated by comma):”.
 - Each line is "<string>, <label>" where label ∈ {{1, 0}}. The string may be empty; an empty string appears as nothing before the comma (", 1") and represents epsilon.
 - The alphabet is exactly the set of characters appearing in the data (typically a, b, c). Do not introduce other symbols.
-
+{clustered_ce_instr}
 PYFORMLANG REGEX SYNTAX
 - Union: +
 - Concatenation: space-separated symbols (each symbol is a single character from the alphabet or the literal epsilon).
@@ -184,7 +184,7 @@ Training Data (Each line has one input-output pair separated by comma):
 {1}
 """
 
-SIMPLE_REGULARIZATION = """
+SIMPLYRX_REGULARIZATION = """
 CONSTRAINTS
 - Prefer simpler, more general regexes while staying consistent with all datapoints.
 - Total regex length (ignoring spaces) must be ≤ 50 characters.
@@ -199,6 +199,12 @@ CONSTRAINTS
 - Total regex length (ignoring spaces) must be ≤ 50 characters.
 - Nesting depth of Kleene stars (*, +, ?) must be ≤ 3.
 - Use only symbols that appear in the alphabet (except metacharacters such as (), |, *, +, ?, []).
+"""
+
+SIMPLYRX_CLUSTRED_CE_INSTR = """
+- The strings may contain grouped class of characters, e.g., [abc] for letter a or b or c etc.
+- Each character class only represent one possible character in the string, e.g., "a[a-c]c" can represent "abc" but not "abcc".
+
 """
 
 EXTRX_CLUSTRED_CE_INSTR = """
@@ -296,9 +302,11 @@ def main(argv=None):
         }
     else:
         task = SimplyRegularLanguage(args.regex, args.max_length)
-        prompt_template = SIMPLE_PROMPT_TEMPLATE
-        regularization = SIMPLE_REGULARIZATION
-        prompt_kwargs = None
+        prompt_template = SIMPLYRX_PROMPT_TEMPLATE
+        regularization = SIMPLYRX_REGULARIZATION
+        prompt_kwargs = { 
+            "clustered_ce_instr": SIMPLYRX_CLUSTRED_CE_INSTR if args.ce_clustered else ""
+        }
 
     model, tokenizer = load_model_and_tokenizer(args.mkey, api_key)
     teacher = Teacher(task)

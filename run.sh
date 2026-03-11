@@ -44,4 +44,20 @@
 # python train_icl_gen.py --regex "([A-Za-z0-9#]{5})&~([A-Za-z0-9#]*[AEIOUaeiou][A-Za-z0-9#]*)" --mkey gpt-oss --use_reg --rerun 3 --tot_train_size 3000 --start_size 3 --scale_factor 2.0
 # python train_icl_gen.py --regex "([A-Za-z0-9#]{5})&~([A-Za-z0-9#]*[AEIOUaeiou][A-Za-z0-9#]*)" --mkey gpt-oss --use_reg --use_ce --rerun 3 --ce_epochs 12 --ce_batch_size 250 --ce_clustered
 # python train_icl_gen.py --regex "([A-Za-z0-9#]*Mr[A-Za-z0-9#]*)&([A-Za-z0-9#]*Mrs[A-Za-z0-9#]*)&~([A-Za-z0-9#]*((Ms)|(Miss))[A-Za-z0-9#]*)" --mkey gpt-oss --use_reg --rerun 3 --tot_train_size 3000 --start_size 3 --scale_factor 2.0
-python train_icl_gen.py --regex "([A-Za-z0-9#]*Mr[A-Za-z0-9#]*)&([A-Za-z0-9#]*Mrs[A-Za-z0-9#]*)&~([A-Za-z0-9#]*((Ms)|(Miss))[A-Za-z0-9#]*)" --mkey gpt5 --use_reg --use_ce --rerun 3 --ce_epochs 12 --ce_batch_size 250 --ce_clustered
+# python train_icl_gen.py --regex "([A-Za-z0-9#]*Mr[A-Za-z0-9#]*)&([A-Za-z0-9#]*Mrs[A-Za-z0-9#]*)&~([A-Za-z0-9#]*((Ms)|(Miss))[A-Za-z0-9#]*)" --mkey gpt-oss --use_reg --use_ce --rerun 3 --ce_epochs 12 --ce_batch_size 250 --ce_clustered
+
+# 9
+python train_icl_gen.py --regex "([A-Za-z0-9#]*[A-Za-z]{4}[A-Za-z0-9#]*){2}" --mkey gpt-oss --use_reg --rerun 3 --tot_train_size 3000 --start_size 3 --scale_factor 2.0
+python train_icl_gen.py --regex "([A-Za-z0-9#]*[A-Za-z]{4}[A-Za-z0-9#]*){2}" --mkey gpt-oss --use_reg --use_ce --rerun 3 --ce_epochs 12 --ce_batch_size 250 --ce_clustered
+# 10
+python train_icl_gen.py --regex "([A-Za-z0-9#]*[A-Za-z]+[A-Za-z0-9#]*)&([A-Za-z0-9#]*[0-9][A-Za-z0-9#]*){4}" --mkey gpt-oss --use_reg --rerun 3 --tot_train_size 3000 --start_size 3 --scale_factor 2.0
+python train_icl_gen.py --regex "([A-Za-z0-9#]*[A-Za-z]+[A-Za-z0-9#]*)&([A-Za-z0-9#]*[0-9][A-Za-z0-9#]*){4}" --mkey gpt-oss --use_reg --use_ce --rerun 3 --ce_epochs 12 --ce_batch_size 250 --ce_clustered
+# 12
+python train_icl_gen.py --regex "([A-Za-z0-9#]*([A-Za-z0-9#]*[A-Za-z]+[A-Za-z0-9#]*){3})&(([A-Za-z0-9#]*[0-9][A-Za-z0-9#]*){2}[A-Za-z0-9#]*)" --mkey gpt-oss --use_reg --rerun 3 --tot_train_size 3000 --start_size 3 --scale_factor 2.0
+python train_icl_gen.py --regex "([A-Za-z0-9#]*([A-Za-z0-9#]*[A-Za-z]+[A-Za-z0-9#]*){3})&(([A-Za-z0-9#]*[0-9][A-Za-z0-9#]*){2}[A-Za-z0-9#]*)" --mkey gpt-oss --use_reg --use_ce --rerun 3 --ce_epochs 12 --ce_batch_size 250 --ce_clustered
+# 20
+python train_icl_gen.py --regex "([0-9#]*[A-Za-z]+[0-9#]*){3,6}" --mkey gpt-oss --use_reg --rerun 3 --tot_train_size 3000 --start_size 3 --scale_factor 2.0
+python train_icl_gen.py --regex "([0-9#]*[A-Za-z]+[0-9#]*){3,6}" --mkey gpt-oss --use_reg --use_ce --rerun 3 --ce_epochs 12 --ce_batch_size 250 --ce_clustered
+# 25
+python train_icl_gen.py --regex "([0-9#]*[A-Za-z]+[0-9#]*){0,4}&([A-Za-z0-9#]*(([A-Za-z]+)&([A-Za-z0-9#]*uin[A-Za-z0-9#]*))[A-Za-z0-9#]*){1,}" --mkey gpt-oss --use_reg --rerun 3 --tot_train_size 3000 --start_size 3 --scale_factor 2.0
+python train_icl_gen.py --regex "([0-9#]*[A-Za-z]+[0-9#]*){0,4}&([A-Za-z0-9#]*(([A-Za-z]+)&([A-Za-z0-9#]*uin[A-Za-z0-9#]*))[A-Za-z0-9#]*){1,}" --mkey gpt-oss --use_reg --use_ce --rerun 3 --ce_epochs 12 --ce_batch_size 250 --ce_clustered
