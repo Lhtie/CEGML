@@ -3,6 +3,8 @@ from typing import Any
 
 from modeling.llm import is_vllm_model, resolve_model_path
 
+_CALLABLE_CACHE: dict[tuple, "LocalVLLMChatCallable"] = {}
+
 
 class LocalVLLMChatCallable:
     def __init__(
@@ -68,9 +70,16 @@ def build_chat_callable(
     sampling_kwargs: dict[str, Any] | None = None,
 ):
     if is_vllm_model(model):
-        return LocalVLLMChatCallable(
+        cache_key = (
             model,
-            model_kwargs=model_kwargs,
-            sampling_kwargs=sampling_kwargs,
+            tuple(sorted((model_kwargs or {}).items())),
+            tuple(sorted((sampling_kwargs or {}).items())),
         )
+        if cache_key not in _CALLABLE_CACHE:
+            _CALLABLE_CACHE[cache_key] = LocalVLLMChatCallable(
+                model,
+                model_kwargs=model_kwargs,
+                sampling_kwargs=sampling_kwargs,
+            )
+        return _CALLABLE_CACHE[cache_key]
     return model
