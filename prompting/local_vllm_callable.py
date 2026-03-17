@@ -6,6 +6,28 @@ from modeling.llm import is_vllm_model, resolve_model_path
 _CALLABLE_CACHE: dict[tuple, "LocalVLLMChatCallable"] = {}
 
 
+def _freeze_for_cache(value):
+    if isinstance(value, dict):
+        return tuple(sorted((k, _freeze_for_cache(v)) for k, v in value.items()))
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_for_cache(v) for v in value)
+    return value
+
+
+def _is_chat_message(value) -> bool:
+    return isinstance(value, dict) and "role" in value and "content" in value
+
+
+def _is_single_prompt(value) -> bool:
+    if isinstance(value, str):
+        return True
+    if _is_chat_message(value):
+        return True
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return all(_is_chat_message(item) for item in value)
+    return False
+
+
 class LocalVLLMChatCallable:
     def __init__(
         self,
@@ -53,7 +75,7 @@ class LocalVLLMChatCallable:
     def __call__(self, prompts, *args, **kwargs):
         from vllm import SamplingParams
 
-        is_single = not isinstance(prompts, list)
+        is_single = _is_single_prompt(prompts)
         normalized_inputs = [prompts] if is_single else prompts
         compiled_prompts = [self._normalize_prompt(prompt) for prompt in normalized_inputs]
         sampling_params = SamplingParams(
@@ -74,8 +96,8 @@ def build_chat_callable(
     if is_vllm_model(model):
         cache_key = (
             model,
-            tuple(sorted((model_kwargs or {}).items())),
-            tuple(sorted((sampling_kwargs or {}).items())),
+            _freeze_for_cache(model_kwargs or {}),
+            _freeze_for_cache(sampling_kwargs or {}),
         )
         if cache_key not in _CALLABLE_CACHE:
             _CALLABLE_CACHE[cache_key] = LocalVLLMChatCallable(

@@ -1,6 +1,5 @@
 import os
 import sys
-import json
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal, Protocol, TypedDict
 from gepa.core.adapter import EvaluationBatch, GEPAAdapter
@@ -8,7 +7,7 @@ from gepa.core.adapter import EvaluationBatch, GEPAAdapter
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from tasks.rl import ExtRegularLanguage, SimplyRegularLanguage
 from teacher import Teacher
-from train_icl_gen import extract_ans
+from train_icl_gen import EXTRX_SIGMA, extract_ans
 
 # DataInst, Trajectory, RolloutOutput
 class DefaultDataInst(TypedDict):
@@ -44,7 +43,7 @@ class ChatMessage(TypedDict):
 
 
 class ChatCompletionCallable(Protocol):
-    def __call__(self, messages: Sequence[ChatMessage]) -> str: ...
+    def __call__(self, messages: Sequence[Sequence[ChatMessage]]) -> list[str]: ...
 
 
 class DFAMatchAdapter(GEPAAdapter[DefaultDataInst, DefaultTrajectory, DefaultRolloutOutput]):
@@ -76,7 +75,7 @@ class DFAMatchAdapter(GEPAAdapter[DefaultDataInst, DefaultTrajectory, DefaultRol
 
     def _build_task(self, regex_str: str):
         if self.task_type == "extrx":
-            return ExtRegularLanguage(regex_str, self.str_max_length)
+            return ExtRegularLanguage(regex_str, self.str_max_length, alphabet=EXTRX_SIGMA)
         if self.task_type == "simplyrx":
             return SimplyRegularLanguage(regex_str, self.str_max_length)
         raise ValueError(f"Unsupported task_type: {self.task_type}")
@@ -133,9 +132,14 @@ class DFAMatchAdapter(GEPAAdapter[DefaultDataInst, DefaultTrajectory, DefaultRol
                     )
                 ]
             else:
-                responses = [self.model(messages) for messages in litellm_requests]
+                responses = self.model(litellm_requests)
         except Exception as e:
             raise e
+
+        if len(responses) != len(batch):
+            raise ValueError(
+                f"Model returned {len(responses)} responses for batch size {len(batch)}."
+            )
 
         for data, assistant_response in zip(batch, responses, strict=False):
             output: DefaultRolloutOutput = {"full_assistant_response": assistant_response}
