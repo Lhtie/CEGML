@@ -6,7 +6,6 @@ from typing import Any, Literal, Protocol, TypedDict
 from gepa.core.adapter import EvaluationBatch, GEPAAdapter
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from modeling.llm import is_vllm_model, resolve_model_path
 from tasks.rl import ExtRegularLanguage, SimplyRegularLanguage
 from teacher import Teacher
 from train_icl_gen import extract_ans
@@ -56,44 +55,22 @@ class DFAMatchAdapter(GEPAAdapter[DefaultDataInst, DefaultTrajectory, DefaultRol
         failure_score: float = 0.0,
         max_litellm_workers: int = 10,
         litellm_batch_completion_kwargs: dict[str, Any] | None = None,
-        vllm_model_kwargs: dict[str, Any] | None = None,
-        vllm_sampling_kwargs: dict[str, Any] | None = None,
         str_max_length: int = 32,
     ):
         self.backend = "callable"
         if isinstance(model, str):
-            if is_vllm_model(model):
-                from transformers import AutoTokenizer
-                from vllm import LLM
+            import litellm
 
-                model_path = resolve_model_path(model)
-                self.backend = "vllm"
-                self.tokenizer = AutoTokenizer.from_pretrained(model_path)
-                default_vllm_model_kwargs = {
-                    "model": model_path,
-                    "tensor_parallel_size": 2,
-                    "dtype": "bfloat16",
-                    "max_model_len": 65536,
-                    "hf_overrides": {
-                        "dtype": "bfloat16",
-                        "torch_dtype": "bfloat16",
-                    },
-                }
-                if vllm_model_kwargs is not None:
-                    default_vllm_model_kwargs.update(vllm_model_kwargs)
-                self.vllm_model = LLM(**default_vllm_model_kwargs)
-            else:
-                import litellm
-
-                self.backend = "litellm"
-                self.litellm = litellm
-                # litellm._turn_on_debug()
-        self.model = model
+            self.backend = "litellm"
+            self.litellm = litellm
+            # litellm._turn_on_debug()
+            self.model = model
+        else:
+            self.model = model
 
         self.failure_score = failure_score
         self.max_litellm_workers = max_litellm_workers
         self.litellm_batch_completion_kwargs = litellm_batch_completion_kwargs or {}
-        self.vllm_sampling_kwargs = vllm_sampling_kwargs or {}
         self.str_max_length = str_max_length
         self.task_type = task_type
 
@@ -103,25 +80,6 @@ class DFAMatchAdapter(GEPAAdapter[DefaultDataInst, DefaultTrajectory, DefaultRol
         if self.task_type == "simplyrx":
             return SimplyRegularLanguage(regex_str, self.str_max_length)
         raise ValueError(f"Unsupported task_type: {self.task_type}")
-
-    def _batch_generate_with_vllm(self, requests: Sequence[Sequence[ChatMessage]]) -> list[str]:
-        from vllm import SamplingParams
-
-        prompts = [
-            self.tokenizer.apply_chat_template(
-                list(messages),
-                tokenize=False,
-                add_generation_prompt=True,
-            )
-            for messages in requests
-        ]
-        sampling_params = SamplingParams(
-            temperature=0.0,
-            max_tokens=32768,
-            **self.vllm_sampling_kwargs,
-        )
-        outputs = self.vllm_model.generate(prompts, sampling_params)
-        return [output.outputs[0].text.strip() for output in outputs]
 
     def _evaluate_regex(self, task, answer: str, extracted_ans: str) -> tuple[float, str | None]:
         teacher = Teacher(task)
@@ -168,15 +126,12 @@ class DFAMatchAdapter(GEPAAdapter[DefaultDataInst, DefaultTrajectory, DefaultRol
 
         try:
             if isinstance(self.model, str):
-                if self.backend == "vllm":
-                    responses = self._batch_generate_with_vllm(litellm_requests)
-                else:
-                    responses = [
-                        resp.choices[0].message.content.strip()
-                        for resp in self.litellm.batch_completion(
-                            model=self.model, messages=litellm_requests, max_workers=self.max_litellm_workers, **self.litellm_batch_completion_kwargs
-                        )
-                    ]
+                responses = [
+                    resp.choices[0].message.content.strip()
+                    for resp in self.litellm.batch_completion(
+                        model=self.model, messages=litellm_requests, max_workers=self.max_litellm_workers, **self.litellm_batch_completion_kwargs
+                    )
+                ]
             else:
                 responses = [self.model(messages) for messages in litellm_requests]
         except Exception as e:
