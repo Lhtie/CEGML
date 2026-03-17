@@ -37,6 +37,8 @@ class LocalVLLMChatCallable:
     def _normalize_prompt(self, prompt) -> str:
         if isinstance(prompt, str):
             messages = [{"role": "user", "content": prompt}]
+        elif isinstance(prompt, dict):
+            messages = [prompt]
         elif isinstance(prompt, Sequence):
             messages = list(prompt)
         else:
