@@ -7,48 +7,37 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import keysecrets
 from gepa_adapter import DFAMatchAdapter
-
-def collect_data(input_dir: str, output_path: str):
-    train_data = []
-    for dirpath, dirnames, filenames in os.walk(input_dir):
-        for filename in filenames:
-            if filename.lower().endswith(".json"):
-                file_path = os.path.join(dirpath, filename)
-                print(f"Found JSON file: {file_path}")
-                try:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        for epoch, res in data.items():
-                            if float(res["Accuracy"]) == 1.0:
-                                for log in res["Logs"]:
-                                    if "Equivalent" in log and bool(log["Equivalent"]) == True:
-                                        train_data.append({
-                                            "input": "Training Data" + log["Prompt"].split("Training Data")[1],
-                                            "additional_context": {
-                                                "solution": log["Response"]
-                                            },
-                                            "answer": log["Prediction"]
-                                        })
-                                        
-                except Exception as e:
-                    print(f"Error reading {file_path}: {e}")
-    with open(output_path, "w", encoding="utf-8") as out_file:
-        json.dump({"train": train_data, "val": []}, out_file, indent=4)
-
-prompt_template = """Task: Infer a single regular language (unknown but fixed) from labeled examples, then directly output the infered regex string that is valid for pyformlang.regular_expression.Regex.
-Syntax rules:
-- Union is +; Concatenation is space-separated tokens (we do not need multi-char tokens); Kleene star is *;
-- Do not use |, ., ?, character classes [], {{m,n}}, lookaheads, or anchors.
-Premises:
-- Prefer simpler regexes with fewer operators and literals while still consistent with the datapoints.
-- Concretely, the total lengths (ignore spaces) <= 50 characters
-- the depths of klene star nesting <= 3
-
-You could think step by step, and finally output the regex. (Please briefly explain your reasoning before the final answer)
-Please wrap your final answer in <ans> and </ans> tags, for example: ... <ans>(a+b)*c</ans>
-"""
+from train_icl_gen import (
+    EXTRX_CLUSTRED_CE_INSTR,
+    EXTRX_PROMPT_TEMPLATE,
+    EXTRX_REGULARIZATION,
+    EXTRX_SIGMA,
+    SIMPLYRX_CLUSTRED_CE_INSTR,
+    SIMPLYRX_PROMPT_TEMPLATE,
+    SIMPLYRX_REGULARIZATION,
+)
 
 os.environ["OPENAI_API_KEY"] = keysecrets.api_key
+
+def build_seed_prompt(task_type: str) -> str:
+    if task_type == "extrx":
+        prompt = EXTRX_PROMPT_TEMPLATE.format(
+            EXTRX_REGULARIZATION,
+            "",
+            sigma=EXTRX_SIGMA,
+            clustered_ce_instr=EXTRX_CLUSTRED_CE_INSTR,
+        )
+    else:
+        prompt = SIMPLYRX_PROMPT_TEMPLATE.format(
+            SIMPLYRX_REGULARIZATION,
+            "",
+            clustered_ce_instr=SIMPLYRX_CLUSTRED_CE_INSTR,
+        )
+
+    training_data_marker = "\nTraining Data (Each line has one input-output pair separated by comma):\n"
+    if training_data_marker in prompt:
+        prompt = prompt.split(training_data_marker, 1)[0].rstrip()
+    return prompt
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -56,23 +45,22 @@ if __name__ == "__main__":
     parser.add_argument("--max_metric_calls", type=int, default=150)
     parser.add_argument("--task_lm", type=str, default="openai/gpt-5.1")
     parser.add_argument("--reflection_lm", type=str, default="openai/gpt-5.1")
+    parser.add_argument("--task_type", type=str, default="simplyrx", choices=["simplyrx", "extrx"])
     args = parser.parse_args()
-    
-    # icl_gen
-    # collect_data("logs", "datasets/gepa_icl_gen.json")
 
-    with open("datasets/gepa_icl_gen.json", "r", encoding="utf-8") as f:
+    with open(f"prompting/gepa_icl_gen_{args.task_type}.json", "r", encoding="utf-8") as f:
         data = json.load(f)
     print("Data size:", len(data["train"]))
     
     adapter = DFAMatchAdapter(
         model=args.task_lm,
+        task_type=args.task_type,
         str_max_length=args.max_length
     )
     
     gepa_result = gepa.optimize(
         seed_candidate={
-            "system_prompt": prompt_template
+            "system_prompt": build_seed_prompt(args.task_type)
         },
         trainset=data["train"],
         adapter=adapter,

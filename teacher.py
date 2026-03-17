@@ -138,6 +138,13 @@ class Teacher:
         train_ex, train_labels, eval_ex, eval_labels,
         sigma=None,
     ):
+        def score_examples(dfa_pred, examples, labels):
+            if len(examples) == 0:
+                return None
+            return sum(
+                [int(int(dfa_accepts_ex(dfa_pred, ex)) == label) for ex, label in zip(examples, labels)]
+            ) / len(examples)
+
         pred = msg.get("Prediction")
         try:
             if sigma is None:
@@ -152,12 +159,8 @@ class Teacher:
             msg["Equivalent"] = eq
             msg["Witness"] = witness
             msg["diffRatio"] = diff_ratio
-            msg["scoreTrainSet"] = sum(
-                [int(int(dfa_accepts_ex(dfa_pred, ex)) == label) for ex, label in zip(train_ex, train_labels)]
-            ) / len(train_ex)
-            msg["scoreEvalSet"] = sum(
-                [int(int(dfa_accepts_ex(dfa_pred, ex)) == label) for ex, label in zip(eval_ex, eval_labels)]
-            ) / len(eval_ex)
+            msg["scoreTrainSet"] = score_examples(dfa_pred, train_ex, train_labels)
+            msg["scoreEvalSet"] = score_examples(dfa_pred, eval_ex, eval_labels)
         except Exception as e:
             msg["Error"] = f"Error compiling regex: {e}"
             print(msg["Error"])

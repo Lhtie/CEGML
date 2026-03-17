@@ -2,11 +2,13 @@ import os
 import sys
 import json
 from collections.abc import Mapping, Sequence
-from typing import Any, Protocol, TypedDict
+from typing import Any, Literal, Protocol, TypedDict
 from gepa.core.adapter import EvaluationBatch, GEPAAdapter
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from tasks.rl import SimplyRegularLanguage
+from modeling.llm import is_vllm_model, resolve_model_path
+from tasks.rl import ExtRegularLanguage, SimplyRegularLanguage
+from teacher import Teacher
 from train_icl_gen import extract_ans
 
 # DataInst, Trajectory, RolloutOutput
@@ -50,22 +52,95 @@ class DFAMatchAdapter(GEPAAdapter[DefaultDataInst, DefaultTrajectory, DefaultRol
     def __init__(
         self,
         model: str | ChatCompletionCallable,
+        task_type: Literal["simplyrx", "extrx"] = "simplyrx",
         failure_score: float = 0.0,
         max_litellm_workers: int = 10,
-        litellm_batch_completion_kwargs: dict[str, Any] = {},
+        litellm_batch_completion_kwargs: dict[str, Any] | None = None,
+        vllm_model_kwargs: dict[str, Any] | None = None,
+        vllm_sampling_kwargs: dict[str, Any] | None = None,
         str_max_length: int = 32,
     ):
+        self.backend = "callable"
         if isinstance(model, str):
-            import litellm
+            if is_vllm_model(model):
+                from transformers import AutoTokenizer
+                from vllm import LLM
 
-            self.litellm = litellm
-            # litellm._turn_on_debug()
+                model_path = resolve_model_path(model)
+                self.backend = "vllm"
+                self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+                default_vllm_model_kwargs = {
+                    "model": model_path,
+                    "tensor_parallel_size": 2,
+                    "dtype": "bfloat16",
+                    "max_model_len": 65536,
+                    "hf_overrides": {
+                        "dtype": "bfloat16",
+                        "torch_dtype": "bfloat16",
+                    },
+                }
+                if vllm_model_kwargs is not None:
+                    default_vllm_model_kwargs.update(vllm_model_kwargs)
+                self.vllm_model = LLM(**default_vllm_model_kwargs)
+            else:
+                import litellm
+
+                self.backend = "litellm"
+                self.litellm = litellm
+                # litellm._turn_on_debug()
         self.model = model
 
         self.failure_score = failure_score
         self.max_litellm_workers = max_litellm_workers
-        self.litellm_batch_completion_kwargs = litellm_batch_completion_kwargs
+        self.litellm_batch_completion_kwargs = litellm_batch_completion_kwargs or {}
+        self.vllm_sampling_kwargs = vllm_sampling_kwargs or {}
         self.str_max_length = str_max_length
+        self.task_type = task_type
+
+    def _build_task(self, regex_str: str):
+        if self.task_type == "extrx":
+            return ExtRegularLanguage(regex_str, self.str_max_length)
+        if self.task_type == "simplyrx":
+            return SimplyRegularLanguage(regex_str, self.str_max_length)
+        raise ValueError(f"Unsupported task_type: {self.task_type}")
+
+    def _batch_generate_with_vllm(self, requests: Sequence[Sequence[ChatMessage]]) -> list[str]:
+        from vllm import SamplingParams
+
+        prompts = [
+            self.tokenizer.apply_chat_template(
+                list(messages),
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+            for messages in requests
+        ]
+        sampling_params = SamplingParams(
+            temperature=0.0,
+            max_tokens=32768,
+            **self.vllm_sampling_kwargs,
+        )
+        outputs = self.vllm_model.generate(prompts, sampling_params)
+        return [output.outputs[0].text.strip() for output in outputs]
+
+    def _evaluate_regex(self, task, answer: str, extracted_ans: str) -> tuple[float, str | None]:
+        teacher = Teacher(task)
+        _, fst_gt, sigma = task.regex_to_pynini_via_pyformlang(answer)
+        msg = teacher.judge_regex(
+            msg={"Prediction": extracted_ans},
+            fst_gt=fst_gt,
+            train_ex=[],
+            train_labels=[],
+            eval_ex=[],
+            eval_labels=[],
+            sigma=sigma,
+        )
+        if msg.get("Equivalent") is True:
+            return 1.0, None
+        if "Error" in msg:
+            return self.failure_score, f"Regex parsing or DFA construction failed. Exception: {msg['Error']}"
+        witness = msg.get("Witness")
+        return self.failure_score, f"Predicted regex is not equivalent to ground truth. One of the counterexamples is '{witness}'"
 
     def evaluate(
         self,
@@ -93,12 +168,15 @@ class DFAMatchAdapter(GEPAAdapter[DefaultDataInst, DefaultTrajectory, DefaultRol
 
         try:
             if isinstance(self.model, str):
-                responses = [
-                    resp.choices[0].message.content.strip()
-                    for resp in self.litellm.batch_completion(
-                        model=self.model, messages=litellm_requests, max_workers=self.max_litellm_workers, **self.litellm_batch_completion_kwargs
-                    )
-                ]
+                if self.backend == "vllm":
+                    responses = self._batch_generate_with_vllm(litellm_requests)
+                else:
+                    responses = [
+                        resp.choices[0].message.content.strip()
+                        for resp in self.litellm.batch_completion(
+                            model=self.model, messages=litellm_requests, max_workers=self.max_litellm_workers, **self.litellm_batch_completion_kwargs
+                        )
+                    ]
             else:
                 responses = [self.model(messages) for messages in litellm_requests]
         except Exception as e:
@@ -109,20 +187,8 @@ class DFAMatchAdapter(GEPAAdapter[DefaultDataInst, DefaultTrajectory, DefaultRol
             score: float = 0.0
             extracted_ans: str = extract_ans(assistant_response)
             
-            task = SimplyRegularLanguage(data["answer"], self.str_max_length)
-            dfa_gt, fst_gt, sigma = task.regex_to_pynini_via_pyformlang(data["answer"])
-            try:
-                dfa_pred, fst_pred, _ = task.regex_to_pynini_via_pyformlang(extracted_ans, sigma)
-                eq, witness = task.equivalent_and_witness(fst_gt, fst_pred, sigma)
-                if eq:
-                    score = 1.0
-                    failure_reason = None
-                else:
-                    score = self.failure_score
-                    failure_reason = f"Predicted regex is not equivalent to ground truth. One of the counterexamples is '{witness}'"
-            except Exception as e:
-                score = self.failure_score
-                failure_reason = f"Regex parsing or DFA construction failed. Exception: {e}"
+            task = self._build_task(data["answer"])
+            score, failure_reason = self._evaluate_regex(task, data["answer"], extracted_ans)
 
             outputs.append(output)
             scores.append(score)
