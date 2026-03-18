@@ -7,6 +7,7 @@ import csv
 import numpy as np
 from tqdm import tqdm
 from typing import Iterable, Set, Tuple
+from train_icl_gen import EXTRX_SIGMA
 
 
 regex_list_train = [
@@ -35,7 +36,7 @@ def generate_dataset(args, task_type="simplyrx", outdir="datasets"):
     elif task_type == "pythonrx":
         task = PythonRegularLanguage(args.regex, args.max_length)
     elif task_type == "extrx":
-        task = ExtRegularLanguage(args.regex, args.max_length)
+        task = ExtRegularLanguage(args.regex, args.max_length, alphabet=EXTRX_SIGMA)
     else:
         raise ValueError(f"Unknown task type: {task_type}")
     
