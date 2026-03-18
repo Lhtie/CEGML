@@ -6,6 +6,7 @@ import json
 import re
 import numpy as np
 from tqdm import tqdm
+from types import SimpleNamespace
 
 from modeling.llm import is_vllm_model, load_model_and_tokenizer
 from tasks.rl import SimplyRegularLanguage, ExtRegularLanguage
@@ -68,7 +69,8 @@ INFERENCE STRATEGY
    - Sanity-check near-misses from negatives (e.g., wrong start letter, wrong modular length, incomplete final block, mixing vs non-mixing).
    - Re-check syntax: unions around multi-symbol sequences, spaces everywhere in concatenation, and only allowed symbols.
 
-{0}
+{regularization_instr}
+{agentic_reflection_instr}
 OUTPUT FORMAT
 - First, provide 1-3 concise sentences explaining the observed structure (mandatory prefix/set, block size/pattern, modular length, final-block restriction, epsilon/singleton handling), wrapped in <reasoning> and </reasoning>, e.g.:
   <reasoning>All positives start with c and then repeat 2-char blocks from a restricted set.</reasoning>
@@ -76,7 +78,7 @@ OUTPUT FORMAT
   <ans>(a a* b)*</ans>
 
 Training Data (Each line has one input-output pair separated by comma):
-{1}
+{0}
 """
 
 EXTRX_SIGMA = "[A-Za-z0-9#]"
@@ -173,7 +175,8 @@ INFERENCE STRATEGY
    - Check boundary cases (short strings, empty string).
    - Re-check syntax correctness and grouping.
 
-{0}
+{regularization_instr}
+{agentic_reflection_instr}
 OUTPUT FORMAT
 - First, provide 1-3 concise sentences explaining the observed structure (mandatory prefix/set, block size/pattern, modular length, final-block restriction, epsilon/singleton handling), wrapped in <reasoning> and </reasoning>, e.g.:
   <reasoning>Accepted strings are length-5 alphanumerics that must not contain vowels.</reasoning>
@@ -181,7 +184,7 @@ OUTPUT FORMAT
   <ans>(a*([A-Z])|(b))*</ans>
 
 Training Data (Each line has one input-output pair separated by comma):
-{1}
+{0}
 """
 
 SIMPLYRX_REGULARIZATION = """
@@ -252,6 +255,153 @@ def savejson(ctx, path):
     with open(path, "w") as f:
         json.dump(ctx, f, indent=4)
 
+
+def build_reflection_prompt(previous_reasoning, previous_regex, train_ex, train_labels):
+    ce_lines = "\n".join(
+        [train_data_template.format(ex, label) for ex, label in zip(train_ex, train_labels)]
+    )
+    return (
+        AGENTIC_REFLECTION_INSTR
+        + "Previous reasoning:\n"
+        + (previous_reasoning or "(none)")
+        + "\nPrevious regex:\n"
+        + (previous_regex or "(none)")
+        + "\nNew counterexamples (string, label):\n"
+        + ce_lines
+        + "\n\n"
+    )
+
+
+def maybe_update_current_guess(current_guess, current_reasoning, current_score_eval, guess, reasoning, score_eval):
+    if guess is None or reasoning is None or score_eval is None:
+        return current_guess, current_reasoning, current_score_eval
+    if current_guess is None or current_reasoning is None:
+        return guess, reasoning, score_eval
+    if current_score_eval is None or current_score_eval < score_eval:
+        return guess, reasoning, score_eval
+    return current_guess, current_reasoning, current_score_eval
+
+
+def run_episode(
+    *,
+    config,
+    task,
+    data,
+    teacher,
+    prompt_template,
+    prompt_kwargs,
+    generate_fn,
+    on_retry=None,
+    on_epoch_end=None,
+):
+    regex = task.regex_str
+    _, fst_gt, _ = task.regex_to_pynini_via_pyformlang(regex)
+    accs = []
+    agg_train_ex, agg_train_labels = [], []
+    num_samples = log_scaling(config.tot_train_size, config.start_size, config.scale_factor)
+    epochs = config.ce_epochs if config.use_ce else len(num_samples)
+
+    current_guess = None
+    current_guess_reasoning = None
+    current_guess_score_eval = None
+    epoch_results = []
+
+    for epoch in range(epochs):
+        reflection_prompt = ""
+        if config.use_ce:
+            if current_guess is None:
+                train_ex = data["train_ex"][epoch * config.ce_start_size:(epoch + 1) * config.ce_start_size]
+                train_labels = data["train_labels"][epoch * config.ce_start_size:(epoch + 1) * config.ce_start_size]
+            else:
+                train_ex, train_labels = teacher.generate_counterexamples(
+                    bs=config.ce_batch_size,
+                    regex_gt=regex,
+                    regex_gen=current_guess,
+                    clustered=config.ce_clustered,
+                )
+                if config.reasoning_mode == "agentic_reflection":
+                    reflection_prompt = build_reflection_prompt(
+                        current_guess_reasoning,
+                        current_guess,
+                        train_ex,
+                        train_labels,
+                    )
+        else:
+            l, r = len(agg_train_ex), num_samples[epoch]
+            train_ex = data["train_ex"][l:r]
+            train_labels = data["train_labels"][l:r]
+
+        agg_train_ex += train_ex
+        agg_train_labels += train_labels
+        train_p = "\n".join(
+            [train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)]
+        )
+
+        msgs, acc = [], 0
+        epoch_guess = None
+        epoch_guess_reasoning = None
+        epoch_guess_score_eval = None
+        for _ in range(config.retries):
+            iter_prompt_kwargs = dict(prompt_kwargs)
+            if config.use_ce and config.reasoning_mode == "agentic_reflection":
+                iter_prompt_kwargs["agentic_reflection_instr"] = reflection_prompt
+            msg = generate_fn(
+                prompt_template=prompt_template,
+                train_prompt=train_p,
+                prompt_format_kwargs=iter_prompt_kwargs,
+            )
+            msg = teacher.judge_regex(
+                msg=msg,
+                fst_gt=fst_gt,
+                train_ex=agg_train_ex,
+                train_labels=agg_train_labels,
+                eval_ex=data["eval_ex"],
+                eval_labels=data["eval_labels"],
+            )
+            if msg.get("Equivalent"):
+                acc = max(acc, 1)
+            epoch_guess, epoch_guess_reasoning, epoch_guess_score_eval = maybe_update_current_guess(
+                epoch_guess,
+                epoch_guess_reasoning,
+                epoch_guess_score_eval,
+                msg.get("Prediction"),
+                msg.get("Reasoning"),
+                msg.get("scoreEvalSet"),
+            )
+            msgs.append(msg)
+            if on_retry is not None:
+                on_retry(epoch, msgs, epoch_guess, epoch_guess_reasoning)
+
+        current_guess = epoch_guess
+        current_guess_reasoning = epoch_guess_reasoning
+        current_guess_score_eval = epoch_guess_score_eval
+
+        epoch_result = {
+            "Accuracy": acc,
+            "NumTrainingSamples": len(agg_train_ex),
+            "CurrentGuess": current_guess,
+            "CurrentGuessReasoning": current_guess_reasoning,
+            "Logs": msgs,
+        }
+        epoch_results.append(epoch_result)
+        accs.append(acc)
+
+        if on_epoch_end is not None:
+            on_epoch_end(epoch, epoch_result)
+
+        if acc == 1.0:
+            break
+
+    return {
+        "epoch_results": epoch_results,
+        "epochs_completed": len(epoch_results),
+        "final_num_samples": len(agg_train_ex),
+        "final_accuracy": accs[-1] if accs else 0.0,
+        "current_guess": current_guess,
+        "current_guess_reasoning": current_guess_reasoning,
+        "current_guess_score_eval": current_guess_score_eval,
+    }
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--task_type", type=str, default="extrx", choices=["simplyrx", "extrx"])
@@ -295,16 +445,18 @@ def main(argv=None):
     if args.task_type == "extrx":
         task = ExtRegularLanguage(args.regex, args.max_length, alphabet=EXTRX_SIGMA)
         prompt_template = EXTRX_PROMPT_TEMPLATE
-        regularization = EXTRX_REGULARIZATION
         prompt_kwargs = {
-            "sigma": EXTRX_SIGMA, 
+            "sigma": EXTRX_SIGMA,
+            "regularization_instr": EXTRX_REGULARIZATION if args.use_reg else "",
+            "agentic_reflection_instr": "",
             "clustered_ce_instr": EXTRX_CLUSTRED_CE_INSTR if args.ce_clustered else ""
         }
     else:
         task = SimplyRegularLanguage(args.regex, args.max_length)
         prompt_template = SIMPLYRX_PROMPT_TEMPLATE
-        regularization = SIMPLYRX_REGULARIZATION
-        prompt_kwargs = { 
+        prompt_kwargs = {
+            "regularization_instr": SIMPLYRX_REGULARIZATION if args.use_reg else "",
+            "agentic_reflection_instr": "",
             "clustered_ce_instr": SIMPLYRX_CLUSTRED_CE_INSTR if args.ce_clustered else ""
         }
 
@@ -330,114 +482,51 @@ def main(argv=None):
     with open(dataset, "r") as f:
         data = json.load(f)
 
-    _, fst_gt, _ = task.regex_to_pynini_via_pyformlang(args.regex)
-    eval_ex = data["eval_ex"]
-    eval_labels = data["eval_labels"]
-
     msgdict, finish_states = {}, {}
     msgdict["summary"] = None
     for runid in range(args.rerun):
         print(f"=== Rerun {runid} ===")
-        accs = []
-        agg_train_ex, agg_train_labels = [], []
-        num_samples = log_scaling(args.tot_train_size, args.start_size, args.scale_factor)
-        epochs = args.ce_epochs if args.use_ce else len(num_samples)
         msgdict[f"run-{runid}"] = {}
-        learner.reset_current_guess()
 
-        for epoch in tqdm(range(epochs)):
-            reflection_prompt = ""
-            if args.use_ce:
-                if learner.current_guess is None:
-                    train_ex = data["train_ex"][epoch * args.ce_start_size:(epoch + 1) * args.ce_start_size]
-                    train_labels = data["train_labels"][epoch * args.ce_start_size:(epoch + 1) * args.ce_start_size]
-                else:
-                    train_ex, train_labels = teacher.generate_counterexamples(
-                        bs=args.ce_batch_size,
-                        regex_gt=args.regex,
-                        regex_gen=learner.current_guess,
-                        clustered=args.ce_clustered,
-                    )
-                    if args.reasoning_mode == "agentic_reflection":
-                        ce_lines = "\n".join(
-                            [train_data_template.format(ex, label) for ex, label in zip(train_ex, train_labels)]
-                        )
-                        reflection_prompt = (
-                            AGENTIC_REFLECTION_INSTR
-                            + "Previous reasoning:\n"
-                            + (learner.current_guess_reasoning or "(none)")
-                            + "\nPrevious regex:\n"
-                            + (learner.current_guess or "(none)")
-                            + "\nNew counterexamples (string, label):\n"
-                            + ce_lines
-                            + "\n\n"
-                        )
-            else:
-                l, r = len(agg_train_ex), num_samples[epoch]
-                train_ex = data["train_ex"][l:r]
-                train_labels = data["train_labels"][l:r]
-                
-            agg_train_ex += train_ex
-            agg_train_labels += train_labels
-            train_p = "\n".join(
-                [train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)]
+        def generate_fn(
+            prompt_template,
+            train_prompt,
+            prompt_format_kwargs,
+        ):
+            return learner.generate(
+                prompt_template=prompt_template,
+                train_prompt=train_prompt,
+                prompt_format_kwargs=prompt_format_kwargs,
+                temp=args.temp,
+                answer_extractor=extract_ans,
+                reasoning_extractor=extract_reasoning,
             )
 
-            msgs, acc = [], 0
-            learner.reset_current_guess()
-            for _ in range(args.retries):
-                reg_prompt = regularization if args.use_reg else ""
-                if args.use_ce and args.reasoning_mode == "agentic_reflection":
-                    reg_prompt = reg_prompt + reflection_prompt
-                msg = learner.generate(
-                    prompt_template=prompt_template,
-                    train_prompt=train_p,
-                    regularization_prompt=reg_prompt,
-                    prompt_format_kwargs=prompt_kwargs,
-                    temp=args.temp,
-                    answer_extractor=extract_ans,
-                    reasoning_extractor=extract_reasoning,
-                )
-                msg = teacher.judge_regex(
-                    msg=msg,
-                    fst_gt=fst_gt,
-                    train_ex=agg_train_ex,
-                    train_labels=agg_train_labels,
-                    eval_ex=eval_ex,
-                    eval_labels=eval_labels
-                )
-                if msg.get("Equivalent"):
-                    acc = max(acc, 1)
-                learner.update_current_guess(
-                    msg["Prediction"], 
-                    msg["Reasoning"],
-                    msg.get("scoreEvalSet", None)
-                )
-
-                msgs.append(msg)
-                msgdict[f"run-{runid}"][f"epoch-{epoch}"] = {"Logs": msgs}
-                savejson(msgdict, config_name)
-
-            accs.append(acc)
-            print(f"Accuracy at epoch {epoch}: {acc}")
-
-            msgdict[f"run-{runid}"][f"epoch-{epoch}"] = {
-                "Accuracy": acc,
-                "NumTrainingSamples": len(agg_train_ex),
-                "CurrentGuess": learner.current_guess,
-                "CurrentGuessReasoning": learner.current_guess_reasoning,
-                "Logs": msgs,
-            }
+        def on_retry(epoch, msgs, epoch_guess, epoch_guess_reasoning):
+            msgdict[f"run-{runid}"][f"epoch-{epoch}"] = {"Logs": msgs}
             savejson(msgdict, config_name)
 
-            if acc == 1.0:
-                print(f"Early stop at epoch {epoch}")
-                break
+        def on_epoch_end(epoch, epoch_result):
+            msgdict[f"run-{runid}"][f"epoch-{epoch}"] = epoch_result
+            savejson(msgdict, config_name)
+            print(f"Accuracy at epoch {epoch}: {epoch_result['Accuracy']}")
+
+        episode_result = run_episode(
+            config=args,
+            task=task,
+            data=data,
+            teacher=teacher,
+            prompt_template=prompt_template,
+            prompt_kwargs=prompt_kwargs,
+            generate_fn=generate_fn,
+            on_retry=on_retry,
+            on_epoch_end=on_epoch_end,
+        )
 
         finish_states[f"run-{runid}"] = {
-            "epochs": epoch + 1,
-            "final_num_samples": len(agg_train_ex),
-            "final_accuracy": accs[-1],
+            "epochs": episode_result["epochs_completed"],
+            "final_num_samples": episode_result["final_num_samples"],
+            "final_accuracy": episode_result["final_accuracy"],
         }
         msgdict["summary"] = finish_states
         savejson(msgdict, config_name)

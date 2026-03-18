@@ -212,7 +212,6 @@ class LearnerForICLGen:
         self, 
         prompt_template, 
         train_prompt, 
-        regularization_prompt="", 
         prompt_format_kwargs=None,
         temp=0.0, 
         answer_extractor=None,
@@ -220,7 +219,6 @@ class LearnerForICLGen:
     ):
         fmt_kwargs = prompt_format_kwargs or {}
         prompt = prompt_template.format(
-            regularization_prompt,
             train_prompt,
             **fmt_kwargs
         )
