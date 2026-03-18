@@ -7,9 +7,8 @@ import csv
 import numpy as np
 from tqdm import tqdm
 from typing import Iterable, Set, Tuple
-from train_icl_gen import EXTRX_SIGMA
 
-
+EXTRX_SIGMA = "[A-Za-z0-9#]"
 regex_list_train = [
     "(a(a)*b)*",                                # 2 states
     "(c(a+c)(a+b+c)a(b+c))*c",                  # 5 states
@@ -17,7 +16,6 @@ regex_list_train = [
     "((a b)*+(a c)*+(b c)*)",                   # 8 states
     "(a(b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*"       # 8 states
 ]
-
 regex_list_test = [
     "((a+b)c(a+b))*",                           # 3 states
     "((a* b)* c)*",                             # 3 states
