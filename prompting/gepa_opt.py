@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import sys
+from statistics import mean
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import keysecrets
@@ -53,7 +54,7 @@ if __name__ == "__main__":
 
     with open(f"prompting/gepa_icl_gen_{args.task_type}.json", "r", encoding="utf-8") as f:
         data = json.load(f)
-    print("Data size:", len(data["train"]))
+    print("Data size:", {split: len(data.get(split, [])) for split in ["train", "val", "test"]})
     
     adapter = DFAMatchAdapter(
         model=build_chat_callable(args.task_lm),
@@ -66,9 +67,15 @@ if __name__ == "__main__":
             "system_prompt": build_seed_prompt(args.task_type, args.ce_clustered)
         },
         trainset=data["train"],
+        valset=data["val"],
         adapter=adapter,
         max_metric_calls=args.max_metric_calls,
         reflection_lm=build_chat_callable(args.reflection_lm)
     )
 
     print("GEPA Optimized Prompt:", gepa_result.best_candidate['system_prompt'])
+
+    if data.get("test"):
+        test_result = adapter.evaluate(data["test"], gepa_result.best_candidate, capture_traces=False)
+        test_score = mean(test_result.scores) if test_result.scores else 0.0
+        print("Test score:", test_score)
