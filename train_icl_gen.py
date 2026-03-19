@@ -15,6 +15,7 @@ from teacher import Teacher
 from curve import plot_loss_curve, plot_accuracy_curve
 from dataset import generate_dataset
 from keysecrets import api_key
+from tasks.utils import dfa_accepts_ex
 
 SIMPLYRX_PROMPT_TEMPLATE = """TASK
 You will be given labeled strings and must infer a single regular language that matches all positives (label 1) and rejects all negatives (label 0). Output a concise regex in pyformlang.regular_expression.Regex syntax.
@@ -256,19 +257,85 @@ def savejson(ctx, path):
         json.dump(ctx, f, indent=4)
 
 
-def build_reflection_prompt(previous_reasoning, previous_regex, train_ex, train_labels):
+def build_reflection_prompt(previous_reasoning, previous_regex, train_ex, train_labels, feedback_note=None):
     ce_lines = "\n".join(
         [train_data_template.format(ex, label) for ex, label in zip(train_ex, train_labels)]
     )
-    return (
+    prompt = (
         AGENTIC_REFLECTION_INSTR
         + "Previous reasoning:\n"
         + (previous_reasoning or "(none)")
         + "\nPrevious regex:\n"
         + (previous_regex or "(none)")
-        + "\nNew counterexamples (string, label):\n"
+    )
+    if feedback_note:
+        prompt += "\nWhat failed in the previous attempt:\n" + feedback_note + "\n"
+    prompt += (
+        "\nNew counterexamples (string, label):\n"
         + ce_lines
         + "\n\n"
+    )
+    return prompt
+
+
+def build_retry_reflection_prompt(task, msg, train_ex, train_labels, max_examples=16):
+    previous_regex = msg.get("Prediction")
+    previous_reasoning = msg.get("Reasoning")
+
+    feedback = []
+    if msg.get("Error"):
+        feedback.append(msg["Error"])
+    if msg.get("Equivalent") is False and msg.get("Witness") is not None:
+        witness = msg["Witness"]
+        witness_label = int(task.accepts(witness))
+        feedback.append(
+            f"Shortest disagreement witness: {train_data_template.format(witness, witness_label)}"
+        )
+    if msg.get("scoreTrainSet") is not None:
+        feedback.append(f"Training accuracy of previous regex: {msg['scoreTrainSet']:.3f}")
+    if msg.get("scoreEvalSet") is not None:
+        feedback.append(f"Eval accuracy of previous regex: {msg['scoreEvalSet']:.3f}")
+
+    repair_ex, repair_labels = [], []
+    pred = previous_regex
+    if pred is not None and msg.get("Error") is None:
+        try:
+            dfa_pred, _, _ = task.regex_to_pynini_via_pyformlang(pred)
+        except Exception:
+            dfa_pred = None
+        if dfa_pred is not None:
+            for ex, label in zip(train_ex, train_labels):
+                if int(dfa_accepts_ex(dfa_pred, ex)) != label:
+                    repair_ex.append(ex)
+                    repair_labels.append(label)
+
+    if not repair_ex:
+        seen = set()
+        witness = msg.get("Witness")
+        if witness is not None:
+            witness_label = int(task.accepts(witness))
+            repair_ex.append(witness)
+            repair_labels.append(witness_label)
+            seen.add((witness, witness_label))
+        for ex, label in zip(train_ex, train_labels):
+            key = (ex, label)
+            if key in seen:
+                continue
+            repair_ex.append(ex)
+            repair_labels.append(label)
+            seen.add(key)
+            if len(repair_ex) >= max_examples:
+                break
+    else:
+        repair_ex = repair_ex[:max_examples]
+        repair_labels = repair_labels[:max_examples]
+
+    return build_reflection_prompt(
+        previous_reasoning=previous_reasoning,
+        previous_regex=previous_regex,
+        train_ex=repair_ex,
+        train_labels=repair_labels,
+        feedback_note="; ".join(feedback) if feedback else None,
     )
 
 
@@ -341,10 +408,13 @@ def run_episode(
         epoch_guess = None
         epoch_guess_reasoning = None
         epoch_guess_score_eval = None
-        for _ in range(config.retries):
+        retry_reflection_prompt = ""
+        for retry_idx in range(config.retries):
             iter_prompt_kwargs = dict(prompt_kwargs)
-            if config.use_ce and config.reasoning_mode == "agentic_reflection":
-                iter_prompt_kwargs["agentic_reflection_instr"] = reflection_prompt
+            if config.reasoning_mode == "agentic_reflection":
+                iter_prompt_kwargs["agentic_reflection_instr"] = (
+                    reflection_prompt + retry_reflection_prompt
+                )
             msg = generate_fn(
                 prompt_template=prompt_template,
                 train_prompt=train_p,
@@ -369,8 +439,21 @@ def run_episode(
                 msg.get("scoreEvalSet"),
             )
             msgs.append(msg)
+            if (
+                config.reasoning_mode == "agentic_reflection"
+                and retry_idx + 1 < config.retries
+                and not msg.get("Equivalent")
+            ):
+                retry_reflection_prompt = build_retry_reflection_prompt(
+                    task=task,
+                    msg=msg,
+                    train_ex=agg_train_ex,
+                    train_labels=agg_train_labels,
+                )
             if on_retry is not None:
                 on_retry(epoch, msgs, epoch_guess, epoch_guess_reasoning)
+            if msg.get("Equivalent"):
+                break
 
         current_guess = epoch_guess
         current_guess_reasoning = epoch_guess_reasoning
@@ -427,7 +510,7 @@ def main(argv=None):
         "--reasoning_mode",
         type=str,
         default="agentic_reflection",
-        choices=["legacy_best_eval", "agentic_reflection"],
+        choices=["single_inference", "agentic_reflection"],
     )
     parser.add_argument("--indir", type=str, default="datasets")
     parser.add_argument("--outdir", type=str, default="logs/opt_prompt")
