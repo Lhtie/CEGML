@@ -226,6 +226,21 @@ AGENTIC REFLECTION UPDATE
 
 """
 
+AGENTIC_REPAIR_INSTR = """
+AGENTIC REPAIR UPDATE
+- You are repairing the previous attempt using the failure feedback and repair examples below.
+- Repair goals:
+  1) Produce a regex that compiles under the required regex syntax.
+  2) Fix the specific mistakes exposed by the counterexamples, disagreement witness, and any reported errors.
+  3) Preserve the parts of the previous solution that still fit the training data.
+- What to do:
+  - If the previous regex is invalid, first correct the syntax or unsupported constructs.
+  - If a witness or repair example is rejected/accepted incorrectly, revise the regex so that string gets the correct label.
+  - Keep the reasoning concise and focused on what changed from the previous attempt.
+  - Return the repaired regex in the required output format.
+
+"""
+
 train_data_template = "{0}, {1}"
 
 def extract_ans(res):
@@ -263,13 +278,13 @@ def build_reflection_prompt(previous_reasoning, previous_regex, train_ex, train_
     )
     prompt = (
         AGENTIC_REFLECTION_INSTR
-        + "Previous reasoning:\n"
+        + "Reasoning of previous epoch:\n"
         + (previous_reasoning or "(none)")
-        + "\nPrevious regex:\n"
+        + "\nRegex of previous epoch:\n"
         + (previous_regex or "(none)")
     )
     if feedback_note:
-        prompt += "\nWhat failed in the previous attempt:\n" + feedback_note + "\n"
+        prompt += "\nWhat failed in the previous epoch:\n" + feedback_note + "\n"
     prompt += (
         "\nNew counterexamples (string, label):\n"
         + ce_lines
@@ -278,19 +293,42 @@ def build_reflection_prompt(previous_reasoning, previous_regex, train_ex, train_
     return prompt
 
 
-def build_retry_reflection_prompt(task, msg, train_ex, train_labels, max_examples=16):
+def build_repair_prompt(previous_reasoning, previous_regex, train_ex, train_labels, feedback_note=None):
+    ce_lines = "\n".join(
+        [train_data_template.format(ex, label) for ex, label in zip(train_ex, train_labels)]
+    )
+    prompt = (
+        AGENTIC_REPAIR_INSTR
+        + "Reasoning of previous attempt:\n"
+        + (previous_reasoning or "(none)")
+        + "\nRegex of previous attempt:\n"
+        + (previous_regex or "(none)")
+    )
+    if feedback_note:
+        prompt += "\nRepair feedback:\n" + feedback_note + "\n"
+    if ce_lines:
+        prompt += (
+            "\nRepair examples (string, label):\n"
+            + ce_lines
+            + "\n\n"
+        )
+    else:
+        prompt += (
+            "\nRepair examples (string, label):\n"
+            + "(none available; the previous regex either failed to compile or no repair examples were found)\n\n"
+        )
+    return prompt
+
+
+def build_retry_prompt(task, msg, train_ex, train_labels, max_examples=16):
     previous_regex = msg.get("Prediction")
     previous_reasoning = msg.get("Reasoning")
 
     feedback = []
+    if previous_regex is None:
+        feedback.append("Unable to extract a regex from previous response.")
     if msg.get("Error"):
         feedback.append(msg["Error"])
-    if msg.get("Equivalent") is False and msg.get("Witness") is not None:
-        witness = msg["Witness"]
-        witness_label = int(task.accepts(witness))
-        feedback.append(
-            f"Shortest disagreement witness: {train_data_template.format(witness, witness_label)}"
-        )
     if msg.get("scoreTrainSet") is not None:
         feedback.append(f"Training accuracy of previous regex: {msg['scoreTrainSet']:.3f}")
     if msg.get("scoreEvalSet") is not None:
@@ -298,6 +336,7 @@ def build_retry_reflection_prompt(task, msg, train_ex, train_labels, max_example
 
     repair_ex, repair_labels = [], []
     pred = previous_regex
+    dfa_pred = None
     if pred is not None and msg.get("Error") is None:
         try:
             dfa_pred, _, _ = task.regex_to_pynini_via_pyformlang(pred)
@@ -309,45 +348,20 @@ def build_retry_reflection_prompt(task, msg, train_ex, train_labels, max_example
                     repair_ex.append(ex)
                     repair_labels.append(label)
 
-    if not repair_ex:
-        seen = set()
-        witness = msg.get("Witness")
-        if witness is not None:
-            witness_label = int(task.accepts(witness))
-            repair_ex.append(witness)
-            repair_labels.append(witness_label)
-            seen.add((witness, witness_label))
-        for ex, label in zip(train_ex, train_labels):
-            key = (ex, label)
-            if key in seen:
-                continue
-            repair_ex.append(ex)
-            repair_labels.append(label)
-            seen.add(key)
-            if len(repair_ex) >= max_examples:
-                break
-    else:
+    if dfa_pred is not None and not repair_ex:
+        return None, True
+
+    if repair_ex:
         repair_ex = repair_ex[:max_examples]
         repair_labels = repair_labels[:max_examples]
 
-    return build_reflection_prompt(
+    return build_repair_prompt(
         previous_reasoning=previous_reasoning,
         previous_regex=previous_regex,
         train_ex=repair_ex,
         train_labels=repair_labels,
         feedback_note="; ".join(feedback) if feedback else None,
-    )
-
-
-def maybe_update_current_guess(current_guess, current_reasoning, current_score_eval, guess, reasoning, score_eval):
-    if guess is None or reasoning is None or score_eval is None:
-        return current_guess, current_reasoning, current_score_eval
-    if current_guess is None or current_reasoning is None:
-        return guess, reasoning, score_eval
-    if current_score_eval is None or current_score_eval < score_eval:
-        return guess, reasoning, score_eval
-    return current_guess, current_reasoning, current_score_eval
-
+    ), False
 
 def run_episode(
     *,
@@ -370,7 +384,6 @@ def run_episode(
 
     current_guess = None
     current_guess_reasoning = None
-    current_guess_score_eval = None
     epoch_results = []
 
     for epoch in range(epochs):
@@ -405,15 +418,13 @@ def run_episode(
         )
 
         msgs, acc = [], 0
-        epoch_guess = None
-        epoch_guess_reasoning = None
-        epoch_guess_score_eval = None
-        retry_reflection_prompt = ""
+        retry_prompt = ""
+        retry_done = False
         for retry_idx in range(config.retries):
             iter_prompt_kwargs = dict(prompt_kwargs)
             if config.reasoning_mode == "agentic_reflection":
                 iter_prompt_kwargs["agentic_reflection_instr"] = (
-                    reflection_prompt + retry_reflection_prompt
+                    reflection_prompt + retry_prompt
                 )
             msg = generate_fn(
                 prompt_template=prompt_template,
@@ -430,34 +441,21 @@ def run_episode(
             )
             if msg.get("Equivalent"):
                 acc = max(acc, 1)
-            epoch_guess, epoch_guess_reasoning, epoch_guess_score_eval = maybe_update_current_guess(
-                epoch_guess,
-                epoch_guess_reasoning,
-                epoch_guess_score_eval,
-                msg.get("Prediction"),
-                msg.get("Reasoning"),
-                msg.get("scoreEvalSet"),
-            )
-            msgs.append(msg)
-            if (
-                config.reasoning_mode == "agentic_reflection"
-                and retry_idx + 1 < config.retries
-                and not msg.get("Equivalent")
-            ):
-                retry_reflection_prompt = build_retry_reflection_prompt(
+            if (config.reasoning_mode == "agentic_reflection"):
+                retry_prompt, retry_done = build_retry_prompt(
                     task=task,
                     msg=msg,
                     train_ex=agg_train_ex,
                     train_labels=agg_train_labels,
                 )
+            msgs.append(msg)
             if on_retry is not None:
-                on_retry(epoch, msgs, epoch_guess, epoch_guess_reasoning)
-            if msg.get("Equivalent"):
+                on_retry(epoch, msgs)
+            if msg.get("Equivalent") or retry_done:
                 break
 
-        current_guess = epoch_guess
-        current_guess_reasoning = epoch_guess_reasoning
-        current_guess_score_eval = epoch_guess_score_eval
+        current_guess = msg.get("Prediction")
+        current_guess_reasoning = msg.get("Reasoning")
 
         epoch_result = {
             "Accuracy": acc,
@@ -481,8 +479,7 @@ def run_episode(
         "final_num_samples": len(agg_train_ex),
         "final_accuracy": accs[-1] if accs else 0.0,
         "current_guess": current_guess,
-        "current_guess_reasoning": current_guess_reasoning,
-        "current_guess_score_eval": current_guess_score_eval,
+        "current_guess_reasoning": current_guess_reasoning
     }
 
 def main(argv=None):
@@ -585,7 +582,7 @@ def main(argv=None):
                 reasoning_extractor=extract_reasoning,
             )
 
-        def on_retry(epoch, msgs, epoch_guess, epoch_guess_reasoning):
+        def on_retry(epoch, msgs):
             msgdict[f"run-{runid}"][f"epoch-{epoch}"] = {"Logs": msgs}
             savejson(msgdict, config_name)
 
