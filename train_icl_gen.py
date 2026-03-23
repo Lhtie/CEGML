@@ -348,8 +348,17 @@ def build_retry_prompt(task, msg, train_ex, train_labels, max_examples=16):
                     repair_ex.append(ex)
                     repair_labels.append(label)
 
-    if dfa_pred is not None and not repair_ex:
-        return None, True
+    # two objectives: 1. produce a regex that compiles, 2. fix mistakes on training data
+    compile_score = 1.0 if dfa_pred is not None else 0.0
+    total_train = len(train_ex)
+    if dfa_pred is not None and total_train > 0:
+        repair_fit_score = 1.0 - (len(repair_ex) / total_train)
+    else:
+        repair_fit_score = 0.0
+    retry_done_score = 0.5 * compile_score + 0.5 * repair_fit_score
+
+    if retry_done_score >= 1.0:
+        return None, retry_done_score
 
     if repair_ex:
         repair_ex = repair_ex[:max_examples]
@@ -361,7 +370,7 @@ def build_retry_prompt(task, msg, train_ex, train_labels, max_examples=16):
         train_ex=repair_ex,
         train_labels=repair_labels,
         feedback_note="; ".join(feedback) if feedback else None,
-    ), False
+    ), retry_done_score
 
 def run_episode(
     *,
@@ -389,10 +398,7 @@ def run_episode(
     for epoch in range(epochs):
         reflection_prompt = ""
         if config.use_ce:
-            if current_guess is None:
-                train_ex = data["train_ex"][epoch * config.ce_start_size:(epoch + 1) * config.ce_start_size]
-                train_labels = data["train_labels"][epoch * config.ce_start_size:(epoch + 1) * config.ce_start_size]
-            else:
+            try:
                 train_ex, train_labels = teacher.generate_counterexamples(
                     bs=config.ce_batch_size,
                     regex_gt=regex,
@@ -406,6 +412,11 @@ def run_episode(
                         train_ex,
                         train_labels,
                     )
+            except Exception as e:
+                print(f"Error generating counterexamples at epoch {epoch}: {e}, use {config.ce_start_size} random examples instead.")
+                train_ex = data["train_ex"][epoch * config.ce_start_size:(epoch + 1) * config.ce_start_size]
+                train_labels = data["train_labels"][epoch * config.ce_start_size:(epoch + 1) * config.ce_start_size]
+                
         else:
             l, r = len(agg_train_ex), num_samples[epoch]
             train_ex = data["train_ex"][l:r]
@@ -419,7 +430,8 @@ def run_episode(
 
         msgs, acc = [], 0
         retry_prompt = ""
-        retry_done = False
+        best_retry_score = -1.0
+        best_retry_msg = None
         for retry_idx in range(config.retries):
             iter_prompt_kwargs = dict(prompt_kwargs)
             if config.reasoning_mode == "agentic_reflection":
@@ -442,20 +454,27 @@ def run_episode(
             if msg.get("Equivalent"):
                 acc = max(acc, 1)
             if (config.reasoning_mode == "agentic_reflection"):
-                retry_prompt, retry_done = build_retry_prompt(
+                retry_prompt, retry_done_score = build_retry_prompt(
                     task=task,
                     msg=msg,
                     train_ex=agg_train_ex,
                     train_labels=agg_train_labels,
                 )
+                if best_retry_msg is None or retry_done_score >= best_retry_score:
+                    best_retry_score = retry_done_score
+                    best_retry_msg = msg
             msgs.append(msg)
             if on_retry is not None:
                 on_retry(epoch, msgs)
-            if msg.get("Equivalent") or retry_done:
+            if msg.get("Equivalent") or retry_done_score >= 1.0:
                 break
 
-        current_guess = msg.get("Prediction")
-        current_guess_reasoning = msg.get("Reasoning")
+        if best_retry_msg is not None:
+            current_guess = best_retry_msg.get("Prediction")
+            current_guess_reasoning = best_retry_msg.get("Reasoning")
+        else:
+            current_guess = msg.get("Prediction")
+            current_guess_reasoning = msg.get("Reasoning")
 
         epoch_result = {
             "Accuracy": acc,
