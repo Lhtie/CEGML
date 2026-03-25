@@ -192,7 +192,13 @@ def summarize_scaleup_log_for_pareto(
         if isinstance(run_stats, dict)
     ]
     avg_tokens = float(np.mean(run_totals)) if run_totals else 0.0
-    success_rate = _compute_success_rate(msgdict.get("summary", {}))
+    summary = msgdict.get("summary", {})
+    success_rate = _compute_success_rate(summary)
+    total_runs = sum(
+        1 for run_key, run_info in summary.items()
+        if str(run_key).startswith("run-") and isinstance(run_info, dict)
+    )
+    success_count = int(round(success_rate * total_runs))
 
     return {
         "path": log_path,
@@ -200,6 +206,8 @@ def summarize_scaleup_log_for_pareto(
         "avg_total_tokens": avg_tokens,
         "success_rate": success_rate,
         "run_token_totals": run_totals,
+        "success_count": success_count,
+        "total_runs": total_runs,
     }
 
 
@@ -228,26 +236,52 @@ def _pareto_front(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sorted(front, key=lambda p: (p["avg_total_tokens"], -p["success_rate"]))
 
 
-def _plot_method_points_and_front(
-    ax,
-    points: List[Dict[str, Any]],
-    label: str,
-    color: str,
-):
+def _aggregate_method_points(points: List[Dict[str, Any]], method_label: str, color: str) -> Optional[Dict[str, Any]]:
     if not points:
+        return None
+
+    pooled_run_tokens: List[int] = []
+    total_success_count = 0
+    total_runs = 0
+    for point in points:
+        pooled_run_tokens.extend(point.get("run_token_totals", []))
+        total_success_count += point.get("success_count", 0)
+        total_runs += point.get("total_runs", 0)
+
+    avg_total_tokens = float(np.mean(pooled_run_tokens)) if pooled_run_tokens else 0.0
+    success_rate = (total_success_count / total_runs) if total_runs else 0.0
+    return {
+        "label": method_label,
+        "color": color,
+        "avg_total_tokens": avg_total_tokens,
+        "success_rate": success_rate,
+        "num_msgdicts": len(points),
+        "total_runs": total_runs,
+    }
+
+
+def _plot_aggregated_method_points(ax, aggregated_points: List[Dict[str, Any]]):
+    if not aggregated_points:
         return
 
-    xs = [point["avg_total_tokens"] for point in points]
-    ys = [point["success_rate"] for point in points]
-    ax.scatter(xs, ys, s=28, alpha=0.6, color=color, label=label)
+    for point in aggregated_points:
+        ax.scatter(
+            point["avg_total_tokens"],
+            point["success_rate"],
+            s=70,
+            alpha=0.9,
+            color=point["color"],
+            label=point["label"],
+        )
 
-    front = _pareto_front(points)
+    front = _pareto_front(aggregated_points)
     if front:
         ax.plot(
             [point["avg_total_tokens"] for point in front],
             [point["success_rate"] for point in front],
-            color=color,
-            linewidth=2,
+            color="black",
+            linewidth=1.8,
+            linestyle="--",
         )
 
 
@@ -291,13 +325,18 @@ def plot_pareto(
     for depth in range(5):
         plt.figure(figsize=(8, 6))
         ax = plt.gca()
+        aggregated_points: List[Dict[str, Any]] = []
         for method_key, _, label, color in method_specs:
             depth_points = [
                 point
                 for point in all_points_by_method[method_key]
                 if point.get("depth") == depth
             ]
-            _plot_method_points_and_front(ax, depth_points, label, color)
+            aggregated_point = _aggregate_method_points(depth_points, label, color)
+            if aggregated_point is not None:
+                aggregated_points.append(aggregated_point)
+
+        _plot_aggregated_method_points(ax, aggregated_points)
 
         ax.set_title(f"Pareto Front for SimplyRx Scaleup (gpt-oss, depth={depth})")
         ax.set_xlabel("Average Total Input Tokens Across Reruns")
@@ -311,8 +350,13 @@ def plot_pareto(
 
     plt.figure(figsize=(8, 6))
     ax = plt.gca()
+    aggregated_points = []
     for method_key, _, label, color in method_specs:
-        _plot_method_points_and_front(ax, all_points_by_method[method_key], label, color)
+        aggregated_point = _aggregate_method_points(all_points_by_method[method_key], label, color)
+        if aggregated_point is not None:
+            aggregated_points.append(aggregated_point)
+
+    _plot_aggregated_method_points(ax, aggregated_points)
 
     ax.set_title("Pareto Front for SimplyRx Scaleup (gpt-oss, all depths)")
     ax.set_xlabel("Average Total Input Tokens Across Reruns")
