@@ -92,23 +92,47 @@ def nl_rx_turk():
             
 def KB13():
     from tasks.rl import ExtRegularLanguage
+    from tasks.utils import kleene_star_depth
     from tqdm import tqdm
 
-    bins = {}
-    with open("datasets/KB13_pyrx.txt", "r") as f:
+    records = []
+    bins_by_state = {}
+    joint_bins = {}
+    with open("datasets/scaleup/KB13_pyrx.txt", "r") as f:
         lines = f.readlines()
-        for rx in tqdm(lines[:350]):
-            pyrx = ExtRegularLanguage(rx.strip(), max_length=32, alphabet="[A-Za-z0-9#]")
+        for rx in tqdm(lines):
+            rx = rx.strip()
+            pyrx = ExtRegularLanguage(rx, max_length=32, alphabet="[A-Za-z0-9#]")
             dfa = pyrx.dfa
-            bins[len(dfa.states)] = bins.get(len(dfa.states), []) + [rx.strip()]
+            num_states = len(dfa.states)
+            star_depth = kleene_star_depth(pyrx.regex_tree)
 
-    bins = dict(sorted(bins.items(), key=lambda x: x[0]))
+            records.append((rx, num_states, star_depth))
+            bins_by_state[num_states] = bins_by_state.get(num_states, []) + [(rx, star_depth)]
+            joint_bins[(num_states, star_depth)] = joint_bins.get((num_states, star_depth), 0) + 1
 
-    print("Available number of states: ", list(bins.keys()))
-    for state_num in bins:
+    bins_by_state = dict(sorted(bins_by_state.items(), key=lambda x: x[0]))
+    state_values = sorted({num_states for _, num_states, _ in records})
+    depth_values = sorted({star_depth for _, _, star_depth in records})
+
+    print("Available number of states: ", state_values)
+    print("Available kleene star depths: ", depth_values)
+
+    print("\nCounts by (#states, star_depth):")
+    header = ["#states\\depth"] + [str(depth) for depth in depth_values]
+    print("\t".join(header))
+    for state_num in state_values:
+        row = [str(state_num)]
+        for depth in depth_values:
+            row.append(str(joint_bins.get((state_num, depth), 0)))
+        print("\t".join(row))
+
+    print("\nDetailed regex list:")
+    for state_num in bins_by_state:
         print(f"Regexes with {state_num} states:")
-        for rx in bins[state_num]:
-            print(f"  {rx}")
+        rows = sorted(bins_by_state[state_num], key=lambda x: (x[1], x[0]))
+        for rx, star_depth in rows:
+            print(f"  [star_depth={star_depth}] {rx}")
 
 def enum_regexes(max_n: int, max_k: int, sigma: Tuple[str, ...], outdir: str = "datasets"):
     from dataclasses import dataclass
@@ -285,7 +309,7 @@ if __name__ == "__main__":
     torch.cuda.manual_seed(args.seed)
 
     # nl_rx_turk()
-    # KB13()
+    KB13()
     # enum_regexes(max_n=25, max_k=4, sigma=('a', 'b', 'c'), outdir=args.outdir)
 
-    generate_dataset(args, task_type=args.task_type, outdir=args.outdir)
+    # generate_dataset(args, task_type=args.task_type, outdir=args.outdir)

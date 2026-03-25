@@ -365,11 +365,19 @@ class ExtRegularLanguage(RegularLanguage):
 
 if __name__ == "__main__":
     nl = ExtRegularLanguage(
-        "([A-Za-z0-9#]*[0-9][A-Za-z0-9#]*){5,}",
+        "([A-Za-z0-9#]*moot[A-Za-z0-9#]*)&([A-Za-z0-9#]*[A-Za-z]{6,}[A-Za-z0-9#]*){3,}",
         max_length=32,
         alphabet="[A-Za-z0-9#]",
         debug=True,
     )
     print(tree_to_regex(nl.regex_tree))
-    datasets = nl.generate_random_strings_balanced(20, 32, rate=0.5)
-    print(list(zip(datasets, [nl.accepts(s) for s in datasets])))
+    dfa = nl.dfa
+    state_map = {s: i for i, s in enumerate(dfa.states)}
+    print("Start state:", state_map[dfa.start_state])
+    print("Final states:", [state_map[s] for s in dfa.final_states])
+    print("Transitions:")
+    for state in dfa.states:
+        for symbol in dfa.symbols:
+            next_states = dfa._transition_function(state, symbol)
+            if len(next_states) > 0:
+                print(f"  {state_map[state]} --{symbol}--> {list(state_map[s] for s in next_states)}")

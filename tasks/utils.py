@@ -308,6 +308,27 @@ def tree_to_regex(node, par=None):
         inner = inner[1:-1]
     return inner + node.get("quant", "")
 
+def kleene_star_depth(root):
+    """
+    Return the maximum nesting depth of unbounded repetition in a regex tree.
+
+    Depth increases for quantifiers that can induce unbounded looping in the
+    DFA construction, namely "*", "+", and "{m,}".
+    """
+    def is_unbounded_quant(quant):
+        if quant in {"*", "+"}:
+            return True
+        return re.fullmatch(r"\{\s*\d+\s*,\s*\}", quant or "") is not None
+
+    def walk(node, depth):
+        next_depth = depth + 1 if is_unbounded_quant(node.get("quant", "")) else depth
+        best = next_depth
+        for child in node.get("children", []):
+            best = max(best, walk(child, next_depth))
+        return best
+
+    return walk(root, 0)
+
 def _dfa_from_atom(atom_value: str):
     rx = PythonRegex(atom_value)
     nfa = rx.to_epsilon_nfa()
@@ -387,26 +408,45 @@ def _complement_dfa(dfa, sigma):
     return new
 
 def _product_dfa(dfa_a, dfa_b, sigma, accept_fn):
-    dfa_a = _complete_dfa(dfa_a, sigma)
-    dfa_b = _complete_dfa(dfa_b, sigma)
+    dead = State(("dead_product",))
+
+    def lazy_next(dfa, state, sym):
+        if state is None:
+            return None
+        return _dfa_next(dfa, state, sym)
+
+    def lazy_pair(sa, sb):
+        if sa is None and sb is None:
+            return dead
+        return State((sa, sb))
+
     new = DeterministicFiniteAutomaton()
     start = State((dfa_a.start_state, dfa_b.start_state))
     new.add_start_state(start)
     queue = deque([start])
     seen = {start}
+
     while queue:
         cur = queue.popleft()
-        sa, sb = cur.value
-        if accept_fn(sa in dfa_a.final_states, sb in dfa_b.final_states):
+        if cur == dead:
+            sa = sb = None
+        else:
+            sa, sb = cur.value
+
+        fa = sa in dfa_a.final_states if sa is not None else False
+        fb = sb in dfa_b.final_states if sb is not None else False
+        if accept_fn(fa, fb):
             new.add_final_state(cur)
+
         for sym in sigma:
-            na = _dfa_next(dfa_a, sa, sym)
-            nb = _dfa_next(dfa_b, sb, sym)
-            nxt = State((na, nb))
+            na = lazy_next(dfa_a, sa, sym)
+            nb = lazy_next(dfa_b, sb, sym)
+            nxt = lazy_pair(na, nb)
             new.add_transition(cur, sym, nxt)
             if nxt not in seen:
                 seen.add(nxt)
                 queue.append(nxt)
+
     return new.minimize()
 
 def _dfa_union(dfa_a, dfa_b, sigma):
@@ -468,6 +508,98 @@ def _dfa_epsilon():
     dfa.add_final_state(s)
     return dfa
 
+def _dfa_repeat_exact(dfa, k):
+    if k < 0:
+        raise ValueError("Exact repetition count must be non-negative")
+    if k == 0:
+        return _dfa_epsilon()
+
+    enfa = EpsilonNFA()
+    eps = Epsilon()
+    prev_finals = None
+
+    for idx in range(k):
+        copy_enfa, _ = _dfa_to_enfa(dfa, ("repeat_exact", idx))
+        _merge_enfa(
+            enfa,
+            copy_enfa,
+            add_starts=(idx == 0),
+            add_finals=(idx == k - 1),
+        )
+        if prev_finals is not None:
+            for fa in prev_finals:
+                for sb in copy_enfa.start_states:
+                    enfa.add_transition(fa, eps, sb)
+        prev_finals = list(copy_enfa.final_states)
+
+    return enfa.to_deterministic().minimize()
+
+def _dfa_repeat_range(dfa, lo, hi=None):
+    if lo < 0:
+        raise ValueError("Lower repetition bound must be non-negative")
+    if hi is not None and hi < lo:
+        return _dfa_epsilon()
+
+    enfa = EpsilonNFA()
+    eps = Epsilon()
+
+    if hi == 0:
+        return _dfa_epsilon()
+
+    if hi is None:
+        if lo == 0:
+            return _dfa_star(dfa)
+
+        prev_finals = None
+        mandatory_finals = None
+        for idx in range(lo):
+            copy_enfa, _ = _dfa_to_enfa(dfa, ("repeat_lo", idx))
+            _merge_enfa(enfa, copy_enfa, add_starts=(idx == 0), add_finals=False)
+            if prev_finals is not None:
+                for fa in prev_finals:
+                    for sb in copy_enfa.start_states:
+                        enfa.add_transition(fa, eps, sb)
+            prev_finals = list(copy_enfa.final_states)
+            mandatory_finals = list(copy_enfa.final_states)
+
+        loop_enfa, _ = _dfa_to_enfa(dfa, ("repeat_tail", 0))
+        _merge_enfa(enfa, loop_enfa, add_starts=False, add_finals=False)
+        loop_entry = list(loop_enfa.start_states)
+        loop_finals = list(loop_enfa.final_states)
+
+        for fa in mandatory_finals:
+            enfa.add_final_state(fa)
+            for sb in loop_entry:
+                enfa.add_transition(fa, eps, sb)
+        for fa in loop_finals:
+            enfa.add_final_state(fa)
+            for sb in loop_entry:
+                enfa.add_transition(fa, eps, sb)
+
+        return enfa.to_deterministic().minimize()
+
+    if lo == 0:
+        start = State(("repeat_range_start", lo, hi))
+        enfa.add_start_state(start)
+        enfa.add_final_state(start)
+        prev_finals = [start]
+    else:
+        prev_finals = None
+
+    for idx in range(hi):
+        copy_enfa, _ = _dfa_to_enfa(dfa, ("repeat_range", idx))
+        _merge_enfa(enfa, copy_enfa, add_starts=(idx == 0 and lo > 0), add_finals=False)
+        if prev_finals is not None:
+            for fa in prev_finals:
+                for sb in copy_enfa.start_states:
+                    enfa.add_transition(fa, eps, sb)
+        prev_finals = list(copy_enfa.final_states)
+        if idx + 1 >= lo:
+            for fa in prev_finals:
+                enfa.add_final_state(fa)
+
+    return enfa.to_deterministic().minimize()
+
 def _apply_quant(dfa, quant):
     if not quant:
         return dfa
@@ -480,29 +612,15 @@ def _apply_quant(dfa, quant):
     m = re.fullmatch(r"\{\s*(\d+)\s*\}", quant)
     if m:
         k = int(m.group(1))
-        if k == 0:
-            return _dfa_epsilon()
-        out = dfa
-        for _ in range(k - 1):
-            out = _dfa_concat(out, dfa)
-        return out
+        return _dfa_repeat_exact(dfa, k)
     m = re.fullmatch(r"\{\s*(\d+)\s*,\s*(\d+)\s*\}", quant)
     if m:
         lo, hi = int(m.group(1)), int(m.group(2))
-        if hi < lo:
-            return _dfa_epsilon()
-        opts = []
-        for k in range(lo, hi + 1):
-            opts.append(_apply_quant(dfa, "{" + str(k) + "}"))
-        out = opts[0]
-        for opt in opts[1:]:
-            out = _dfa_union(out, opt, _dfa_symbols(out) | _dfa_symbols(opt))
-        return out
+        return _dfa_repeat_range(dfa, lo, hi)
     m = re.fullmatch(r"\{\s*(\d+)\s*,\s*\}", quant)
     if m:
         lo = int(m.group(1))
-        base = _apply_quant(dfa, "{" + str(lo) + "}")
-        return _dfa_concat(base, _dfa_star(dfa))
+        return _dfa_repeat_range(dfa, lo, None)
     return dfa
 
 def _dfa_summary(dfa):

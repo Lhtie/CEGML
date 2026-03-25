@@ -413,7 +413,7 @@ def run_episode(
                         train_labels,
                     )
             except Exception as e:
-                print(f"Error generating counterexamples at epoch {epoch}: {e}, use {config.ce_start_size} random examples instead.")
+                print(f"Cannot generate counterexamples at epoch {epoch}: {e}, use {config.ce_start_size} random examples instead.")
                 train_ex = data["train_ex"][epoch * config.ce_start_size:(epoch + 1) * config.ce_start_size]
                 train_labels = data["train_labels"][epoch * config.ce_start_size:(epoch + 1) * config.ce_start_size]
                 
@@ -429,7 +429,7 @@ def run_episode(
         )
 
         msgs, acc = [], 0
-        retry_prompt = ""
+        retry_prompt, retry_done_score = "", 0.0
         best_retry_score = -1.0
         best_retry_msg = None
         for retry_idx in range(config.retries):
@@ -453,6 +453,10 @@ def run_episode(
             )
             if msg.get("Equivalent"):
                 acc = max(acc, 1)
+            msgs.append(msg)
+            if on_retry is not None:
+                on_retry(epoch, msgs)
+            
             if (config.reasoning_mode == "agentic_reflection"):
                 retry_prompt, retry_done_score = build_retry_prompt(
                     task=task,
@@ -463,10 +467,9 @@ def run_episode(
                 if best_retry_msg is None or retry_done_score >= best_retry_score:
                     best_retry_score = retry_done_score
                     best_retry_msg = msg
-            msgs.append(msg)
-            if on_retry is not None:
-                on_retry(epoch, msgs)
-            if msg.get("Equivalent") or retry_done_score >= 1.0:
+                if retry_done_score >= 1.0:
+                    break
+            if msg.get("Equivalent"):
                 break
 
         if best_retry_msg is not None:
