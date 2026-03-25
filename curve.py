@@ -1,9 +1,330 @@
 import os
 import json
+import glob
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 import matplotlib as mpl
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+
+def _load_token_counter(mkey: str):
+    from modeling.llm import resolve_model_path
+
+    model_path = resolve_model_path(mkey)
+
+    if mkey.startswith("gpt-oss"):
+        try:
+            from transformers import AutoTokenizer
+        except ImportError as e:
+            raise ImportError(
+                "Counting tokens for gpt-oss requires transformers to be installed."
+            ) from e
+
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+        def count_fn(prompt: str) -> int:
+            token_ids = tokenizer.apply_chat_template(
+                [{"role": "user", "content": prompt}],
+                tokenize=True,
+                add_generation_prompt=True,
+            )
+            return len(token_ids)
+
+        return count_fn
+
+    if mkey.startswith(("gpt3", "gpt4")):
+        try:
+            import tiktoken
+        except ImportError as e:
+            raise ImportError(
+                "Counting tokens for OpenAI chat models requires tiktoken to be installed."
+            ) from e
+
+        encoding = tiktoken.encoding_for_model(model_path)
+
+        def count_fn(prompt: str) -> int:
+            return len(encoding.encode(prompt))
+
+        return count_fn
+
+    try:
+        from transformers import AutoTokenizer
+    except ImportError as e:
+        raise ImportError(
+            f"Counting tokens for model `{mkey}` requires transformers to be installed."
+        ) from e
+
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+    def count_fn(prompt: str) -> int:
+        token_ids = tokenizer.apply_chat_template(
+            [{"role": "user", "content": prompt}],
+            tokenize=True,
+            add_generation_prompt=True,
+        )
+        return len(token_ids)
+
+    return count_fn
+
+
+def _extract_prompt_from_log(log_item: Dict[str, Any]) -> Optional[str]:
+    if not isinstance(log_item, dict):
+        return None
+
+    prompt = log_item.get("Prompt")
+    if isinstance(prompt, str):
+        return prompt
+
+    return None
+
+
+def count_rerun_input_tokens(
+    msgdict: Dict[str, Any],
+    mkey: str = "gpt-oss",
+    token_counter: Optional[Callable[[str], int]] = None,
+) -> Dict[str, Any]:
+    """
+    Read a logged msgdict and count the total input tokens fed to the LLM for each rerun.
+
+    Args:
+        msgdict: The loaded JSON log dictionary.
+        mkey: Model key used to choose the tokenizer, e.g. "gpt-oss".
+
+    Returns:
+        A dict with per-run totals and per-epoch breakdowns.
+    """
+    count_tokens = token_counter if token_counter is not None else _load_token_counter(mkey)
+    results: Dict[str, Any] = {"model": mkey, "runs": {}, "grand_total_tokens": 0}
+
+    for run_key, run_value in msgdict.items():
+        if not str(run_key).startswith("run-") or not isinstance(run_value, dict):
+            continue
+
+        run_total = 0
+        epoch_breakdown: Dict[str, Any] = {}
+
+        for epoch_key, epoch_value in run_value.items():
+            if not isinstance(epoch_value, dict):
+                continue
+
+            logs = epoch_value.get("Logs", [])
+            epoch_total = 0
+            prompt_count = 0
+
+            if isinstance(logs, list):
+                for log_item in logs:
+                    prompt = _extract_prompt_from_log(log_item)
+                    if prompt is None:
+                        continue
+                    epoch_total += count_tokens(prompt)
+                    prompt_count += 1
+
+            epoch_breakdown[epoch_key] = {
+                "prompt_count": prompt_count,
+                "total_tokens": epoch_total,
+            }
+            run_total += epoch_total
+
+        results["runs"][run_key] = {
+            "total_tokens": run_total,
+            "epochs": epoch_breakdown,
+        }
+        results["grand_total_tokens"] += run_total
+
+    return results
+
+
+def _extract_regex_from_log_path(path: str) -> str:
+    basename = os.path.basename(path)
+    prefix = "msgdict_regex="
+    if prefix not in basename:
+        raise ValueError(f"Cannot parse regex from path: {path}")
+
+    regex_part = basename.split(prefix, 1)[1]
+    for suffix in ("_totTrain=", "_ceEpochs="):
+        if suffix in regex_part:
+            return regex_part.split(suffix, 1)[0]
+    raise ValueError(f"Cannot parse regex suffix from path: {path}")
+
+
+def _build_scaleup_simplyrx_depth_map(regex_list_path: str) -> Dict[str, int]:
+    with open(regex_list_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    depth_map: Dict[str, int] = {}
+    for state_group in data["simplyrx"]:
+        for depth_group in state_group["regex_list"]:
+            depth = depth_group["Stardepth"]
+            for regex in depth_group["regex_list"]:
+                depth_map[regex] = depth
+    return depth_map
+
+
+def _compute_success_rate(summary: Dict[str, Any]) -> float:
+    run_items = [
+        run_info
+        for run_key, run_info in summary.items()
+        if str(run_key).startswith("run-") and isinstance(run_info, dict)
+    ]
+    if not run_items:
+        return 0.0
+
+    success_count = sum(
+        1 for run_info in run_items if float(run_info.get("final_accuracy", 0)) >= 1.0
+    )
+    return success_count / len(run_items)
+
+
+def summarize_scaleup_log_for_pareto(
+    log_path: str,
+    mkey: str = "gpt-oss",
+    token_counter: Optional[Callable[[str], int]] = None,
+) -> Dict[str, Any]:
+    with open(log_path, "r", encoding="utf-8") as f:
+        msgdict = json.load(f)
+
+    token_stats = count_rerun_input_tokens(msgdict, mkey=mkey, token_counter=token_counter)
+    run_totals = [
+        run_stats["total_tokens"]
+        for run_stats in token_stats["runs"].values()
+        if isinstance(run_stats, dict)
+    ]
+    avg_tokens = float(np.mean(run_totals)) if run_totals else 0.0
+    success_rate = _compute_success_rate(msgdict.get("summary", {}))
+
+    return {
+        "path": log_path,
+        "regex": _extract_regex_from_log_path(log_path),
+        "avg_total_tokens": avg_tokens,
+        "success_rate": success_rate,
+        "run_token_totals": run_totals,
+    }
+
+
+def _pareto_front(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not points:
+        return []
+
+    front: List[Dict[str, Any]] = []
+    for i, point in enumerate(points):
+        dominated = False
+        for j, other in enumerate(points):
+            if i == j:
+                continue
+            no_worse_x = other["avg_total_tokens"] <= point["avg_total_tokens"]
+            no_worse_y = other["success_rate"] >= point["success_rate"]
+            strictly_better = (
+                other["avg_total_tokens"] < point["avg_total_tokens"]
+                or other["success_rate"] > point["success_rate"]
+            )
+            if no_worse_x and no_worse_y and strictly_better:
+                dominated = True
+                break
+        if not dominated:
+            front.append(point)
+
+    return sorted(front, key=lambda p: (p["avg_total_tokens"], -p["success_rate"]))
+
+
+def _plot_method_points_and_front(
+    ax,
+    points: List[Dict[str, Any]],
+    label: str,
+    color: str,
+):
+    if not points:
+        return
+
+    xs = [point["avg_total_tokens"] for point in points]
+    ys = [point["success_rate"] for point in points]
+    ax.scatter(xs, ys, s=28, alpha=0.6, color=color, label=label)
+
+    front = _pareto_front(points)
+    if front:
+        ax.plot(
+            [point["avg_total_tokens"] for point in front],
+            [point["success_rate"] for point in front],
+            color=color,
+            linewidth=2,
+        )
+
+
+def plot_pareto(
+    logs_root: str, regex_list_path: str, outdir: str, mkey: str,
+) -> Dict[str, List[Dict[str, Any]]]:
+    os.makedirs(outdir, exist_ok=True)
+
+    depth_map = _build_scaleup_simplyrx_depth_map(regex_list_path)
+    token_counter = _load_token_counter(mkey)
+
+    method_specs: List[Tuple[str, str, str, str]] = [
+        ("std_reg", os.path.join(logs_root, "std/reg"), "std/reg", "#1f77b4"),
+        (
+            "ce_agentic",
+            os.path.join(logs_root, "ce/reg/agentic_reflection"),
+            "ce/reg/agentic_reflection",
+            "#d62728",
+        ),
+        (
+            "ce_non_agentic",
+            os.path.join(logs_root, "ce/reg/single_inference"),
+            "ce/reg/single_inference",
+            "#2ca02c",
+        ),
+    ]
+
+    all_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
+    for method_key, method_dir, _, _ in method_specs:
+        points: List[Dict[str, Any]] = []
+        for log_path in sorted(glob.glob(os.path.join(method_dir, "*.json"))):
+            point = summarize_scaleup_log_for_pareto(
+                log_path,
+                mkey=mkey,
+                token_counter=token_counter,
+            )
+            point["depth"] = depth_map.get(point["regex"])
+            points.append(point)
+        all_points_by_method[method_key] = points
+
+    for depth in range(5):
+        plt.figure(figsize=(8, 6))
+        ax = plt.gca()
+        for method_key, _, label, color in method_specs:
+            depth_points = [
+                point
+                for point in all_points_by_method[method_key]
+                if point.get("depth") == depth
+            ]
+            _plot_method_points_and_front(ax, depth_points, label, color)
+
+        ax.set_title(f"Pareto Front for SimplyRx Scaleup (gpt-oss, depth={depth})")
+        ax.set_xlabel("Average Total Input Tokens Across Reruns")
+        ax.set_ylabel("Success Run Ratio")
+        ax.set_ylim(-0.02, 1.02)
+        ax.grid(True, linestyle="--", alpha=0.4)
+        ax.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir, f"pareto_depth={depth}.png"), dpi=300)
+        plt.close()
+
+    plt.figure(figsize=(8, 6))
+    ax = plt.gca()
+    for method_key, _, label, color in method_specs:
+        _plot_method_points_and_front(ax, all_points_by_method[method_key], label, color)
+
+    ax.set_title("Pareto Front for SimplyRx Scaleup (gpt-oss, all depths)")
+    ax.set_xlabel("Average Total Input Tokens Across Reruns")
+    ax.set_ylabel("Success Run Ratio")
+    ax.set_ylim(-0.02, 1.02)
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(outdir, "pareto_all_depths.png"), dpi=300)
+    plt.close()
+
+    return all_points_by_method
 
 def plot_loss_curve(losses, outdir, name):
     epochs = len(losses)
@@ -121,61 +442,23 @@ def plot_3dSurface(Z):
     plt.savefig("accuracy_curves/surface_paper.pdf", bbox_inches="tight")
     plt.show()
 
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--plot_type", type=str, default="pareto", choices=["pareto"])
+    parser.add_argument("--logs_root", type=str, default="logs/scaleup/icl_gen_simplyrx/model=gpt-oss")
+    parser.add_argument("--regex_list_path", type=str, default="datasets/scaleup/regex_list.json")
+    parser.add_argument("--outdir", type=str, default="accuracy_curves/scaleup/icl_gen_simplyrx/model=gpt-oss")
+    parser.add_argument("--mkey", type=str, default="gpt-oss")
+    return parser.parse_args()
+
 if __name__ == "__main__":
-    Z = np.array([
-        [[ 7.52,  8.00,  8.56], [13.16, 14.00, 14.98], [18.80, 20.00, 21.40], [24.44, 26.00, 27.82],
-        [30.08, 32.00, 34.24], [35.72, 38.00, 40.66], [41.36, 44.00, 47.08], [47.00, 50.00, 53.50]],
+    args = parse_args()
 
-        [[ 9.00,  9.00,  9.00], [33.33, 33.33, 33.33], [16.33, 16.33, 16.33], [58.00, 58.00, 58.00],
-        [44.00, 44.00, 44.00], [12.00, 27.33, 12.00], [55.27, 58.80, 62.92], [61.37, 65.30, 69.87]],
-
-        [[26.32, 28.00, 29.96], [28.33, 28.33, 28.33], [35.72, 38.00, 40.66], [42.07, 44.75, 47.90],
-        [48.41, 51.50, 55.11], [69.00, 69.00, 69.00], [61.10, 65.00, 69.55], [67.44, 71.75, 76.73]],
-
-        [[34.32, 36.50, 39.06], [41.23, 43.85, 46.91], [48.13, 51.20, 54.78], [55.04, 58.55, 62.65],
-        [61.94, 65.90, 70.53], [68.85, 73.25, 78.41], [75.75, 80.60, 86.24], [82.66, 87.95, 94.16]],
-
-        [[45.12, 48.00, 51.36], [53.77, 57.20, 61.20], [62.42, 66.40, 71.05], [71.06, 75.60, 80.89],
-        [79.71, 84.80, 90.74], [88.36, 94.00,100.58], [97.01,103.20,110.42], [105.66,112.40,120.27]]
-    ], dtype=float)
-    # Z = np.array([
-    #     [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
-    #     [[9, 9, 9], [33.33, 33.33, 33.33], [16.33, 16.33, 16.33], [58, 58, 58], [44, 44, 44], [12, 27.33, 12], [0, 0, 0], [0, 0, 0]],
-    #     [[0, 0, 0], [28.33, 28.33, 28.33], [0, 0, 0], [0, 0, 0], [0, 0, 0], [69, 69, 69], [0, 0, 0], [0, 0, 0]],
-    #     [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
-    #     [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]
-    # ])
-    plot_3dSurface(Z)
-    exit(0)
-
-    # names = ["baseline", "50_50_CEs", "100_CEs", "random_CEs", "normal_CEs"]
-    # colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple']
-    names = ["", "_ce"]
-    colors = ['tab:blue', 'tab:red']
-    # names = ["posrate=0.05", "posrate=0.1", "posrate=0.23", "posrate=0.3", "posrate=0.5", "posrate=0.8"]
-    # colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown']
-    # names = ["num_aug=1-aug_strategy=dfa_state", "num_aug=5-aug_strategy=dfa_state", "num_aug=5-aug_strategy=random", "num_aug=5-aug_strategy=repeat"]
-    # colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:purple']
-
-    data = {}
-    for name in names:
-        # with open(os.path.join("accuracy_curves", f"Regex=(a(a)*b)*-mode={name}-train_length=8-test_length=8-num_aug=1-aug_strategy=dfa_state-epochs_per_round=3.json"), "r") as f:
-        with open(os.path.join("accuracy_curves", f"icl_model=gpt5_totTrain=384_startSize=3_scaleFactor=2.0_totEval=32_evalBatch=32{name}.json"), "r") as f:
-            data[name] = json.load(f)
-
-    plt.figure(figsize=(10, 6))
-    for (k, d), c in zip(data.items(), colors):
-        num_samples = d["num_samples"]
-        accs = d["accs"]
-        smoothed_accs = smooth(accs, window_size=3)
-
-        plt.plot(num_samples, smoothed_accs, label=k, color=c, linewidth=2)
-        
-    plt.title('Smoothed Accuracy Curve', fontsize=16)
-    plt.xlabel('#TrainingSamples', fontsize=14)
-    plt.ylabel('Accuracy', fontsize=14)
-    plt.legend()
-    plt.grid(True, linestyle='--', alpha=0.7)
-    plt.tight_layout()
-
-    plt.savefig(os.path.join("accuracy_curves", "ICL_model=gpt5_totTrain=384_CE.png"), dpi=500)
+    if args.plot_type == "pareto":
+        plot_pareto(
+            logs_root=args.logs_root,
+            regex_list_path=args.regex_list_path,
+            outdir=args.outdir,
+            mkey=args.mkey,
+        )

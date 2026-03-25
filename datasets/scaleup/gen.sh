@@ -11,6 +11,8 @@ extract_first_regexes() {
 import json, sys
 path = sys.argv[1]
 data = json.load(open(path, "r", encoding="utf-8"))
+if isinstance(data, dict):
+    data = data.get("simplyrx", [])
 for state_block in data:
     for depth_block in state_block.get("regex_list", []):
         lst = depth_block.get("regex_list", [])
