@@ -8,7 +8,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 
-ROOT = Path("/mnt/c/Users/lhxlh/Documents/UW-Madison/research/CEGML")
+ROOT = Path(__file__).resolve().parents[3]
 REGEX_LIST = ROOT / "datasets/scaleup/regex_list.json"
 REPORT_MD = ROOT / "logs/scaleup/summary/oss_extrx_ce_std_analysis.md"
 REPORT_XLSX = ROOT / "logs/scaleup/summary/oss_extrx_ce_std_analysis.xlsx"
