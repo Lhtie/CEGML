@@ -443,6 +443,7 @@ def run_episode(
                 train_prompt=train_p,
                 prompt_format_kwargs=iter_prompt_kwargs,
             )
+            print(f"Epoch {epoch}, Retry {retry_idx}, Response: {msg}")
             msg = teacher.judge_regex(
                 msg=msg,
                 fst_gt=fst_gt,

@@ -100,8 +100,8 @@ class Teacher:
             
         ce_x = ce_pos + ce_neg
         ce_y = [1] * len(ce_pos) + [0] * len(ce_neg)
-        print(f"Generated {len(ce_x)} counterexamples with diff ratio {rate:.4f}")
-        print(f"Counterexamples: {ce_x}")
+        # print(f"Generated {len(ce_x)} counterexamples with diff ratio {rate:.4f}")
+        # print(f"Counterexamples: {ce_x}")
         return ce_x, ce_y
     
     def generate_posexamples(self, n, seq_len):
@@ -153,12 +153,12 @@ class Teacher:
                 dfa_pred, fst_pred, sigma_cur = self.task.regex_to_pynini_via_pyformlang(pred, sigma)
 
             eq, witness = self.task.equivalent_and_witness(fst_gt, fst_pred, sigma_cur)
-            diff_ratio = self.task.diff_ratio(
-                fst_gt, fst_pred, sigma_cur, k=self.task.max_length
-            )
+            # diff_ratio = self.task.diff_ratio(
+            #     fst_gt, fst_pred, sigma_cur, k=self.task.max_length
+            # )
             msg["Equivalent"] = eq
             msg["Witness"] = witness
-            msg["diffRatio"] = diff_ratio
+            # msg["diffRatio"] = diff_ratio
             msg["scoreTrainSet"] = score_examples(dfa_pred, train_ex, train_labels)
             msg["scoreEvalSet"] = score_examples(dfa_pred, eval_ex, eval_labels)
         except Exception as e:
