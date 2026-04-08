@@ -195,9 +195,14 @@ class RegularLanguage:
                 token_cache[key] = dfa_edge_char_class(diff_dfa, state_a, state_b)
             return token_cache[key]
 
+        # Keep traversal time bounded so clustered witness generation cannot
+        # wander through an enormous difference DFA forever.
+        max_frontier = max(256, 8 * k, 4 * len(diff_dfa.states))
+        max_expansions = max_frontier * max(4, self.max_length)
         witnesses = []
         # Stack item: (state, token_path, visited_states)
         stack = [(diff_dfa.start_state, [], {diff_dfa.start_state})]
+        expansions = 0
         while stack:
             cur, token_path, visited_states = stack.pop()
 
@@ -209,12 +214,18 @@ class RegularLanguage:
             if len(token_path) >= self.max_length:
                 continue
 
+            expansions += 1
+            if expansions > max_expansions:
+                break
+
             # Expand loop-free paths only (no repeated states on current path).
             for nxt in grouped_next_states(cur):
                 if nxt in visited_states:
                     continue
                 token = edge_token(cur, nxt)
                 stack.append((nxt, token_path + [token], visited_states | {nxt}))
+                if len(stack) >= max_frontier:
+                    break
         return witnesses
     
     def count_strings_of_length(self, fst: pynini.Fst, sigma: pynini.SymbolTable, length: int) -> int:
