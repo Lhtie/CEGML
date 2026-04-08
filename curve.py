@@ -159,16 +159,23 @@ def _load_scaleup_regex_metadata(regex_list_path: str, task_type: str) -> Dict[s
         raise KeyError(f"Task type `{task_type}` not found in {regex_list_path}")
 
     depth_map: Dict[str, int] = {}
+    state_map: Dict[str, int] = {}
     depths = set()
+    states = set()
     for state_group in data[task_type]:
+        state = int(state_group["#States"])
+        states.add(state)
         for depth_group in state_group["regex_list"]:
             depth = int(depth_group["Stardepth"])
             depths.add(depth)
             for regex in depth_group["regex_list"]:
                 depth_map[regex] = depth
+                state_map[regex] = state
     return {
         "depth_map": depth_map,
+        "state_map": state_map,
         "depths": sorted(depths),
+        "states": sorted(states),
     }
 
 
@@ -218,6 +225,70 @@ def summarize_scaleup_log_for_pareto(
         "run_token_totals": run_totals,
         "success_count": success_count,
         "total_runs": total_runs,
+    }
+
+
+def summarize_scaleup_log_for_solve_rate(log_path: str) -> Dict[str, Any]:
+    with open(log_path, "r", encoding="utf-8") as f:
+        msgdict = json.load(f)
+
+    summary = msgdict.get("summary", {})
+    success_rate = _compute_success_rate(summary)
+    total_runs = sum(
+        1 for run_key, run_info in summary.items()
+        if str(run_key).startswith("run-") and isinstance(run_info, dict)
+    )
+    success_count = int(round(success_rate * total_runs))
+
+    return {
+        "path": log_path,
+        "regex": _extract_regex_from_log_path(log_path),
+        "success_rate": success_rate,
+        "success_count": success_count,
+        "total_runs": total_runs,
+    }
+
+
+def summarize_scaleup_log_for_sample_efficiency(log_path: str) -> Dict[str, Any]:
+    with open(log_path, "r", encoding="utf-8") as f:
+        msgdict = json.load(f)
+
+    solved_samples: List[int] = []
+    summary = msgdict.get("summary", {})
+    run_keys = sorted(
+        [
+            run_key
+            for run_key, run_info in summary.items()
+            if str(run_key).startswith("run-") and isinstance(run_info, dict)
+        ],
+        key=lambda x: int(str(x).split("-")[1]),
+    )
+
+    for run_key in run_keys:
+        run_epochs = msgdict.get(run_key, {})
+        epoch_keys = sorted(
+            [
+                epoch_key
+                for epoch_key, epoch_value in run_epochs.items()
+                if str(epoch_key).startswith("epoch-") and isinstance(epoch_value, dict)
+            ],
+            key=lambda x: int(str(x).split("-")[1]),
+        )
+        for epoch_key in epoch_keys:
+            epoch = run_epochs[epoch_key]
+            if float(epoch.get("Accuracy", 0.0)) >= 1.0:
+                solved_samples.append(int(epoch["NumTrainingSamples"]))
+                break
+
+    mean_solved_samples = float(np.mean(solved_samples)) if solved_samples else None
+    median_solved_samples = float(np.median(solved_samples)) if solved_samples else None
+    return {
+        "path": log_path,
+        "regex": _extract_regex_from_log_path(log_path),
+        "mean_solved_samples": mean_solved_samples,
+        "median_solved_samples": median_solved_samples,
+        "solved_samples": solved_samples,
+        "num_solved_runs": len(solved_samples),
     }
 
 
@@ -439,18 +510,8 @@ def _plot_depth_overlay(
     ax.legend(handles=depth_handles, loc="center right", title="Depth")
 
 
-def plot_pareto(
-    logs_root: str, regex_list_path: str, outdir: str, mkey: str, task_type: str = "simplyrx",
-) -> Dict[str, List[Dict[str, Any]]]:
-    os.makedirs(outdir, exist_ok=True)
-
-    metadata = _load_scaleup_regex_metadata(regex_list_path, task_type)
-    depth_map = metadata["depth_map"]
-    available_depths = metadata["depths"]
-    token_counter = _load_token_counter(mkey)
-    task_label = "SimplyRx" if task_type == "simplyrx" else "ExtRx"
-
-    method_specs: List[Tuple[str, str, str, str]] = [
+def _build_method_specs(logs_root: str) -> List[Tuple[str, str, str, str]]:
+    return [
         ("std_reg", os.path.join(logs_root, "std/reg"), "std/reg", "#1f77b4"),
         (
             "ce_agentic",
@@ -465,6 +526,504 @@ def plot_pareto(
             "#2ca02c",
         ),
     ]
+
+
+def _task_label(task_type: str) -> str:
+    return "SimplyRx" if task_type == "simplyrx" else "ExtRx"
+
+
+def _method_depth_offsets() -> Dict[str, float]:
+    return {
+        "std_reg": -0.12,
+        "ce_agentic": 0.0,
+        "ce_non_agentic": 0.12,
+    }
+
+
+def plot_solve_rate_by_stardepth(
+    logs_root: str, regex_list_path: str, outdir: str, task_type: str = "simplyrx",
+) -> Dict[str, List[Dict[str, Any]]]:
+    os.makedirs(outdir, exist_ok=True)
+
+    metadata = _load_scaleup_regex_metadata(regex_list_path, task_type)
+    depth_map = metadata["depth_map"]
+    available_depths = metadata["depths"]
+    task_label = _task_label(task_type)
+    method_specs = _build_method_specs(logs_root)
+    depth_markers = {
+        "std_reg": "o",
+        "ce_agentic": "s",
+        "ce_non_agentic": "^",
+    }
+    depth_offsets = _method_depth_offsets()
+
+    all_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
+    for method_key, method_dir, _, _ in method_specs:
+        points: List[Dict[str, Any]] = []
+        for log_path in sorted(glob.glob(os.path.join(method_dir, "*.json"))):
+            point = summarize_scaleup_log_for_solve_rate(log_path)
+            point["depth"] = depth_map.get(point["regex"])
+            points.append(point)
+        all_points_by_method[method_key] = points
+
+    plt.figure(figsize=(8.8, 5.8))
+    ax = plt.gca()
+
+    for method_key, _, label, color in method_specs:
+        method_points = all_points_by_method[method_key]
+        depth_values: List[int] = []
+        mean_rates: List[float] = []
+
+        for depth in available_depths:
+            depth_points = [point for point in method_points if point.get("depth") == depth]
+            if not depth_points:
+                continue
+            depth_values.append(depth)
+            mean_rates.append(float(np.mean([point["success_rate"] for point in depth_points])))
+
+        if not depth_values:
+            continue
+
+        ax.plot(
+            depth_values,
+            mean_rates,
+            marker=depth_markers.get(method_key, "o"),
+            color=color,
+            linewidth=2.0,
+            markersize=7,
+            label=label,
+        )
+        for depth, rate in zip(depth_values, mean_rates):
+            ax.annotate(
+                f"{rate:.2f}",
+                (depth, rate),
+                textcoords="offset points",
+                xytext=(0, 7),
+                ha="center",
+                fontsize=8.5,
+                color=color,
+            )
+
+    ax.set_title(f"Solve Rate by Stardepth ({task_label})")
+    ax.set_xlabel("StarDepth")
+    ax.set_ylabel("Mean Solve Rate")
+    ax.set_xticks(available_depths)
+    ax.set_ylim(0.0, 1.05)
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(outdir, "solve_rate_by_stardepth_compare.png"), dpi=300)
+    plt.close()
+
+    return all_points_by_method
+
+
+def plot_solve_rate_by_states(
+    logs_root: str, regex_list_path: str, outdir: str, task_type: str = "simplyrx",
+) -> Dict[str, List[Dict[str, Any]]]:
+    os.makedirs(outdir, exist_ok=True)
+
+    metadata = _load_scaleup_regex_metadata(regex_list_path, task_type)
+    depth_map = metadata["depth_map"]
+    state_map = metadata["state_map"]
+    available_states = metadata["states"]
+    task_label = _task_label(task_type)
+    method_specs = _build_method_specs(logs_root)
+    state_markers = {
+        "std_reg": "o",
+        "ce_agentic": "s",
+        "ce_non_agentic": "^",
+    }
+
+    all_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
+    for method_key, method_dir, _, _ in method_specs:
+        points: List[Dict[str, Any]] = []
+        for log_path in sorted(glob.glob(os.path.join(method_dir, "*.json"))):
+            point = summarize_scaleup_log_for_solve_rate(log_path)
+            point["depth"] = depth_map.get(point["regex"])
+            point["state"] = state_map.get(point["regex"])
+            points.append(point)
+        all_points_by_method[method_key] = points
+
+    plt.figure(figsize=(8.8, 5.8))
+    ax = plt.gca()
+
+    for method_key, _, label, color in method_specs:
+        method_points = all_points_by_method[method_key]
+        state_values: List[int] = []
+        mean_rates: List[float] = []
+
+        for state in available_states:
+            state_points = [point for point in method_points if point.get("state") == state]
+            if not state_points:
+                continue
+            state_values.append(state)
+            mean_rates.append(float(np.mean([point["success_rate"] for point in state_points])))
+
+        if not state_values:
+            continue
+
+        ax.plot(
+            state_values,
+            mean_rates,
+            marker=state_markers.get(method_key, "o"),
+            color=color,
+            linewidth=2.0,
+            markersize=7,
+            label=label,
+        )
+        for state, rate in zip(state_values, mean_rates):
+            ax.annotate(
+                f"{rate:.2f}",
+                (state, rate),
+                textcoords="offset points",
+                xytext=(0, 7),
+                ha="center",
+                fontsize=8.5,
+                color=color,
+            )
+
+    ax.set_title(f"Solve Rate by #States ({task_label})")
+    ax.set_xlabel("#States")
+    ax.set_ylabel("Mean Solve Rate")
+    ax.set_xticks(available_states)
+    ax.set_ylim(0.0, 1.05)
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(outdir, "solve_rate_by_states_compare.png"), dpi=300)
+    plt.close()
+
+    return all_points_by_method
+
+
+def plot_mean_samples_by_stardepth(
+    logs_root: str, regex_list_path: str, outdir: str, task_type: str = "simplyrx",
+) -> Dict[str, List[Dict[str, Any]]]:
+    os.makedirs(outdir, exist_ok=True)
+
+    metadata = _load_scaleup_regex_metadata(regex_list_path, task_type)
+    depth_map = metadata["depth_map"]
+    available_depths = metadata["depths"]
+    task_label = _task_label(task_type)
+    method_specs = _build_method_specs(logs_root)
+    depth_markers = {
+        "std_reg": "o",
+        "ce_agentic": "s",
+        "ce_non_agentic": "^",
+    }
+    depth_offsets = _method_depth_offsets()
+
+    all_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
+    for method_key, method_dir, _, _ in method_specs:
+        points: List[Dict[str, Any]] = []
+        for log_path in sorted(glob.glob(os.path.join(method_dir, "*.json"))):
+            point = summarize_scaleup_log_for_sample_efficiency(log_path)
+            point["depth"] = depth_map.get(point["regex"])
+            points.append(point)
+        all_points_by_method[method_key] = points
+
+    plt.figure(figsize=(8.8, 5.8))
+    ax = plt.gca()
+
+    for method_key, _, label, color in method_specs:
+        method_points = all_points_by_method[method_key]
+        depth_values: List[int] = []
+        depth_level_mean_samples: List[float] = []
+        depth_level_std_samples: List[float] = []
+
+        for depth in available_depths:
+            depth_sample_pool: List[int] = []
+            for point in method_points:
+                if point.get("depth") != depth:
+                    continue
+                depth_sample_pool.extend(point.get("solved_samples", []))
+
+            if not depth_sample_pool:
+                continue
+            depth_values.append(depth)
+            depth_level_mean_samples.append(float(np.mean(depth_sample_pool)))
+            depth_level_std_samples.append(float(np.std(depth_sample_pool)))
+
+        if not depth_values:
+            continue
+
+        shifted_depth_values = [
+            depth + depth_offsets.get(method_key, 0.0) for depth in depth_values
+        ]
+
+        ax.errorbar(
+            shifted_depth_values,
+            depth_level_mean_samples,
+            yerr=depth_level_std_samples,
+            marker=depth_markers.get(method_key, "o"),
+            color=color,
+            linewidth=2.0,
+            markersize=7,
+            elinewidth=1.2,
+            capsize=4,
+            capthick=1.2,
+            alpha=0.9,
+            label=label,
+        )
+        for shifted_depth, mean_samples in zip(
+            shifted_depth_values, depth_level_mean_samples
+        ):
+            ax.annotate(
+                f"{mean_samples:.0f}",
+                (shifted_depth, mean_samples),
+                textcoords="offset points",
+                xytext=(0, 9),
+                ha="center",
+                fontsize=8.5,
+                color=color,
+            )
+
+    ax.set_title(f"Average #Solved Samples by Stardepth ({task_label})")
+    ax.set_xlabel("StarDepth")
+    ax.set_ylabel("Mean #Solved Samples")
+    ax.set_xticks(available_depths)
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend()
+    ax.yaxis.set_major_formatter(FuncFormatter(_format_token_tick))
+    plt.tight_layout()
+    plt.savefig(os.path.join(outdir, "mean_samples_by_stardepth_compare.png"), dpi=300)
+    plt.close()
+
+    return all_points_by_method
+
+
+def _aggregate_pooled_median_by_cell(
+    points: List[Dict[str, Any]],
+    states: List[int],
+    depths: List[int],
+) -> np.ndarray:
+    z = np.full((len(depths), len(states)), np.inf, dtype=float)
+    state_to_idx = {state: idx for idx, state in enumerate(states)}
+    depth_to_idx = {depth: idx for idx, depth in enumerate(depths)}
+
+    pooled_samples: Dict[Tuple[int, int], List[int]] = {}
+    for point in points:
+        state = point.get("state")
+        depth = point.get("depth")
+        if state is None or depth is None:
+            continue
+        pooled_samples.setdefault((state, depth), []).extend(point.get("solved_samples", []))
+
+    for (state, depth), samples in pooled_samples.items():
+        if not samples:
+            continue
+        z[depth_to_idx[depth], state_to_idx[state]] = float(np.median(samples))
+
+    return z
+
+
+def plot_3d_median_samples(
+    logs_root: str, regex_list_path: str, outdir: str, task_type: str = "simplyrx",
+) -> Dict[str, List[Dict[str, Any]]]:
+    os.makedirs(outdir, exist_ok=True)
+
+    metadata = _load_scaleup_regex_metadata(regex_list_path, task_type)
+    depth_map = metadata["depth_map"]
+    state_map = metadata["state_map"]
+    available_depths = metadata["depths"]
+    available_states = metadata["states"]
+    task_label = _task_label(task_type)
+    method_specs = _build_method_specs(logs_root)
+
+    all_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
+    z_values_by_method: Dict[str, np.ndarray] = {}
+
+    for method_key, method_dir, _, _ in method_specs:
+        points: List[Dict[str, Any]] = []
+        for log_path in sorted(glob.glob(os.path.join(method_dir, "*.json"))):
+            point = summarize_scaleup_log_for_sample_efficiency(log_path)
+            point["depth"] = depth_map.get(point["regex"])
+            point["state"] = state_map.get(point["regex"])
+            points.append(point)
+        all_points_by_method[method_key] = points
+        z_values_by_method[method_key] = _aggregate_pooled_median_by_cell(
+            points, available_states, available_depths
+        )
+
+    finite_values = [
+        value
+        for z in z_values_by_method.values()
+        for value in z[np.isfinite(z)]
+    ]
+    vmin = float(min(finite_values)) if finite_values else 0.0
+    vmax = float(max(finite_values)) if finite_values else 1.0
+
+    mpl.rcParams.update({
+        "font.size": 10,
+        "axes.labelsize": 11,
+        "axes.titlesize": 11,
+        "figure.dpi": 120,
+        "savefig.dpi": 300,
+    })
+
+    fig = plt.figure(figsize=(16, 5.6), constrained_layout=True)
+    cmap = plt.colormaps.get_cmap("YlOrRd_r")
+    norm = Normalize(vmin=vmin, vmax=vmax)
+
+    X, Y = np.meshgrid(np.array(available_states), np.array(available_depths))
+    axes = []
+
+    for subplot_idx, (method_key, _, label, _) in enumerate(method_specs, start=1):
+        ax = fig.add_subplot(1, 3, subplot_idx, projection="3d")
+        axes.append(ax)
+        Z = z_values_by_method[method_key]
+        Z_masked = np.ma.masked_invalid(Z)
+
+        ax.plot_surface(
+            X,
+            Y,
+            Z_masked,
+            facecolors=cmap(norm(Z_masked.filled(vmin))),
+            rstride=1,
+            cstride=1,
+            linewidth=0.35,
+            antialiased=True,
+            shade=False,
+            alpha=0.95,
+        )
+
+        for depth_idx, depth in enumerate(available_depths):
+            for state_idx, state in enumerate(available_states):
+                value = Z[depth_idx, state_idx]
+                if not np.isfinite(value):
+                    continue
+                ax.text(
+                    state,
+                    depth,
+                    value,
+                    f"{value:.0f}",
+                    fontsize=7,
+                    ha="center",
+                    va="bottom",
+                )
+
+        ax.set_title(label)
+        ax.set_xlabel("#States")
+        ax.set_ylabel("StarDepth")
+        ax.set_zlabel("Median #Solved Samples")
+        ax.set_xticks(available_states)
+        ax.set_yticks(available_depths)
+        ax.set_zlim(vmin, vmax * 1.03 if vmax > 0 else 1.0)
+        ax.view_init(elev=24, azim=-55)
+        ax.set_box_aspect((1.2, 1.0, 0.8))
+        ax.xaxis.pane.fill = False
+        ax.yaxis.pane.fill = False
+        ax.zaxis.pane.fill = False
+
+    fig.suptitle(f"Median #Solved Samples Surface ({task_label})", fontsize=13)
+    mappable = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    mappable.set_array(np.array(finite_values) if finite_values else np.array([0.0]))
+    cbar = fig.colorbar(mappable, ax=axes, shrink=0.72, pad=0.04)
+    cbar.set_label("Median #Solved Samples")
+
+    plt.savefig(os.path.join(outdir, "median_samples_surface_compare.png"), bbox_inches="tight")
+    plt.close()
+
+    return all_points_by_method
+
+
+def plot_median_samples_heatmap(
+    logs_root: str, regex_list_path: str, outdir: str, task_type: str = "simplyrx",
+) -> Dict[str, List[Dict[str, Any]]]:
+    os.makedirs(outdir, exist_ok=True)
+
+    metadata = _load_scaleup_regex_metadata(regex_list_path, task_type)
+    depth_map = metadata["depth_map"]
+    state_map = metadata["state_map"]
+    available_depths = metadata["depths"]
+    available_states = metadata["states"]
+    task_label = _task_label(task_type)
+    method_specs = _build_method_specs(logs_root)
+
+    all_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
+    z_values_by_method: Dict[str, np.ndarray] = {}
+
+    for method_key, method_dir, _, _ in method_specs:
+        points: List[Dict[str, Any]] = []
+        for log_path in sorted(glob.glob(os.path.join(method_dir, "*.json"))):
+            point = summarize_scaleup_log_for_sample_efficiency(log_path)
+            point["depth"] = depth_map.get(point["regex"])
+            point["state"] = state_map.get(point["regex"])
+            points.append(point)
+        all_points_by_method[method_key] = points
+        z_values_by_method[method_key] = _aggregate_pooled_median_by_cell(
+            points, available_states, available_depths
+        )
+
+    finite_values = [
+        value
+        for z in z_values_by_method.values()
+        for value in z[np.isfinite(z)]
+    ]
+    vmax = float(max(finite_values)) if finite_values else 1.0
+    vmin = float(min(finite_values)) if finite_values else 0.0
+
+    fig, axes = plt.subplots(1, 3, figsize=(15.5, 4.8), constrained_layout=True)
+    cmap = plt.colormaps.get_cmap("YlOrRd_r")
+    images = []
+
+    for ax, (method_key, _, label, _) in zip(axes, method_specs):
+        z = z_values_by_method[method_key]
+        z_plot = np.where(np.isfinite(z), z, vmax)
+        image = ax.imshow(
+            z_plot,
+            origin="lower",
+            aspect="auto",
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+        )
+        images.append(image)
+
+        ax.set_title(label)
+        ax.set_xlabel("#States")
+        ax.set_ylabel("StarDepth")
+        ax.set_xticks(range(len(available_states)))
+        ax.set_xticklabels(available_states)
+        ax.set_yticks(range(len(available_depths)))
+        ax.set_yticklabels(available_depths)
+
+        for row_idx, depth in enumerate(available_depths):
+            for col_idx, state in enumerate(available_states):
+                value = z[row_idx, col_idx]
+                text = "inf" if not np.isfinite(value) else f"{value:.0f}"
+                ax.text(
+                    col_idx,
+                    row_idx,
+                    text,
+                    ha="center",
+                    va="center",
+                    fontsize=8,
+                    color="black",
+                )
+
+    fig.suptitle(f"Median #Solved Samples Heatmap ({task_label})", fontsize=13)
+    cbar = fig.colorbar(images[-1], ax=axes, shrink=0.85, pad=0.02)
+    cbar.set_label("Median #Solved Samples")
+
+    plt.savefig(os.path.join(outdir, "median_samples_heatmap_compare.png"), bbox_inches="tight")
+    plt.close()
+
+    return all_points_by_method
+
+
+def plot_pareto(
+    logs_root: str, regex_list_path: str, outdir: str, mkey: str, task_type: str = "simplyrx",
+) -> Dict[str, List[Dict[str, Any]]]:
+    os.makedirs(outdir, exist_ok=True)
+
+    metadata = _load_scaleup_regex_metadata(regex_list_path, task_type)
+    depth_map = metadata["depth_map"]
+    available_depths = metadata["depths"]
+    token_counter = _load_token_counter(mkey)
+    task_label = _task_label(task_type)
+    method_specs = _build_method_specs(logs_root)
 
     all_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
     for method_key, method_dir, _, _ in method_specs:
@@ -645,16 +1204,32 @@ def plot_3dSurface(Z):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--plot_type", type=str, default="pareto", choices=["pareto"])
+    parser.add_argument(
+        "--plot_type",
+        type=str,
+        default="pareto",
+        choices=[
+            "pareto",
+            "solve_rate_by_stardepth",
+            "solve_rate_by_states",
+            "mean_samples_by_stardepth",
+            "median_samples_surface",
+            "median_samples_heatmap",
+        ],
+    )
     parser.add_argument("--task_type", type=str, default="simplyrx", choices=["simplyrx", "extrx"])
-    parser.add_argument("--logs_root", type=str, default="logs/scaleup/icl_gen_simplyrx/model=gpt-oss")
+    parser.add_argument("--logs_root", type=str, default=None)
     parser.add_argument("--regex_list_path", type=str, default="datasets/scaleup/regex_list.json")
-    parser.add_argument("--outdir", type=str, default="accuracy_curves/scaleup/icl_gen_simplyrx/model=gpt-oss")
+    parser.add_argument("--outdir", type=str, default=None)
     parser.add_argument("--mkey", type=str, default="gpt-oss")
     return parser.parse_args()
 
 if __name__ == "__main__":
     args = parse_args()
+    if args.logs_root is None:
+        args.logs_root = f"logs/scaleup/icl_gen_{args.task_type}/model={args.mkey}"
+    if args.outdir is None:
+        args.outdir = f"accuracy_curves/scaleup/icl_gen_{args.task_type}/model={args.mkey}"
 
     if args.plot_type == "pareto":
         plot_pareto(
@@ -662,5 +1237,40 @@ if __name__ == "__main__":
             regex_list_path=args.regex_list_path,
             outdir=args.outdir,
             mkey=args.mkey,
+            task_type=args.task_type,
+        )
+    elif args.plot_type == "solve_rate_by_stardepth":
+        plot_solve_rate_by_stardepth(
+            logs_root=args.logs_root,
+            regex_list_path=args.regex_list_path,
+            outdir=args.outdir,
+            task_type=args.task_type,
+        )
+    elif args.plot_type == "solve_rate_by_states":
+        plot_solve_rate_by_states(
+            logs_root=args.logs_root,
+            regex_list_path=args.regex_list_path,
+            outdir=args.outdir,
+            task_type=args.task_type,
+        )
+    elif args.plot_type == "mean_samples_by_stardepth":
+        plot_mean_samples_by_stardepth(
+            logs_root=args.logs_root,
+            regex_list_path=args.regex_list_path,
+            outdir=args.outdir,
+            task_type=args.task_type,
+        )
+    elif args.plot_type == "median_samples_surface":
+        plot_3d_median_samples(
+            logs_root=args.logs_root,
+            regex_list_path=args.regex_list_path,
+            outdir=args.outdir,
+            task_type=args.task_type,
+        )
+    elif args.plot_type == "median_samples_heatmap":
+        plot_median_samples_heatmap(
+            logs_root=args.logs_root,
+            regex_list_path=args.regex_list_path,
+            outdir=args.outdir,
             task_type=args.task_type,
         )
