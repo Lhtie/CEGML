@@ -5,6 +5,8 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
+from matplotlib.lines import Line2D
+from matplotlib.ticker import FuncFormatter
 import matplotlib as mpl
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -149,17 +151,25 @@ def _extract_regex_from_log_path(path: str) -> str:
     raise ValueError(f"Cannot parse regex suffix from path: {path}")
 
 
-def _build_scaleup_simplyrx_depth_map(regex_list_path: str) -> Dict[str, int]:
+def _load_scaleup_regex_metadata(regex_list_path: str, task_type: str) -> Dict[str, Any]:
     with open(regex_list_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
+    if task_type not in data:
+        raise KeyError(f"Task type `{task_type}` not found in {regex_list_path}")
+
     depth_map: Dict[str, int] = {}
-    for state_group in data["simplyrx"]:
+    depths = set()
+    for state_group in data[task_type]:
         for depth_group in state_group["regex_list"]:
-            depth = depth_group["Stardepth"]
+            depth = int(depth_group["Stardepth"])
+            depths.add(depth)
             for regex in depth_group["regex_list"]:
                 depth_map[regex] = depth
-    return depth_map
+    return {
+        "depth_map": depth_map,
+        "depths": sorted(depths),
+    }
 
 
 def _compute_success_rate(summary: Dict[str, Any]) -> float:
@@ -285,13 +295,160 @@ def _plot_aggregated_method_points(ax, aggregated_points: List[Dict[str, Any]]):
         )
 
 
+def _format_token_tick(x: float, _: int) -> str:
+    if abs(x) >= 1000:
+        return f"{x/1000:.1f}k"
+    return f"{int(x)}"
+
+
+def _set_readable_token_axis(ax, x_values: List[float]):
+    if not x_values:
+        return
+
+    xmin = min(x_values)
+    xmax = max(x_values)
+    if xmax <= 0:
+        ax.set_xlim(left=0)
+        return
+
+    # Start from 0 when it does not compress the interesting region too much.
+    # Otherwise zoom into the populated range and explicitly annotate that choice.
+    should_start_at_zero = xmin <= 0.18 * xmax
+    if should_start_at_zero:
+        ax.set_xlim(left=0, right=xmax * 1.08)
+    else:
+        span = max(xmax - xmin, xmax * 0.08)
+        ax.set_xlim(left=max(0, xmin - 0.12 * span), right=xmax + 0.12 * span)
+        ax.text(
+            0.02,
+            0.02,
+            "x-axis trimmed for readability",
+            transform=ax.transAxes,
+            fontsize=9,
+            color="dimgray",
+            ha="left",
+            va="bottom",
+            bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "alpha": 0.75, "edgecolor": "none"},
+        )
+
+    ax.xaxis.set_major_formatter(FuncFormatter(_format_token_tick))
+
+
+def _style_pareto_axis(ax, x_values: List[float]):
+    ax.set_xlabel("Average Total Input Tokens Across Reruns")
+    ax.set_ylabel("Success Run Ratio")
+    ax.set_ylim(-0.02, 1.02)
+    ax.grid(True, linestyle="--", alpha=0.4)
+    _set_readable_token_axis(ax, x_values)
+
+
+def _plot_depth_overlay(
+    ax,
+    per_depth_points_by_method: Dict[str, List[Dict[str, Any]]],
+    method_specs: List[Tuple[str, str, str, str]],
+):
+    depth_markers = {
+        0: "o",
+        1: "s",
+        2: "^",
+        3: "D",
+        4: "P",
+    }
+    plotted_points: List[Dict[str, Any]] = []
+    plotted_depths = set()
+
+    for method_key, _, label, color in method_specs:
+        method_points = sorted(
+            per_depth_points_by_method.get(method_key, []),
+            key=lambda p: p["depth"],
+        )
+        if not method_points:
+            continue
+
+        ax.plot(
+            [point["avg_total_tokens"] for point in method_points],
+            [point["success_rate"] for point in method_points],
+            color=color,
+            linewidth=1.3,
+            alpha=0.7,
+        )
+
+        for point in method_points:
+            depth = point["depth"]
+            plotted_depths.add(depth)
+            marker = depth_markers.get(depth, "o")
+            ax.scatter(
+                point["avg_total_tokens"],
+                point["success_rate"],
+                s=90,
+                alpha=0.95,
+                color=color,
+                marker=marker,
+                edgecolor="black",
+                linewidth=0.5,
+            )
+            ax.annotate(
+                f"d={depth}",
+                (point["avg_total_tokens"], point["success_rate"]),
+                textcoords="offset points",
+                xytext=(6, 5),
+                fontsize=8.5,
+                color=color,
+            )
+            plotted_points.append(point)
+
+    pareto_points = _pareto_front(plotted_points)
+    if pareto_points:
+        ax.plot(
+            [point["avg_total_tokens"] for point in pareto_points],
+            [point["success_rate"] for point in pareto_points],
+            color="black",
+            linewidth=1.8,
+            linestyle="--",
+            alpha=0.9,
+        )
+
+    setting_handles = [
+        Line2D(
+            [0], [0],
+            marker="o",
+            color=color,
+            markerfacecolor=color,
+            markeredgecolor="black",
+            markeredgewidth=0.5,
+            linewidth=1.3,
+            label=label,
+        )
+        for _, _, label, color in method_specs
+    ]
+    depth_handles = [
+        Line2D(
+            [0], [0],
+            marker=depth_markers.get(depth, "o"),
+            color="gray",
+            markerfacecolor="white",
+            markeredgecolor="gray",
+            linewidth=0,
+            label=f"depth={depth}",
+        )
+        for depth in sorted(plotted_depths)
+    ]
+
+    legend1 = ax.legend(handles=setting_handles, loc="lower right", title="Setting")
+    ax.add_artist(legend1)
+    ax.legend(handles=depth_handles, loc="center right", title="Depth")
+
+
 def plot_pareto(
-    logs_root: str, regex_list_path: str, outdir: str, mkey: str,
+    logs_root: str, regex_list_path: str, outdir: str, mkey: str, task_type: str = "simplyrx",
 ) -> Dict[str, List[Dict[str, Any]]]:
     os.makedirs(outdir, exist_ok=True)
 
-    depth_map = _build_scaleup_simplyrx_depth_map(regex_list_path)
+    metadata = _load_scaleup_regex_metadata(regex_list_path, task_type)
+    depth_map = metadata["depth_map"]
+    available_depths = metadata["depths"]
     token_counter = _load_token_counter(mkey)
+    task_label = "SimplyRx" if task_type == "simplyrx" else "ExtRx"
 
     method_specs: List[Tuple[str, str, str, str]] = [
         ("std_reg", os.path.join(logs_root, "std/reg"), "std/reg", "#1f77b4"),
@@ -322,11 +479,26 @@ def plot_pareto(
             points.append(point)
         all_points_by_method[method_key] = points
 
-    for depth in range(5):
-        plt.figure(figsize=(8, 6))
-        ax = plt.gca()
-        aggregated_points: List[Dict[str, Any]] = []
-        for method_key, _, label, color in method_specs:
+    plt.figure(figsize=(8, 6))
+    ax = plt.gca()
+    aggregated_points: List[Dict[str, Any]] = []
+    for method_key, _, label, color in method_specs:
+        aggregated_point = _aggregate_method_points(all_points_by_method[method_key], label, color)
+        if aggregated_point is not None:
+            aggregated_points.append(aggregated_point)
+
+    _plot_aggregated_method_points(ax, aggregated_points)
+    _style_pareto_axis(ax, [point["avg_total_tokens"] for point in aggregated_points])
+    ax.set_title(f"Pareto Front for {task_label} Scaleup (task average)")
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(outdir, "pareto_task_average.png"), dpi=300)
+    plt.close()
+
+    per_depth_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
+    for method_key, _, label, color in method_specs:
+        method_depth_points: List[Dict[str, Any]] = []
+        for depth in available_depths:
             depth_points = [
                 point
                 for point in all_points_by_method[method_key]
@@ -334,38 +506,22 @@ def plot_pareto(
             ]
             aggregated_point = _aggregate_method_points(depth_points, label, color)
             if aggregated_point is not None:
-                aggregated_points.append(aggregated_point)
+                aggregated_point["depth"] = depth
+                method_depth_points.append(aggregated_point)
+        per_depth_points_by_method[method_key] = method_depth_points
 
-        _plot_aggregated_method_points(ax, aggregated_points)
-
-        ax.set_title(f"Pareto Front for SimplyRx Scaleup (gpt-oss, depth={depth})")
-        ax.set_xlabel("Average Total Input Tokens Across Reruns")
-        ax.set_ylabel("Success Run Ratio")
-        ax.set_ylim(-0.02, 1.02)
-        ax.grid(True, linestyle="--", alpha=0.4)
-        ax.legend()
-        plt.tight_layout()
-        plt.savefig(os.path.join(outdir, f"pareto_depth={depth}.png"), dpi=300)
-        plt.close()
-
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=(9.5, 6.5))
     ax = plt.gca()
-    aggregated_points = []
-    for method_key, _, label, color in method_specs:
-        aggregated_point = _aggregate_method_points(all_points_by_method[method_key], label, color)
-        if aggregated_point is not None:
-            aggregated_points.append(aggregated_point)
-
-    _plot_aggregated_method_points(ax, aggregated_points)
-
-    ax.set_title("Pareto Front for SimplyRx Scaleup (gpt-oss, all depths)")
-    ax.set_xlabel("Average Total Input Tokens Across Reruns")
-    ax.set_ylabel("Success Run Ratio")
-    ax.set_ylim(-0.02, 1.02)
-    ax.grid(True, linestyle="--", alpha=0.4)
-    ax.legend()
+    _plot_depth_overlay(ax, per_depth_points_by_method, method_specs)
+    overlay_x_values = [
+        point["avg_total_tokens"]
+        for method_points in per_depth_points_by_method.values()
+        for point in method_points
+    ]
+    _style_pareto_axis(ax, overlay_x_values)
+    ax.set_title(f"Pareto Front for {task_label} Scaleup (all depths together)")
     plt.tight_layout()
-    plt.savefig(os.path.join(outdir, "pareto_all_depths.png"), dpi=300)
+    plt.savefig(os.path.join(outdir, "pareto_depth_overlay.png"), dpi=300)
     plt.close()
 
     return all_points_by_method
@@ -490,6 +646,7 @@ def plot_3dSurface(Z):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--plot_type", type=str, default="pareto", choices=["pareto"])
+    parser.add_argument("--task_type", type=str, default="simplyrx", choices=["simplyrx", "extrx"])
     parser.add_argument("--logs_root", type=str, default="logs/scaleup/icl_gen_simplyrx/model=gpt-oss")
     parser.add_argument("--regex_list_path", type=str, default="datasets/scaleup/regex_list.json")
     parser.add_argument("--outdir", type=str, default="accuracy_curves/scaleup/icl_gen_simplyrx/model=gpt-oss")
@@ -505,4 +662,5 @@ if __name__ == "__main__":
             regex_list_path=args.regex_list_path,
             outdir=args.outdir,
             mkey=args.mkey,
+            task_type=args.task_type,
         )

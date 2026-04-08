@@ -29,6 +29,7 @@ CONFIGS = {
         "title": "CE / single_inference",
         "dir": ROOT / "logs/scaleup/icl_gen_extrx/model=gpt-oss/ce/reg/single_inference",
         "split_token": "_ceEpochs=",
+        "name_filter": "_ceBatch=250_",
     },
 }
 
@@ -127,6 +128,9 @@ def collect_rows():
 
     for key, cfg in CONFIGS.items():
         for path in sorted(cfg["dir"].glob("*.json")):
+            name_filter = cfg.get("name_filter")
+            if name_filter and name_filter not in path.name:
+                continue
             regex = parse_regex(path.name, cfg["split_token"])
             state_depth = mapping.get(regex)
             if state_depth is None:
