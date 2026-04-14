@@ -70,6 +70,16 @@ def log_scaling(total, start, scale_factor):
     sizes.append(total)
     return sizes
 
+
+def summarize_label_counts(labels):
+    pos = sum(int(label == 1) for label in labels)
+    neg = sum(int(label == 0) for label in labels)
+    return {
+        "positive": pos,
+        "negative": neg,
+        "total": len(labels),
+    }
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--task_type", type=str, default="simplyrx", choices=["simplyrx", "extrx"])
@@ -214,7 +224,7 @@ if __name__ == "__main__":
         
         msgdict[epoch] = {
             "Accuracy": acc,
-            "NumTrainingSamples": len(agg_train_ex),
+            "NumTrainingSamples": summarize_label_counts(agg_train_labels),
             "Logs": msgs
         }
         os.makedirs(os.path.dirname(config_name), exist_ok=True)

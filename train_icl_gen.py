@@ -272,6 +272,16 @@ def savejson(ctx, path):
         json.dump(ctx, f, indent=4)
 
 
+def summarize_label_counts(labels):
+    pos = sum(int(label == 1) for label in labels)
+    neg = sum(int(label == 0) for label in labels)
+    return {
+        "positive": pos,
+        "negative": neg,
+        "total": len(labels),
+    }
+
+
 def build_reflection_prompt(previous_reasoning, previous_regex, train_ex, train_labels, feedback_note=None):
     ce_lines = "\n".join(
         [train_data_template.format(ex, label) for ex, label in zip(train_ex, train_labels)]
@@ -443,7 +453,7 @@ def run_episode(
                 train_prompt=train_p,
                 prompt_format_kwargs=iter_prompt_kwargs,
             )
-            print(f"Epoch {epoch}, Retry {retry_idx}, Response: {msg}")
+            print(f"Epoch {epoch}, Retry {retry_idx}\nPrediction: {msg['Prediction']}\nReasoning: {msg['Reasoning']}")
             msg = teacher.judge_regex(
                 msg=msg,
                 fst_gt=fst_gt,
@@ -499,7 +509,7 @@ def run_episode(
     return {
         "epoch_results": epoch_results,
         "epochs_completed": len(epoch_results),
-        "final_num_samples": len(agg_train_ex),
+        "final_num_samples": summarize_label_counts(agg_train_labels),
         "final_accuracy": accs[-1] if accs else 0.0,
         "current_guess": current_guess,
         "current_guess_reasoning": current_guess_reasoning
