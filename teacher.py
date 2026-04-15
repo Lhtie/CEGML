@@ -1,8 +1,33 @@
 import random
 import numpy as np
+import signal
+from contextlib import contextmanager
 from collections import deque
 from pyformlang.finite_automaton import State, Symbol, DeterministicFiniteAutomaton
 from tasks.utils import dfa_accepts_ex
+
+
+class JudgeTimeoutError(TimeoutError):
+    pass
+
+
+@contextmanager
+def time_limit(seconds):
+    if seconds is None or seconds <= 0:
+        yield
+        return
+
+    def _handle_timeout(signum, frame):
+        raise JudgeTimeoutError(f"judge_regex timed out after {seconds}s")
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    signal.signal(signal.SIGALRM, _handle_timeout)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
 
 class Teacher:
     def __init__(self, task):
@@ -137,6 +162,7 @@ class Teacher:
         self, msg, fst_gt,
         train_ex, train_labels, eval_ex, eval_labels,
         sigma=None,
+        timeout_seconds=30,
     ):
         def score_examples(dfa_pred, examples, labels):
             if len(examples) == 0:
@@ -147,20 +173,21 @@ class Teacher:
 
         pred = msg.get("Prediction")
         try:
-            if sigma is None:
-                dfa_pred, fst_pred, sigma_cur = self.task.regex_to_pynini_via_pyformlang(pred)
-            else:
-                dfa_pred, fst_pred, sigma_cur = self.task.regex_to_pynini_via_pyformlang(pred, sigma)
+            with time_limit(timeout_seconds):
+                if sigma is None:
+                    dfa_pred, fst_pred, sigma_cur = self.task.regex_to_pynini_via_pyformlang(pred)
+                else:
+                    dfa_pred, fst_pred, sigma_cur = self.task.regex_to_pynini_via_pyformlang(pred, sigma)
 
-            eq, witness = self.task.equivalent_and_witness(fst_gt, fst_pred, sigma_cur)
-            # diff_ratio = self.task.diff_ratio(
-            #     fst_gt, fst_pred, sigma_cur, k=self.task.max_length
-            # )
-            msg["Equivalent"] = eq
-            msg["Witness"] = witness
-            # msg["diffRatio"] = diff_ratio
-            msg["scoreTrainSet"] = score_examples(dfa_pred, train_ex, train_labels)
-            msg["scoreEvalSet"] = score_examples(dfa_pred, eval_ex, eval_labels)
+                eq, witness = self.task.equivalent_and_witness(fst_gt, fst_pred, sigma_cur)
+                # diff_ratio = self.task.diff_ratio(
+                #     fst_gt, fst_pred, sigma_cur, k=self.task.max_length
+                # )
+                msg["Equivalent"] = eq
+                msg["Witness"] = witness
+                # msg["diffRatio"] = diff_ratio
+                msg["scoreTrainSet"] = score_examples(dfa_pred, train_ex, train_labels)
+                msg["scoreEvalSet"] = score_examples(dfa_pred, eval_ex, eval_labels)
         except Exception as e:
             msg["Error"] = f"Error compiling regex: {e}"
             print(msg["Error"])

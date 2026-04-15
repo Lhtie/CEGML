@@ -453,14 +453,14 @@ def run_episode(
                 train_prompt=train_p,
                 prompt_format_kwargs=iter_prompt_kwargs,
             )
-            print(f"Epoch {epoch}, Retry {retry_idx}\nPrediction: {msg['Prediction']}\nReasoning: {msg['Reasoning']}")
+            print(f"Epoch {epoch}, Retry {retry_idx}\nPrediction: {msg['Prediction']}\nReasoning: {msg['Reasoning']}", flush=True)
             msg = teacher.judge_regex(
                 msg=msg,
                 fst_gt=fst_gt,
                 train_ex=agg_train_ex,
                 train_labels=agg_train_labels,
                 eval_ex=data["eval_ex"],
-                eval_labels=data["eval_labels"],
+                eval_labels=data["eval_labels"]
             )
             if msg.get("Equivalent"):
                 acc = max(acc, 1)
