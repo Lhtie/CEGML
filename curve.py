@@ -11,7 +11,10 @@ import matplotlib as mpl
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
-def _load_token_counter(mkey: str):
+TokenCounter = Callable[[str], int]
+TokenEncoder = Callable[[str], List[int]]
+
+def _load_token_counter(mkey: str) -> Tuple[TokenCounter, TokenEncoder]:
     from modeling.llm import resolve_model_path
 
     model_path = resolve_model_path(mkey)
@@ -26,15 +29,17 @@ def _load_token_counter(mkey: str):
 
         tokenizer = AutoTokenizer.from_pretrained(model_path)
 
-        def count_fn(prompt: str) -> int:
-            token_ids = tokenizer.apply_chat_template(
+        def encode_fn(prompt: str) -> List[int]:
+            return tokenizer.apply_chat_template(
                 [{"role": "user", "content": prompt}],
                 tokenize=True,
                 add_generation_prompt=True,
             )
-            return len(token_ids)
 
-        return count_fn
+        def count_fn(prompt: str) -> int:
+            return len(encode_fn(prompt))
+
+        return count_fn, encode_fn
 
     if mkey.startswith(("gpt3", "gpt4")):
         try:
@@ -46,10 +51,13 @@ def _load_token_counter(mkey: str):
 
         encoding = tiktoken.encoding_for_model(model_path)
 
-        def count_fn(prompt: str) -> int:
-            return len(encoding.encode(prompt))
+        def encode_fn(prompt: str) -> List[int]:
+            return encoding.encode(prompt)
 
-        return count_fn
+        def count_fn(prompt: str) -> int:
+            return len(encode_fn(prompt))
+
+        return count_fn, encode_fn
 
     try:
         from transformers import AutoTokenizer
@@ -60,15 +68,17 @@ def _load_token_counter(mkey: str):
 
     tokenizer = AutoTokenizer.from_pretrained(model_path)
 
-    def count_fn(prompt: str) -> int:
-        token_ids = tokenizer.apply_chat_template(
+    def encode_fn(prompt: str) -> List[int]:
+        return tokenizer.apply_chat_template(
             [{"role": "user", "content": prompt}],
             tokenize=True,
             add_generation_prompt=True,
         )
-        return len(token_ids)
 
-    return count_fn
+    def count_fn(prompt: str) -> int:
+        return len(encode_fn(prompt))
+
+    return count_fn, encode_fn
 
 
 def _extract_prompt_from_log(log_item: Dict[str, Any]) -> Optional[str]:
@@ -85,10 +95,13 @@ def _extract_prompt_from_log(log_item: Dict[str, Any]) -> Optional[str]:
 def count_rerun_input_tokens(
     msgdict: Dict[str, Any],
     mkey: str = "gpt-oss",
-    token_counter: Optional[Callable[[str], int]] = None,
+    token_counter: Optional[TokenCounter] = None,
+    token_encoder: Optional[TokenEncoder] = None,
 ) -> Dict[str, Any]:
     """
     Read a logged msgdict and count the total input tokens fed to the LLM for each rerun.
+    The first prompt in each rerun is counted in full. Each subsequent prompt only
+    counts the suffix beyond the token prefix shared with the previous prompt.
 
     Args:
         msgdict: The loaded JSON log dictionary.
@@ -97,7 +110,12 @@ def count_rerun_input_tokens(
     Returns:
         A dict with per-run totals and per-epoch breakdowns.
     """
-    count_tokens = token_counter if token_counter is not None else _load_token_counter(mkey)
+    if token_counter is None or token_encoder is None:
+        default_counter, default_encoder = _load_token_counter(mkey)
+        if token_counter is None:
+            token_counter = default_counter
+        if token_encoder is None:
+            token_encoder = default_encoder
     results: Dict[str, Any] = {"model": mkey, "runs": {}, "grand_total_tokens": 0}
 
     for run_key, run_value in msgdict.items():
@@ -106,6 +124,7 @@ def count_rerun_input_tokens(
 
         run_total = 0
         epoch_breakdown: Dict[str, Any] = {}
+        previous_prompt_tokens: Optional[List[int]] = None
 
         for epoch_key, epoch_value in run_value.items():
             if not isinstance(epoch_value, dict):
@@ -114,18 +133,35 @@ def count_rerun_input_tokens(
             logs = epoch_value.get("Logs", [])
             epoch_total = 0
             prompt_count = 0
+            cached_prefix_tokens = 0
 
             if isinstance(logs, list):
                 for log_item in logs:
                     prompt = _extract_prompt_from_log(log_item)
                     if prompt is None:
                         continue
-                    epoch_total += count_tokens(prompt)
+                    prompt_tokens = token_encoder(prompt)
+                    if previous_prompt_tokens is None:
+                        common_prefix = 0
+                        incremental_tokens = token_counter(prompt)
+                    else:
+                        prefix_limit = min(len(previous_prompt_tokens), len(prompt_tokens))
+                        common_prefix = 0
+                        while (
+                            common_prefix < prefix_limit
+                            and previous_prompt_tokens[common_prefix] == prompt_tokens[common_prefix]
+                        ):
+                            common_prefix += 1
+                        incremental_tokens = len(prompt_tokens) - common_prefix
+                    epoch_total += incremental_tokens
+                    cached_prefix_tokens += common_prefix
                     prompt_count += 1
+                    previous_prompt_tokens = prompt_tokens
 
             epoch_breakdown[epoch_key] = {
                 "prompt_count": prompt_count,
                 "total_tokens": epoch_total,
+                "cached_prefix_tokens": cached_prefix_tokens,
             }
             run_total += epoch_total
 
@@ -197,12 +233,18 @@ def _compute_success_rate(summary: Dict[str, Any]) -> float:
 def summarize_scaleup_log_for_pareto(
     log_path: str,
     mkey: str = "gpt-oss",
-    token_counter: Optional[Callable[[str], int]] = None,
+    token_counter: Optional[TokenCounter] = None,
+    token_encoder: Optional[TokenEncoder] = None,
 ) -> Dict[str, Any]:
     with open(log_path, "r", encoding="utf-8") as f:
         msgdict = json.load(f)
 
-    token_stats = count_rerun_input_tokens(msgdict, mkey=mkey, token_counter=token_counter)
+    token_stats = count_rerun_input_tokens(
+        msgdict,
+        mkey=mkey,
+        token_counter=token_counter,
+        token_encoder=token_encoder,
+    )
     run_totals = [
         run_stats["total_tokens"]
         for run_stats in token_stats["runs"].values()
@@ -427,6 +469,15 @@ def _plot_depth_overlay(
     }
     plotted_points: List[Dict[str, Any]] = []
     plotted_depths = set()
+    points_by_depth: Dict[int, List[Dict[str, Any]]] = {}
+
+    for method_key, _, _, _ in method_specs:
+        for point in per_depth_points_by_method.get(method_key, []):
+            depth = point["depth"]
+            points_by_depth.setdefault(depth, []).append({
+                **point,
+                "method_key": method_key,
+            })
 
     for method_key, _, label, color in method_specs:
         method_points = sorted(
@@ -435,14 +486,6 @@ def _plot_depth_overlay(
         )
         if not method_points:
             continue
-
-        ax.plot(
-            [point["avg_total_tokens"] for point in method_points],
-            [point["success_rate"] for point in method_points],
-            color=color,
-            linewidth=1.3,
-            alpha=0.7,
-        )
 
         for point in method_points:
             depth = point["depth"]
@@ -467,6 +510,17 @@ def _plot_depth_overlay(
                 color=color,
             )
             plotted_points.append(point)
+
+    for depth, depth_points in sorted(points_by_depth.items()):
+        depth_front = _pareto_front(depth_points)
+        if len(depth_front) >= 2:
+            ax.plot(
+                [point["avg_total_tokens"] for point in depth_front],
+                [point["success_rate"] for point in depth_front],
+                color="dimgray",
+                linewidth=1.2,
+                alpha=0.65,
+            )
 
     pareto_points = _pareto_front(plotted_points)
     if pareto_points:
@@ -1021,7 +1075,7 @@ def plot_pareto(
     metadata = _load_scaleup_regex_metadata(regex_list_path, task_type)
     depth_map = metadata["depth_map"]
     available_depths = metadata["depths"]
-    token_counter = _load_token_counter(mkey)
+    token_counter, token_encoder = _load_token_counter(mkey)
     task_label = _task_label(task_type)
     method_specs = _build_method_specs(logs_root)
 
@@ -1033,6 +1087,7 @@ def plot_pareto(
                 log_path,
                 mkey=mkey,
                 token_counter=token_counter,
+                token_encoder=token_encoder,
             )
             point["depth"] = depth_map.get(point["regex"])
             points.append(point)
