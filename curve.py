@@ -4,7 +4,7 @@ import glob
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.colors import Normalize
+from matplotlib.colors import Normalize, TwoSlopeNorm
 from matplotlib.lines import Line2D
 from matplotlib.ticker import FuncFormatter
 import matplotlib as mpl
@@ -288,6 +288,41 @@ def summarize_scaleup_log_for_solve_rate(log_path: str) -> Dict[str, Any]:
         "success_rate": success_rate,
         "success_count": success_count,
         "total_runs": total_runs,
+    }
+
+
+def summarize_scaleup_log_for_ce_balance(log_path: str) -> Dict[str, Any]:
+    with open(log_path, "r", encoding="utf-8") as f:
+        msgdict = json.load(f)
+
+    summary = msgdict.get("summary", {})
+    runs: List[Dict[str, Any]] = []
+    for run_key, run_info in summary.items():
+        if not str(run_key).startswith("run-") or not isinstance(run_info, dict):
+            continue
+
+        final_num_samples = run_info.get("final_num_samples", {})
+        if not isinstance(final_num_samples, dict):
+            continue
+
+        positive = int(final_num_samples.get("positive", 0))
+        negative = int(final_num_samples.get("negative", 0))
+        total = int(final_num_samples.get("total", positive + negative))
+        positive_ratio = (positive / total) if total > 0 else None
+
+        runs.append({
+            "run_key": run_key,
+            "final_accuracy": float(run_info.get("final_accuracy", 0.0)),
+            "positive": positive,
+            "negative": negative,
+            "total": total,
+            "positive_ratio": positive_ratio,
+        })
+
+    return {
+        "path": log_path,
+        "regex": _extract_regex_from_log_path(log_path),
+        "runs": runs,
     }
 
 
@@ -1019,7 +1054,7 @@ def plot_median_samples_heatmap(
     vmin = float(min(finite_values)) if finite_values else 0.0
 
     fig, axes = plt.subplots(1, 3, figsize=(15.5, 4.8), constrained_layout=True)
-    cmap = plt.colormaps.get_cmap("YlOrRd_r")
+    cmap = plt.colormaps.get_cmap("YlOrRd")
     images = []
 
     for ax, (method_key, _, label, _) in zip(axes, method_specs):
@@ -1063,6 +1098,82 @@ def plot_median_samples_heatmap(
 
     plt.savefig(os.path.join(outdir, "median_samples_heatmap_compare.png"), bbox_inches="tight")
     plt.close()
+
+    agentic_key = "ce_agentic"
+    single_key = "ce_non_agentic"
+    if agentic_key in z_values_by_method and single_key in z_values_by_method:
+        z_agentic = z_values_by_method[agentic_key]
+        z_single = z_values_by_method[single_key]
+
+        diff = np.full_like(z_agentic, np.nan, dtype=float)
+        valid_mask = np.isfinite(z_agentic) & np.isfinite(z_single)
+        diff[valid_mask] = z_agentic[valid_mask] - z_single[valid_mask]
+
+        diff_finite = diff[np.isfinite(diff)]
+        if diff_finite.size > 0:
+            diff_absmax = float(np.max(np.abs(diff_finite)))
+        else:
+            diff_absmax = 1.0
+        diff_absmax = max(diff_absmax, 1.0)
+        diff_norm = TwoSlopeNorm(vmin=-diff_absmax, vcenter=0.0, vmax=diff_absmax)
+
+        fig, axes = plt.subplots(1, 3, figsize=(15.5, 4.8), constrained_layout=True)
+        compare_specs = [
+            (agentic_key, "ce/reg/agentic_reflection", cmap, z_agentic, Normalize(vmin=vmin, vmax=vmax)),
+            (single_key, "ce/reg/single_inference", cmap, z_single, Normalize(vmin=vmin, vmax=vmax)),
+            ("diff", "agentic - single", plt.colormaps.get_cmap("RdBu_r"), diff, diff_norm),
+        ]
+        images = []
+
+        for ax, (_, title, cur_cmap, z, cur_norm) in zip(axes, compare_specs):
+            if title == "agentic - single":
+                z_plot = np.where(np.isfinite(z), z, 0.0)
+            else:
+                z_plot = np.where(np.isfinite(z), z, vmax)
+            image = ax.imshow(
+                z_plot,
+                origin="lower",
+                aspect="auto",
+                cmap=cur_cmap,
+                norm=cur_norm,
+            )
+            images.append(image)
+
+            ax.set_title(title)
+            ax.set_xlabel("#States")
+            ax.set_ylabel("StarDepth")
+            ax.set_xticks(range(len(available_states)))
+            ax.set_xticklabels(available_states)
+            ax.set_yticks(range(len(available_depths)))
+            ax.set_yticklabels(available_depths)
+
+            for row_idx, depth in enumerate(available_depths):
+                for col_idx, state in enumerate(available_states):
+                    value = z[row_idx, col_idx]
+                    if np.isfinite(value):
+                        text = f"{value:.0f}"
+                    else:
+                        text = "NA"
+                    ax.text(
+                        col_idx,
+                        row_idx,
+                        text,
+                        ha="center",
+                        va="center",
+                        fontsize=8,
+                        color="black",
+                    )
+
+        cbar_main = fig.colorbar(images[0], ax=axes[:2], shrink=0.85, pad=0.02)
+        cbar_main.set_label("Median #Solved Samples")
+        cbar_diff = fig.colorbar(images[2], ax=[axes[2]], shrink=0.85, pad=0.02)
+        cbar_diff.set_label("Median Sample Difference")
+
+        plt.savefig(
+            os.path.join(outdir, "median_samples_heatmap_agentic_vs_single.png"),
+            bbox_inches="tight",
+        )
+        plt.close()
 
     return all_points_by_method
 
@@ -1136,6 +1247,218 @@ def plot_pareto(
     ax.set_title(f"Pareto Front for {task_label} Scaleup (all depths together)")
     plt.tight_layout()
     plt.savefig(os.path.join(outdir, "pareto_depth_overlay.png"), dpi=300)
+    plt.close()
+
+    return all_points_by_method
+
+
+def plot_ce_composition_heatmaps(
+    logs_root: str, regex_list_path: str, outdir: str, task_type: str = "simplyrx",
+) -> Dict[str, List[Dict[str, Any]]]:
+    os.makedirs(outdir, exist_ok=True)
+
+    metadata = _load_scaleup_regex_metadata(regex_list_path, task_type)
+    depth_map = metadata["depth_map"]
+    available_depths = metadata["depths"]
+    task_label = _task_label(task_type)
+    method_specs = [
+        spec for spec in _build_method_specs(logs_root)
+        if spec[0] in {"ce_agentic", "ce_non_agentic"}
+    ]
+    ratio_bin_edges = np.linspace(0.0, 1.0, 6)
+    ratio_bin_labels = [
+        f"{ratio_bin_edges[i]:.1f}-{ratio_bin_edges[i + 1]:.1f}"
+        for i in range(len(ratio_bin_edges) - 1)
+    ]
+
+    all_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
+    for method_key, method_dir, label, color in method_specs:
+        method_points: List[Dict[str, Any]] = []
+        for log_path in sorted(glob.glob(os.path.join(method_dir, "*.json"))):
+            log_summary = summarize_scaleup_log_for_ce_balance(log_path)
+            depth = depth_map.get(log_summary["regex"])
+            for run_info in log_summary["runs"]:
+                if run_info["positive_ratio"] is None:
+                    continue
+                point = {
+                    "regex": log_summary["regex"],
+                    "depth": depth,
+                    "positive_ratio": run_info["positive_ratio"],
+                    "final_accuracy": run_info["final_accuracy"],
+                    "positive": run_info["positive"],
+                    "negative": run_info["negative"],
+                    "total": run_info["total"],
+                }
+                method_points.append(point)
+        all_points_by_method[method_key] = method_points
+
+    fig, axes = plt.subplots(1, len(method_specs), figsize=(10.8, 4.8), constrained_layout=True)
+    if len(method_specs) == 1:
+        axes = [axes]
+
+    cmap = plt.colormaps.get_cmap("YlGnBu")
+    images = []
+
+    for ax, (method_key, _, label, _) in zip(axes, method_specs):
+        z = np.full((len(available_depths), len(ratio_bin_labels)), np.nan, dtype=float)
+        counts = np.zeros_like(z, dtype=int)
+
+        for row_idx, depth in enumerate(available_depths):
+            for col_idx in range(len(ratio_bin_labels)):
+                left = ratio_bin_edges[col_idx]
+                right = ratio_bin_edges[col_idx + 1]
+                bucket = [
+                    point["final_accuracy"]
+                    for point in all_points_by_method.get(method_key, [])
+                    if point.get("depth") == depth
+                    and point.get("positive_ratio") is not None
+                    and (
+                        (left <= point["positive_ratio"] < right)
+                        or (
+                            col_idx == len(ratio_bin_labels) - 1
+                            and left <= point["positive_ratio"] <= right
+                        )
+                    )
+                ]
+                if bucket:
+                    z[row_idx, col_idx] = float(np.mean(bucket))
+                    counts[row_idx, col_idx] = len(bucket)
+
+        z_plot = np.where(np.isfinite(z), z, 0.0)
+        image = ax.imshow(
+            z_plot,
+            origin="lower",
+            aspect="auto",
+            cmap=cmap,
+            vmin=0.0,
+            vmax=1.0,
+        )
+        images.append(image)
+
+        ax.set_title(label)
+        ax.set_xlabel("Positive CE Ratio")
+        ax.set_ylabel("StarDepth")
+        ax.set_xticks(range(len(ratio_bin_labels)))
+        ax.set_xticklabels(ratio_bin_labels, rotation=25, ha="right")
+        ax.set_yticks(range(len(available_depths)))
+        ax.set_yticklabels(available_depths)
+
+        for row_idx, depth in enumerate(available_depths):
+            for col_idx, _ in enumerate(ratio_bin_labels):
+                value = z[row_idx, col_idx]
+                if np.isfinite(value):
+                    text = f"{value:.2f}\n(n={counts[row_idx, col_idx]})"
+                else:
+                    text = "NA"
+                ax.text(
+                    col_idx,
+                    row_idx,
+                    text,
+                    ha="center",
+                    va="center",
+                    fontsize=7.5,
+                    color="black",
+                )
+
+    fig.suptitle(f"Final Accuracy by Positive Counterexample Ratio ({task_label})", fontsize=13)
+    cbar = fig.colorbar(images[-1], ax=axes, shrink=0.85, pad=0.02)
+    cbar.set_label("Mean Final Accuracy")
+    plt.savefig(os.path.join(outdir, "ce_positive_ratio_heatmap.png"), dpi=300, bbox_inches="tight")
+    plt.close()
+
+    all_counts = [
+        max(point["positive"], point["negative"])
+        for points in all_points_by_method.values()
+        for point in points
+    ]
+    count_axis_max = int(np.percentile(all_counts, 90)) if all_counts else 0
+    count_axis_max = max(100, int(np.ceil(count_axis_max / 10.0) * 10))
+    count_bin_step = max(10, int(np.ceil(count_axis_max / 14 / 5.0) * 5))
+    count_bin_edges = np.arange(0, count_axis_max + count_bin_step, count_bin_step)
+    if len(count_bin_edges) < 2:
+        count_bin_edges = np.array([0, max(count_bin_step, 1)])
+    count_bin_labels = [
+        f"{int(count_bin_edges[i])}-{int(count_bin_edges[i + 1])}"
+        for i in range(len(count_bin_edges) - 1)
+    ]
+
+    fig, axes = plt.subplots(1, len(method_specs), figsize=(10.8, 4.8), constrained_layout=True)
+    if len(method_specs) == 1:
+        axes = [axes]
+
+    images = []
+    for ax, (method_key, _, label, _) in zip(axes, method_specs):
+        z = np.full((len(count_bin_labels), len(count_bin_labels)), np.nan, dtype=float)
+        counts = np.zeros_like(z, dtype=int)
+
+        for pos_idx in range(len(count_bin_labels)):
+            pos_left = count_bin_edges[pos_idx]
+            pos_right = count_bin_edges[pos_idx + 1]
+            for neg_idx in range(len(count_bin_labels)):
+                neg_left = count_bin_edges[neg_idx]
+                neg_right = count_bin_edges[neg_idx + 1]
+                bucket = [
+                    point["final_accuracy"]
+                    for point in all_points_by_method.get(method_key, [])
+                    if (
+                        (pos_left <= point["positive"] < pos_right)
+                        or (
+                            pos_idx == len(count_bin_labels) - 1
+                            and pos_left <= point["positive"] <= pos_right
+                        )
+                    )
+                    and (
+                        (neg_left <= point["negative"] < neg_right)
+                        or (
+                            neg_idx == len(count_bin_labels) - 1
+                            and neg_left <= point["negative"] <= neg_right
+                        )
+                    )
+                ]
+                if bucket:
+                    z[pos_idx, neg_idx] = float(np.mean(bucket))
+                    counts[pos_idx, neg_idx] = len(bucket)
+
+        z_plot = np.where(np.isfinite(z), z, 0.0)
+        image = ax.imshow(
+            z_plot,
+            origin="lower",
+            aspect="auto",
+            cmap=cmap,
+            vmin=0.0,
+            vmax=1.0,
+        )
+        images.append(image)
+
+        ax.set_title(label)
+        ax.set_xlabel("Negative CE Count")
+        ax.set_ylabel("Positive CE Count")
+        ax.set_xticks(range(len(count_bin_labels)))
+        ax.set_xticklabels(count_bin_labels, rotation=35, ha="right")
+        ax.set_yticks(range(len(count_bin_labels)))
+        ax.set_yticklabels(count_bin_labels)
+
+        for pos_idx, _ in enumerate(count_bin_labels):
+            for neg_idx, _ in enumerate(count_bin_labels):
+                value = z[pos_idx, neg_idx]
+                if np.isfinite(value):
+                    text = f"{value:.2f}\n(n={counts[pos_idx, neg_idx]})"
+                else:
+                    text = "NA"
+                ax.text(
+                    neg_idx,
+                    pos_idx,
+                    text,
+                    ha="center",
+                    va="center",
+                    fontsize=7.0,
+                    color="black",
+                )
+
+    fig.suptitle(f"Final Accuracy by Positive/Negative Counterexample Counts ({task_label})", fontsize=13)
+    cbar = fig.colorbar(images[-1], ax=axes, shrink=0.85, pad=0.02)
+    cbar.set_label("Mean Final Accuracy")
+    plt.savefig(os.path.join(outdir, "ce_count_balance_heatmap.png"), dpi=300, bbox_inches="tight")
     plt.close()
 
     return all_points_by_method
@@ -1265,6 +1588,7 @@ def parse_args():
         default="pareto",
         choices=[
             "pareto",
+            "ce_composition_heatmaps",
             "solve_rate_by_stardepth",
             "solve_rate_by_states",
             "mean_samples_by_stardepth",
@@ -1292,6 +1616,13 @@ if __name__ == "__main__":
             regex_list_path=args.regex_list_path,
             outdir=args.outdir,
             mkey=args.mkey,
+            task_type=args.task_type,
+        )
+    elif args.plot_type == "ce_composition_heatmaps":
+        plot_ce_composition_heatmaps(
+            logs_root=args.logs_root,
+            regex_list_path=args.regex_list_path,
+            outdir=args.outdir,
             task_type=args.task_type,
         )
     elif args.plot_type == "solve_rate_by_stardepth":
