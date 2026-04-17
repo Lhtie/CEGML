@@ -191,8 +191,8 @@ Training Data (Each line has one input-output pair separated by comma):
 SIMPLYRX_REGULARIZATION = """
 CONSTRAINTS
 - Prefer simpler, more general regexes while staying consistent with all datapoints.
-- Total regex length (ignoring spaces) must be ≤ 50 characters.
-- Nesting depth of Kleene stars must be ≤ 3.
+- Total regex length (ignoring spaces) must be ≤ 60 characters.
+- Nesting depth of Kleene stars must be ≤ 4.
 - Use only symbols that appear in the training data (eg. a, b, c, epsilon).
 
 """
@@ -200,8 +200,8 @@ CONSTRAINTS
 EXTRX_REGULARIZATION = """
 CONSTRAINTS
 - Prefer simpler, more general regexes while staying consistent with all datapoints.
-- Total regex length (ignoring spaces) must be ≤ 50 characters.
-- Nesting depth of Kleene stars (*, +, ?) must be ≤ 3.
+- Total regex length (ignoring spaces) must be ≤ 150 characters.
+- Nesting depth of Kleene stars (*, +, ?) must be ≤ 2.
 - Use only symbols that appear in the alphabet (except metacharacters such as (), |, *, +, ?, []).
 """
 

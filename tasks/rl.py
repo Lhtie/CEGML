@@ -376,7 +376,7 @@ class ExtRegularLanguage(RegularLanguage):
 
 if __name__ == "__main__":
     nl = ExtRegularLanguage(
-        "([A-Za-z0-9#]*moot[A-Za-z0-9#]*)&([A-Za-z0-9#]*[A-Za-z]{6,}[A-Za-z0-9#]*){3,}",
+        "([A-Za-z0-9#]*(([A-Za-z0-9#]*G)&([A-Za-z]+))[A-Za-z0-9#]*){5}",
         max_length=32,
         alphabet="[A-Za-z0-9#]",
         debug=True,
@@ -392,3 +392,15 @@ if __name__ == "__main__":
             next_states = dfa._transition_function(state, symbol)
             if len(next_states) > 0:
                 print(f"  {state_map[state]} --{symbol}--> {list(state_map[s] for s in next_states)}")
+                
+    from teacher import Teacher
+    teacher = Teacher(nl)
+    msg = {}
+    msg["Prediction"] = "~([A-Za-z0-9#]{0,22}|(#[A-Za-z0-9#]*){3})"
+    _, fst_gt, _ = nl.regex_to_pynini_via_pyformlang(nl.regex_str)
+    msg = teacher.judge_regex(
+        msg=msg,
+        fst_gt=fst_gt,
+        train_ex=[], train_labels=[], eval_ex=[], eval_labels=[]
+    )
+    print(msg)
