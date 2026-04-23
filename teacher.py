@@ -162,7 +162,7 @@ class Teacher:
         self, msg, fst_gt,
         train_ex, train_labels, eval_ex, eval_labels,
         sigma=None,
-        timeout_seconds=30,
+        timeout_seconds=10,
     ):
         def score_examples(dfa_pred, examples, labels):
             if len(examples) == 0:
