@@ -18,11 +18,12 @@ MODEL_PATHS = {
     "ds-chat": "deepseek-chat",
     "ds-reasoner": "deepseek-reasoner",
     "qw-dsr1": "DeepSeek-R1-Distill-Qwen-32B",
+    "qw3": "Qwen3-8B", 
     "gm2.5": "gemini-2.5-pro",
     "cl35": "claude-3-5",
     "gpt3.5": "gpt-3.5-turbo",
     "gpt4": "gpt-4o",
-    "gpt5": "gpt-5",
+    "gpt5": "gpt-5.4",
     "gpt-oss": "gpt-oss-120b",
 }
 
@@ -128,7 +129,7 @@ def _run_model(mkey, model, tokenizer, msg, temp):
         if mkey.startswith(("gpt5", "gpt-5")):
             outputs = model(inputs, max_completion_tokens=32768)
         else:
-            outputs = model(inputs, max_tokens=8192, temperature=temp)
+            outputs = model(inputs, max_tokens=32768, temperature=temp)
         res = outputs.choices[0].message.content
         print(f"usage: {outputs.usage}")
         return res
