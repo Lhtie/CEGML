@@ -1,6 +1,7 @@
 import random
 import numpy as np
 import signal
+import multiprocessing as mp
 from contextlib import contextmanager
 from collections import deque
 from pyformlang.finite_automaton import State, Symbol, DeterministicFiniteAutomaton
@@ -28,6 +29,42 @@ def time_limit(seconds):
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, previous_handler)
+
+
+def _judge_regex_worker(
+    queue,
+    task,
+    msg,
+    fst_gt,
+    train_ex,
+    train_labels,
+    eval_ex,
+    eval_labels,
+    sigma,
+):
+    def score_examples(dfa_pred, examples, labels):
+        if len(examples) == 0:
+            return None
+        return sum(
+            [int(int(dfa_accepts_ex(dfa_pred, ex)) == label) for ex, label in zip(examples, labels)]
+        ) / len(examples)
+
+    pred = msg.get("Prediction")
+    try:
+        if sigma is None:
+            dfa_pred, fst_pred, sigma_cur = task.regex_to_pynini_via_pyformlang(pred)
+        else:
+            dfa_pred, fst_pred, sigma_cur = task.regex_to_pynini_via_pyformlang(pred, sigma)
+
+        eq, witness = task.equivalent_and_witness(fst_gt, fst_pred, sigma_cur)
+        result = dict(msg)
+        result["Equivalent"] = eq
+        result["Witness"] = witness
+        result["scoreTrainSet"] = score_examples(dfa_pred, train_ex, train_labels)
+        result["scoreEvalSet"] = score_examples(dfa_pred, eval_ex, eval_labels)
+        queue.put(("ok", result))
+    except Exception as e:
+        queue.put(("error", str(e)))
 
 class Teacher:
     def __init__(self, task):
@@ -164,32 +201,68 @@ class Teacher:
         sigma=None,
         timeout_seconds=10,
     ):
-        def score_examples(dfa_pred, examples, labels):
-            if len(examples) == 0:
-                return None
-            return sum(
-                [int(int(dfa_accepts_ex(dfa_pred, ex)) == label) for ex, label in zip(examples, labels)]
-            ) / len(examples)
-
-        pred = msg.get("Prediction")
         try:
-            with time_limit(timeout_seconds):
-                if sigma is None:
-                    dfa_pred, fst_pred, sigma_cur = self.task.regex_to_pynini_via_pyformlang(pred)
-                else:
-                    dfa_pred, fst_pred, sigma_cur = self.task.regex_to_pynini_via_pyformlang(pred, sigma)
+            if timeout_seconds is not None and timeout_seconds > 0:
+                try:
+                    ctx = mp.get_context("fork")
+                except ValueError:
+                    ctx = None
 
-                eq, witness = self.task.equivalent_and_witness(fst_gt, fst_pred, sigma_cur)
-                # diff_ratio = self.task.diff_ratio(
-                #     fst_gt, fst_pred, sigma_cur, k=self.task.max_length
-                # )
-                msg["Equivalent"] = eq
-                msg["Witness"] = witness
-                # msg["diffRatio"] = diff_ratio
-                msg["scoreTrainSet"] = score_examples(dfa_pred, train_ex, train_labels)
-                msg["scoreEvalSet"] = score_examples(dfa_pred, eval_ex, eval_labels)
+                if ctx is not None:
+                    print(f"Using multiprocessing context: {ctx.get_start_method()}")
+                    queue = ctx.Queue()
+                    proc = ctx.Process(
+                        target=_judge_regex_worker,
+                        args=(
+                            queue,
+                            self.task, msg, fst_gt,
+                            train_ex, train_labels,
+                            eval_ex, eval_labels,
+                            sigma,
+                        ),
+                    )
+                    proc.start()
+                    proc.join(timeout_seconds)
+                    if proc.is_alive():
+                        proc.terminate()
+                        proc.join()
+                        raise JudgeTimeoutError(f"judge_regex timed out after {timeout_seconds}s")
+                    if not queue.empty():
+                        status, payload = queue.get()
+                        if status == "ok":
+                            msg.update(payload)
+                        else:
+                            raise RuntimeError(payload)
+                    elif proc.exitcode not in (0, None):
+                        raise RuntimeError(f"judge_regex worker exited with code {proc.exitcode}")
+                    return msg
+
+            with time_limit(timeout_seconds):
+                _judge_regex_worker(
+                    queue=_InlineQueue(msg),
+                    task=self.task,
+                    msg=msg,
+                    fst_gt=fst_gt,
+                    train_ex=train_ex,
+                    train_labels=train_labels,
+                    eval_ex=eval_ex,
+                    eval_labels=eval_labels,
+                    sigma=sigma,
+                )
         except Exception as e:
             msg["Error"] = f"Error compiling regex: {e}"
             print(msg["Error"])
 
         return msg
+
+
+class _InlineQueue:
+    def __init__(self, target_msg):
+        self.target_msg = target_msg
+
+    def put(self, item):
+        status, payload = item
+        if status == "ok":
+            self.target_msg.update(payload)
+        else:
+            raise RuntimeError(payload)

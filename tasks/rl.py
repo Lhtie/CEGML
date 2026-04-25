@@ -396,7 +396,7 @@ if __name__ == "__main__":
     from teacher import Teacher
     teacher = Teacher(nl)
     msg = {}
-    msg["Prediction"] = "~([A-Za-z0-9#]{0,22}|(#[A-Za-z0-9#]*){3})"
+    msg["Prediction"] = "([A-Za-z0-9#]{23,}&~([A-Za-z0-9#]*0#[A-Za-z0-9#]*|[A-Za-z0-9#]*#))"
     _, fst_gt, _ = nl.regex_to_pynini_via_pyformlang(nl.regex_str)
     msg = teacher.judge_regex(
         msg=msg,

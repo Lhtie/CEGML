@@ -597,6 +597,7 @@ def main(argv=None):
 
     msgdict, finish_states = {}, {}
     msgdict["summary"] = None
+    print(f"Starting training for regex: {args.regex} with model {args.mkey}")
     for runid in range(args.rerun):
         print(f"=== Rerun {runid} ===")
         msgdict[f"run-{runid}"] = {}
