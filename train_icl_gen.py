@@ -382,6 +382,13 @@ def build_retry_prompt(task, msg, train_ex, train_labels, max_examples=16):
         feedback_note="; ".join(feedback) if feedback else None,
     ), retry_done_score
 
+
+def uses_reflection_prompt(reasoning_mode):
+    return reasoning_mode in {"agentic_reflection", "agentic_no_repair_loop"}
+
+def uses_repair_loop(reasoning_mode):
+    return reasoning_mode in {"agentic_reflection", "agentic_no_reflection"}
+
 def run_episode(
     *,
     config,
@@ -415,7 +422,7 @@ def run_episode(
                     regex_gen=current_guess,
                     clustered=config.ce_clustered,
                 )
-                if config.reasoning_mode == "agentic_reflection":
+                if uses_reflection_prompt(config.reasoning_mode):
                     reflection_prompt = build_reflection_prompt(
                         current_guess_reasoning,
                         current_guess,
@@ -444,7 +451,7 @@ def run_episode(
         best_retry_msg = None
         for retry_idx in range(config.retries):
             iter_prompt_kwargs = dict(prompt_kwargs)
-            if config.reasoning_mode == "agentic_reflection":
+            if uses_reflection_prompt(config.reasoning_mode) or uses_repair_loop(config.reasoning_mode):
                 iter_prompt_kwargs["agentic_reflection_instr"] = (
                     reflection_prompt + retry_prompt
                 )
@@ -468,7 +475,7 @@ def run_episode(
             if on_retry is not None:
                 on_retry(epoch, msgs)
             
-            if (config.reasoning_mode == "agentic_reflection"):
+            if uses_repair_loop(config.reasoning_mode):
                 retry_prompt, retry_done_score = build_retry_prompt(
                     task=task,
                     msg=msg,
@@ -480,6 +487,9 @@ def run_episode(
                     best_retry_msg = msg
                 if retry_done_score >= 1.0:
                     break
+            else:
+                best_retry_msg = None
+                break
             if msg.get("Equivalent"):
                 break
 
@@ -540,7 +550,12 @@ def main(argv=None):
         "--reasoning_mode",
         type=str,
         default="agentic_reflection",
-        choices=["single_inference", "agentic_reflection"],
+        choices=[
+            "single_inference",
+            "agentic_reflection",
+            "agentic_no_reflection",
+            "agentic_no_repair_loop",
+        ],
     )
     parser.add_argument("--indir", type=str, default="datasets")
     parser.add_argument("--outdir", type=str, default="logs/opt_prompt")
