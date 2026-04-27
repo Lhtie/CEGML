@@ -376,7 +376,7 @@ class ExtRegularLanguage(RegularLanguage):
 
 if __name__ == "__main__":
     nl = ExtRegularLanguage(
-        "([A-Za-z0-9#]*(([A-Za-z0-9#]*G)&([A-Za-z]+))[A-Za-z0-9#]*){5}",
+        "([A-Za-z0-9#]*(([A-Za-z]+)&([A-Za-z]{0,5}))[A-Za-z0-9#]*){5,}",
         max_length=32,
         alphabet="[A-Za-z0-9#]",
         debug=True,
@@ -396,7 +396,7 @@ if __name__ == "__main__":
     from teacher import Teacher
     teacher = Teacher(nl)
     msg = {}
-    msg["Prediction"] = "([A-Za-z0-9#]{23,}&~([A-Za-z0-9#]*0#[A-Za-z0-9#]*|[A-Za-z0-9#]*#))"
+    msg["Prediction"] = "([A-Za-z0-9#]{20,})&~([A-Za-z0-9#]*#[A-Za-z0-9#]*#[A-Za-z0-9#]*#[A-Za-z0-9#]*)"
     _, fst_gt, _ = nl.regex_to_pynini_via_pyformlang(nl.regex_str)
     msg = teacher.judge_regex(
         msg=msg,
@@ -404,3 +404,12 @@ if __name__ == "__main__":
         train_ex=[], train_labels=[], eval_ex=[], eval_labels=[]
     )
     print(msg)
+    train_ex, train_labels = teacher.generate_counterexamples(
+        bs=250,
+        regex_gt=nl.regex_str,
+        regex_gen=msg["Prediction"],
+        clustered=True
+    )
+    print(f"Generated {len(train_ex)} counterexamples:")
+    for ex in train_ex[:20]:
+        print(f"  {ex} (accepted by GT: {nl.accepts(ex)})")

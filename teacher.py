@@ -66,6 +66,32 @@ def _judge_regex_worker(
     except Exception as e:
         queue.put(("error", str(e)))
 
+
+def _generate_counterexamples_worker(
+    queue,
+    task,
+    bs,
+    regex_gt,
+    regex_gen,
+    clustered,
+):
+    try:
+        dfa_gt, fst_gt, sigma = task.regex_to_pynini_via_pyformlang(regex_gt)
+        dfa_gen, fst_gen, _ = task.regex_to_pynini_via_pyformlang(regex_gen, sigma)
+
+        if clustered:
+            ce_pos = task.k_witnesses_traverse(dfa_gt, dfa_gen, bs // 2)
+            ce_neg = task.k_witnesses_traverse(dfa_gen, dfa_gt, bs // 2)
+        else:
+            ce_pos = task.k_witnesses_sample(dfa_gt, dfa_gen, bs // 2)
+            ce_neg = task.k_witnesses_sample(dfa_gen, dfa_gt, bs // 2)
+
+        ce_x = ce_pos + ce_neg
+        ce_y = [1] * len(ce_pos) + [0] * len(ce_neg)
+        queue.put(("ok", (ce_x, ce_y)))
+    except Exception as e:
+        queue.put(("error", str(e)))
+
 class Teacher:
     def __init__(self, task):
         self.task = task
@@ -147,24 +173,45 @@ class Teacher:
                 ce_y += [int(gt)] + y
         return ce_x, ce_y
     
-    def generate_counterexamples(self, bs, regex_gt, regex_gen, clustered=False):
-        dfa_gt, fst_gt, sigma = self.task.regex_to_pynini_via_pyformlang(regex_gt)
-        dfa_gen, fst_gen, _ = self.task.regex_to_pynini_via_pyformlang(regex_gen, sigma)
+    def generate_counterexamples(self, bs, regex_gt, regex_gen, clustered=False, timeout_seconds=10):
+        if timeout_seconds is not None and timeout_seconds > 0:
+            try:
+                ctx = mp.get_context("fork")
+            except ValueError:
+                ctx = None
 
-        rate = self.task.diff_ratio(fst_gt, fst_gen, sigma, k=self.task.max_length)
-        if clustered:
-            ce_pos = self.task.k_witnesses_traverse(dfa_gt, dfa_gen, bs // 2)
-            ce_neg = self.task.k_witnesses_traverse(dfa_gen, dfa_gt, bs // 2)
-        else:
-            n = np.ceil(bs * rate / 2).astype(int)
-            ce_pos = self.task.k_witnesses_sample(dfa_gt, dfa_gen, n)
-            ce_neg = self.task.k_witnesses_sample(dfa_gen, dfa_gt, n)
-            
-        ce_x = ce_pos + ce_neg
-        ce_y = [1] * len(ce_pos) + [0] * len(ce_neg)
-        # print(f"Generated {len(ce_x)} counterexamples with diff ratio {rate:.4f}")
-        # print(f"Counterexamples: {ce_x}")
-        return ce_x, ce_y
+            if ctx is not None:
+                queue = ctx.Queue()
+                proc = ctx.Process(
+                    target=_generate_counterexamples_worker,
+                    args=(queue, self.task, bs, regex_gt, regex_gen, clustered),
+                )
+                proc.start()
+                proc.join(timeout_seconds)
+                if proc.is_alive():
+                    proc.terminate()
+                    proc.join()
+                    raise JudgeTimeoutError(f"generate_counterexamples timed out after {timeout_seconds}s")
+                if not queue.empty():
+                    status, payload = queue.get()
+                    if status == "ok":
+                        return payload
+                    raise RuntimeError(payload)
+                if proc.exitcode not in (0, None):
+                    raise RuntimeError(f"generate_counterexamples worker exited with code {proc.exitcode}")
+                raise RuntimeError("generate_counterexamples worker exited without returning a result")
+
+        with time_limit(timeout_seconds):
+            inline_queue = _ReturnQueue()
+            _generate_counterexamples_worker(
+                inline_queue,
+                self.task,
+                bs,
+                regex_gt,
+                regex_gen,
+                clustered,
+            )
+            return inline_queue.value
     
     def generate_posexamples(self, n, seq_len):
         final_states = list(self.task.dfa.final_states)
@@ -209,7 +256,6 @@ class Teacher:
                     ctx = None
 
                 if ctx is not None:
-                    print(f"Using multiprocessing context: {ctx.get_start_method()}")
                     queue = ctx.Queue()
                     proc = ctx.Process(
                         target=_judge_regex_worker,
@@ -264,5 +310,17 @@ class _InlineQueue:
         status, payload = item
         if status == "ok":
             self.target_msg.update(payload)
+        else:
+            raise RuntimeError(payload)
+
+
+class _ReturnQueue:
+    def __init__(self):
+        self.value = None
+
+    def put(self, item):
+        status, payload = item
+        if status == "ok":
+            self.value = payload
         else:
             raise RuntimeError(payload)
