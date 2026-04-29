@@ -18,7 +18,8 @@ MODEL_PATHS = {
     "ds-chat": "deepseek-chat",
     "ds-reasoner": "deepseek-reasoner",
     "qw-dsr1": "DeepSeek-R1-Distill-Qwen-32B",
-    "qw3": "Qwen3-8B", 
+    "qw3-8b": "Qwen/Qwen3-8B",
+    "qw3-235b": "Qwen/Qwen3-235B-A22B-fp8-tput",
     "gm2.5": "gemini-2.5-pro",
     "cl35": "claude-3-5",
     "gpt3.5": "gpt-3.5-turbo",
@@ -33,10 +34,18 @@ def is_vllm_model(mkey):
 def is_api_model(mkey):
     if is_vllm_model(mkey):
         return False
-    return mkey.startswith(("gpt", "ds", "gm", "cl"))
+    return mkey.startswith(("gpt", "ds", "gm", "cl", "qw3-235b"))
 
 def resolve_model_path(mkey):
     return MODEL_PATHS.get(mkey, mkey)
+
+def select_api_key(api_key, provider):
+    if isinstance(api_key, dict):
+        key = api_key.get(provider)
+        if not key:
+            raise ValueError(f"Missing API key for provider: {provider}")
+        return key
+    return api_key
 
 def load_model_and_tokenizer(mkey, api_key):
     mpath = resolve_model_path(mkey)
@@ -63,18 +72,29 @@ def load_model_and_tokenizer(mkey, api_key):
     if is_api_model(mkey):
         tokenizer = None
         if mkey.startswith("gpt"):
-            oai_client = OpenAI(api_key=api_key)
+            oai_client = OpenAI(api_key=select_api_key(api_key, "openai"))
             if mkey.startswith(("gpt3", "gpt4")):
                 tokenizer = tiktoken.encoding_for_model(mpath)
         elif mkey.startswith("ds"):
-            oai_client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+            oai_client = OpenAI(
+                api_key=select_api_key(api_key, "deepseek"),
+                base_url="https://api.deepseek.com",
+            )
         elif mkey.startswith("gm"):
             oai_client = OpenAI(
-                api_key=api_key,
+                api_key=select_api_key(api_key, "google"),
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
             )
         elif mkey.startswith("cl"):
-            oai_client = OpenAI(api_key=api_key, base_url="https://api.anthropic.com/v1")
+            oai_client = OpenAI(
+                api_key=select_api_key(api_key, "claude"),
+                base_url="https://api.anthropic.com/v1",
+            )
+        elif mkey.startswith("qw3-235b"):
+            oai_client = OpenAI(
+                api_key=select_api_key(api_key, "together"),
+                base_url="https://api.together.ai/v1",
+            )
         else:
             raise ValueError(f"Unsupported api model key: {mkey}")
 

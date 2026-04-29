@@ -12,234 +12,27 @@ from modeling.llm import is_vllm_model, load_model_and_tokenizer
 from tasks.rl import SimplyRegularLanguage, ExtRegularLanguage
 from learner import LearnerForICLGen
 from teacher import Teacher
-from curve import plot_loss_curve, plot_accuracy_curve
 from dataset import generate_dataset
 from keysecrets import api_key
 from tasks.utils import dfa_accepts_ex
-
-SIMPLYRX_PROMPT_TEMPLATE = """TASK
-You will be given labeled strings and must infer a single regular language that matches all positives (label 1) and rejects all negatives (label 0). Output a concise regex in pyformlang.regular_expression.Regex syntax.
-
-INPUT FORMAT
-- You receive a block titled “Training Data (Each line has one input-output pair separated by comma):”.
-- Each line is "<string>, <label>" where label ∈ {{1, 0}}. The string may be empty; an empty string appears as nothing before the comma (", 1") and represents epsilon.
-- The alphabet is exactly the set of characters appearing in the data (typically a, b, c). Do not introduce other symbols.
-{clustered_ce_instr}
-PYFORMLANG REGEX SYNTAX
-- Union: +
-- Concatenation: space-separated symbols (each symbol is a single character from the alphabet or the literal epsilon).
-- Kleene star: *
-- Parentheses are allowed for grouping; use them whenever you union multi-symbol sequences or need precedence control.
-- Spacing rules:
-  - Concatenation uses spaces between every symbol: "a b", not "ab".
-  - To union sequences, group them: "(a b c + a c c)".
-- Epsilon handling: Use the literal epsilon when needed; prefer satisfying epsilon via an existing Kleene star rather than "epsilon + ...", unless epsilon is explicitly required at the top level.
-- Do NOT use: | . ? [] {{}} anchors/lookarounds, multi-character tokens, or any symbol not present in the training data.
-
-INFERENCE STRATEGY
-1) Start/end constraints:
-   - Check if all positives start with a specific letter or set (e.g., all non-empty positives start with c). If so, encode a mandatory prefix, e.g., "c ..." or "(b + c) ...".
-   - Check for a forced suffix or final-block restriction (e.g., must end with b or a specific 2-letter tail). Place this outside any repeating block when needed.
-
-2) Length/modular and block structure:
-   - Look for fixed-length blocks repeated via "*".
-   - More generally:
-     - Use a star over a union of allowed blocks when strings can mix block types: "((block1) + (block2))*".
-     - If internal blocks allow more endings than the final block, use: "(InternalBlockUnion)* FinalRestrictedBlock".
-   - If a singleton positive (e.g., "b") exists alongside block-based strings, include it via a top-level union only if it cannot be captured by a prefix plus star (e.g., "c (...) *" already accepts "c" because the star can be epsilon).
-
-3) Union design: star-of-union vs union-of-stars
-   - If strings mix different block types within one string, prefer a star over a union of blocks: "((...)+(...))*".
-   - If each positive is formed by repeating exactly one fixed block with no mixing, a compact union of stars can be better: "(a b)* + (a c)* + (b c)*".
-
-4) Compactness tactics:
-   - Factor repeated substrings (e.g., "(a+b+c) a b c (...)").
-   - Use per-position unions like "(a+b)" or "(a+b+c)" instead of enumerating full strings.
-   - Factor common prefixes/suffixes within unions: "(a b c a b + a b c c b)" instead of duplicating.
-
-5) Handling epsilon:
-   - Accept epsilon only if explicitly required by the data.
-   - Prefer to obtain needed epsilon through an existing Kleene star (e.g., "c (block)*" accepts "c"; "(block)*" accepts epsilon). Use "epsilon +" only when unavoidable at top level (e.g., when the empty string is positive but cannot be included via a star elsewhere).
-
-6) Avoid over-generalization:
-   - Do not allow arbitrary middles like "(a+b+c)*" unless strictly supported by all positives and necessary to exclude negatives.
-   - Do not invent constraints not universally implied by positives.
-
-7) Quality checks before finalizing:
-   - Verify your regex accepts every 1-labeled string and rejects every 0-labeled string.
-   - Sanity-check near-misses from negatives (e.g., wrong start letter, wrong modular length, incomplete final block, mixing vs non-mixing).
-   - Re-check syntax: unions around multi-symbol sequences, spaces everywhere in concatenation, and only allowed symbols.
-
-{regularization_instr}
-{agentic_reflection_instr}
-OUTPUT FORMAT
-- First, provide 1-3 concise sentences explaining the observed structure (mandatory prefix/set, block size/pattern, modular length, final-block restriction, epsilon/singleton handling), wrapped in <reasoning> and </reasoning>, e.g.:
-  <reasoning>All positives start with c and then repeat 2-char blocks from a restricted set.</reasoning>
-- Then output ONLY the final regex wrapped in <ans> and </ans>, e.g.:
-  <ans>(a a* b)*</ans>
-
-Training Data (Each line has one input-output pair separated by comma):
-{0}
-"""
-
-EXTRX_SIGMA = "[A-Za-z0-9#]"
-EXTRX_PROMPT_TEMPLATE = """TASK
-You will be given labeled strings and must infer a single regular language that matches all positives (label 1) and rejects all negatives (label 0). Output a concise regex in our specified syntax (extended from pyformlang.regular_expression.PythonRegex).
-
-INPUT FORMAT
-- You receive a block titled “Training Data (Each line has one input-output pair separated by comma):”.
-- Each line is "<string>, <label>" where label ∈ {{1, 0}}. The string may be empty; an empty string appears as nothing before the comma (", 1") and represents epsilon.
-- The alphabet is fixed. Do not introduce other symbols.
-{clustered_ce_instr}
-EXT REGEX SYNTAX (Extended PythonRegex)
-
-Alphabet
-- The alphabet is fixed: Σ = {sigma}
-- No other characters may appear anywhere in the regex.
-- No escape sequences are supported. Do not use '\\' at all.
-Atomic forms
-1) Literal character: Any single symbol in Σ
-2) Character class:
-   - Syntax: [ ... ]
-   - Contents may use only:
-     * ranges like A-Z, 0-9
-     * an individual literal symbol
-Core operators (* are extended operators beyond PythonRegex)
-- Concatenation: implicit by adjacency
-  Example: ab means 'a' followed by 'b'
-- Union (OR): |
-  Example: a|b means 'a' or 'b'
-- Grouping: ( ... )
-  Parentheses define scope and precedence.
-- *Conjunction / intersection: &
-  Semantics: L(R1 & R2) = L(R1) ∩ L(R2)
-- *Negation / complement: ~(R)
-  Semantics: L(~(R)) = Σ* \\ L(R)
-  Negation must always be written with parentheses: ~( ... )
-Quantifiers
-Quantifiers apply to the immediately preceding atom or parenthesized group.
-- * : zero or more
-- + : one or more
-- ? : zero or one
-- {{n}} : exactly n repetitions (n is a nonnegative integer)
-- {{n,m}}: between n and m repetitions inclusive (0 <= n <= m)
-- {{n,}} : at least n repetitions, equivalent to “(E){{n}}(E)*”
-Associativity
-- Concatenation, &, and | are left-associative.
-- Parenthesize whenever there is ambiguity.
-Priority (from highest to lowest): Quantifiers, ~, Concatenation, &, |
-Prohibited constructs (must not appear)
-- Do not use '.' (dot). Use [A-Za-z0-9#] explicitly when you need Σ.
-- Do not use negated character classes [^...].
-- Do not use anchors ^ or $.
-- Do not use word boundary \\b.
-- Do not use lookarounds or backreferences.
-
-INFERENCE STRATEGY
-
-1) Start/end constraints:
-   - Check if all positives start with a specific character or set.
-     If so, encode a mandatory prefix (example: "^c.*" becomes "c.*" since anchors are implicit).
-   - Check for a forced suffix or ending pattern.
-     Place this outside repeating blocks when required.
-
-2) Length/modular and block structure:
-   - Look for fixed substrings repeated via "*".
-   - If strings mix multiple allowed blocks internally, prefer:
-       (block1|block2)*
-   - If internal repetitions are freer than endings, use:
-       (InternalBlockUnion)* FinalRestrictedBlock
-   - If a singleton positive exists (example: "b"), include it using union only if it cannot be captured via star behavior.
-
-3) Union design: star-of-union vs union-of-stars
-   - If block types mix inside strings: (A|B|C)*
-   - If each string repeats exactly one block type: A*|B*|C*
-
-4) Compactness tactics:
-   - Factor common prefixes/suffixes.
-   - Use character classes when appropriate:
-       [ab] instead of (a|b)
-   - Factor repeated substrings inside unions:
-       ab(c|d) instead of abc|abd
-
-5) Handling epsilon:
-   - Accept epsilon only if explicitly required.
-   - Prefer x* instead of (|x)* or (x|).
-   - Only use empty alternation (|) when unavoidable.
-
-6) Avoid over-generalization:
-   - Do NOT allow patterns contradicted by negatives.
-
-7) Quality checks before finalizing:
-   - Verify acceptance of all label-1 strings.
-   - Verify rejection of all label-0 strings.
-   - Check boundary cases (short strings, empty string).
-   - Re-check syntax correctness and grouping.
-
-{regularization_instr}
-{agentic_reflection_instr}
-OUTPUT FORMAT
-- First, provide 1-3 concise sentences explaining the observed structure (mandatory prefix/set, block size/pattern, modular length, final-block restriction, epsilon/singleton handling), wrapped in <reasoning> and </reasoning>, e.g.:
-  <reasoning>Accepted strings are length-5 alphanumerics that must not contain vowels.</reasoning>
-- Then output ONLY the final regex wrapped in <ans> and </ans>, e.g.:
-  <ans>(a*([A-Z])|(b))*</ans>
-
-Training Data (Each line has one input-output pair separated by comma):
-{0}
-"""
-
-SIMPLYRX_REGULARIZATION = """
-CONSTRAINTS
-- Prefer simpler, more general regexes while staying consistent with all datapoints.
-- Total regex length (ignoring spaces) must be ≤ 60 characters.
-- Nesting depth of Kleene stars must be ≤ 4.
-- Use only symbols that appear in the training data (eg. a, b, c, epsilon).
-
-"""
-
-EXTRX_REGULARIZATION = """
-CONSTRAINTS
-- Prefer simpler, more general regexes while staying consistent with all datapoints.
-- Total regex length (ignoring spaces) must be ≤ 150 characters.
-- Nesting depth of Kleene stars (*, +, ?) must be ≤ 2.
-- Use only symbols that appear in the alphabet (except metacharacters such as (), |, *, +, ?, []).
-"""
-
-SIMPLYRX_CLUSTRED_CE_INSTR = """
-- The strings may contain grouped class of characters, e.g., [abc] for letter a or b or c etc.
-- Each character class only represent one possible character in the string, e.g., "a[a-c]c" can represent "abc" but not "abcc".
-
-"""
-
-EXTRX_CLUSTRED_CE_INSTR = """
-- The strings may contain grouped class of characters, e.g., [A-Z] for uppercase letters, [^0-9] for non-digits, etc.
-- Each character class only represent one possible character in the string, e.g., "a[A-Z]c" can represent "aBc" but not "aBCc".
-
-"""
-
-AGENTIC_REFLECTION_INSTR = """
-AGENTIC REFLECTION UPDATE
-- You will receive the previous attempt's reasoning and regex, plus new counterexamples.
-- First, briefly revise the previous reasoning to explain what failed and what should be changed.
-- Then output an updated regex consistent with all training data and the counterexamples.
-- Keep reasoning concise (1-3 sentences) and directly tied to the regex revision.
-
-"""
-
-AGENTIC_REPAIR_INSTR = """
-AGENTIC REPAIR UPDATE
-- You are repairing the previous attempt using the failure feedback and repair examples below.
-- Repair goals:
-  1) Produce a regex that compiles under the required regex syntax.
-  2) Fix the specific mistakes exposed by the counterexamples, disagreement witness, and any reported errors.
-  3) Preserve the parts of the previous solution that still fit the training data.
-- What to do:
-  - If the previous regex is invalid, first correct the syntax or unsupported constructs.
-  - If a witness or repair example is rejected/accepted incorrectly, revise the regex so that string gets the correct label.
-  - Keep the reasoning concise and focused on what changed from the previous attempt.
-  - Return the repaired regex in the required output format.
-
-"""
+from prompting.rl import (
+    AGENTIC_REFLECTION_INSTR,
+    AGENTIC_REPAIR_INSTR,
+    EXTRX_CLUSTRED_CE_INSTR,
+    EXTRX_INPUT_INSTR,
+    EXTRX_OUTPUT_INSTR,
+    EXTRX_PROMPT_TEMPLATE,
+    EXTRX_REGULARIZATION,
+    EXTRX_SIGMA,
+    EXTRX_TASK_INSTR,
+    SIMPLYRX_CLUSTRED_CE_INSTR,
+    SIMPLYRX_INPUT_INSTR,
+    SIMPLYRX_OUTPUT_INSTR,
+    SIMPLYRX_PROMPT_TEMPLATE,
+    SIMPLYRX_REGULARIZATION,
+    SIMPLYRX_TASK_INSTR,
+    TRAINING_DATA_INSTR,
+)
 
 train_data_template = "{0}, {1}"
 
@@ -280,6 +73,49 @@ def summarize_label_counts(labels):
         "negative": neg,
         "total": len(labels),
     }
+
+
+def build_prompt_template(task_type, prompt_mode):
+    if task_type == "extrx":
+        task_instr = EXTRX_TASK_INSTR
+        input_instr = EXTRX_INPUT_INSTR
+        syntax_instr = EXTRX_OUTPUT_INSTR["syntax"]
+        output_format_instr = EXTRX_OUTPUT_INSTR["output_format"]
+        direct_output_format_instr = EXTRX_OUTPUT_INSTR["direct_output_format"]
+        full_prompt_template = EXTRX_PROMPT_TEMPLATE
+    else:
+        task_instr = SIMPLYRX_TASK_INSTR
+        input_instr = SIMPLYRX_INPUT_INSTR
+        syntax_instr = SIMPLYRX_OUTPUT_INSTR["syntax"]
+        output_format_instr = SIMPLYRX_OUTPUT_INSTR["output_format"]
+        direct_output_format_instr = SIMPLYRX_OUTPUT_INSTR["direct_output_format"]
+        full_prompt_template = SIMPLYRX_PROMPT_TEMPLATE
+
+    if prompt_mode == "full":
+        return full_prompt_template
+    if prompt_mode == "naive_prompt":
+        return task_instr + TRAINING_DATA_INSTR
+    if prompt_mode == "only_input_instr":
+        return task_instr + input_instr + TRAINING_DATA_INSTR
+    if prompt_mode == "only_output_str":
+        return task_instr + syntax_instr + direct_output_format_instr + TRAINING_DATA_INSTR
+    if prompt_mode == "input_output_instr":
+        return (
+            task_instr
+            + input_instr
+            + syntax_instr
+            + direct_output_format_instr
+            + TRAINING_DATA_INSTR
+        )
+    if prompt_mode == "zero_prompt":
+        return (
+            task_instr
+            + syntax_instr
+            + input_instr
+            + output_format_instr
+            + TRAINING_DATA_INSTR
+        )
+    raise ValueError(f"Unsupported prompt_mode: {prompt_mode}")
 
 
 def build_reflection_prompt(previous_reasoning, previous_regex, train_ex, train_labels, feedback_note=None):
@@ -547,6 +383,19 @@ def main(argv=None):
     parser.add_argument("--ce_batch_size", type=int, default=128)
     parser.add_argument("--ce_clustered", default=False, action="store_true")
     parser.add_argument(
+        "--prompt_mode",
+        type=str,
+        default="full",
+        choices=[
+            "full",
+            "naive_prompt",
+            "only_input_instr",
+            "only_output_str",
+            "input_output_instr",
+            "zero_prompt",
+        ],
+    )
+    parser.add_argument(
         "--reasoning_mode",
         type=str,
         default="agentic_reflection",
@@ -572,7 +421,7 @@ def main(argv=None):
 
     if args.task_type == "extrx":
         task = ExtRegularLanguage(args.regex, args.max_length, alphabet=EXTRX_SIGMA)
-        prompt_template = EXTRX_PROMPT_TEMPLATE
+        prompt_template = build_prompt_template(args.task_type, args.prompt_mode)
         prompt_kwargs = {
             "sigma": EXTRX_SIGMA,
             "regularization_instr": EXTRX_REGULARIZATION if args.use_reg else "",
@@ -581,7 +430,7 @@ def main(argv=None):
         }
     else:
         task = SimplyRegularLanguage(args.regex, args.max_length)
-        prompt_template = SIMPLYRX_PROMPT_TEMPLATE
+        prompt_template = build_prompt_template(args.task_type, args.prompt_mode)
         prompt_kwargs = {
             "regularization_instr": SIMPLYRX_REGULARIZATION if args.use_reg else "",
             "agentic_reflection_instr": "",
@@ -595,11 +444,13 @@ def main(argv=None):
     if not args.use_ce:
         config_name = os.path.join(args.outdir, f"model={args.mkey}/std/")
         config_name += "reg/" if args.use_reg else "noreg/"
+        config_name += f"prompt={args.prompt_mode}/" if args.prompt_mode != "full" else ""
         config_name += f"msgdict_regex={args.regex}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}.json"
     else:
         config_name = os.path.join(args.outdir, f"model={args.mkey}/ce/")
         config_name += "reg/" if args.use_reg else "noreg/"
         config_name += f"{args.reasoning_mode}/"
+        config_name += f"prompt={args.prompt_mode}/" if args.prompt_mode != "full" else ""
         config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs}_ceBatch={args.ce_batch_size}{'_clustered' if args.ce_clustered else ''}.json"
 
     generate_dataset(args, task_type=args.task_type, outdir=args.indir)
