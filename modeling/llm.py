@@ -19,7 +19,7 @@ MODEL_PATHS = {
     "ds-reasoner": "deepseek-reasoner",
     "qw-dsr1": "DeepSeek-R1-Distill-Qwen-32B",
     "qw3-8b": "Qwen/Qwen3-8B",
-    "qw3-235b": "Qwen/Qwen3-235B-A22B-fp8-tput",
+    "qw3-235b": "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
     "gm2.5": "gemini-2.5-pro",
     "cl35": "claude-3-5",
     "gpt3.5": "gpt-3.5-turbo",
