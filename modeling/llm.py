@@ -147,7 +147,11 @@ def _run_model(mkey, model, tokenizer, msg, temp):
     if is_api_model(mkey):
         sleep(1)
         if mkey.startswith(("gpt5", "gpt-5")):
-            outputs = model(inputs, max_completion_tokens=32768)
+            outputs = model(
+                inputs,
+                max_completion_tokens=32768,
+                reasoning_effort="xhigh",
+            )
         else:
             outputs = model(inputs, max_tokens=32768, temperature=temp)
         res = outputs.choices[0].message.content
