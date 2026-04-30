@@ -81,6 +81,56 @@ def _load_token_counter(mkey: str) -> Tuple[TokenCounter, TokenEncoder]:
     return count_fn, encode_fn
 
 
+def _load_text_token_counter(mkey: str) -> TokenCounter:
+    from modeling.llm import resolve_model_path
+
+    model_path = resolve_model_path(mkey)
+
+    if mkey.startswith("gpt-oss"):
+        try:
+            from transformers import AutoTokenizer
+        except ImportError as e:
+            raise ImportError(
+                "Counting tokens for gpt-oss requires transformers to be installed."
+            ) from e
+
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+        def count_fn(text: str) -> int:
+            return len(tokenizer.encode(text, add_special_tokens=False))
+
+        return count_fn
+
+    if mkey.startswith(("gpt3", "gpt4")):
+        try:
+            import tiktoken
+        except ImportError as e:
+            raise ImportError(
+                "Counting tokens for OpenAI chat models requires tiktoken to be installed."
+            ) from e
+
+        encoding = tiktoken.encoding_for_model(model_path)
+
+        def count_fn(text: str) -> int:
+            return len(encoding.encode(text))
+
+        return count_fn
+
+    try:
+        from transformers import AutoTokenizer
+    except ImportError as e:
+        raise ImportError(
+            f"Counting tokens for model `{mkey}` requires transformers to be installed."
+        ) from e
+
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+    def count_fn(text: str) -> int:
+        return len(tokenizer.encode(text, add_special_tokens=False))
+
+    return count_fn
+
+
 def _extract_prompt_from_log(log_item: Dict[str, Any]) -> Optional[str]:
     if not isinstance(log_item, dict):
         return None
@@ -88,6 +138,17 @@ def _extract_prompt_from_log(log_item: Dict[str, Any]) -> Optional[str]:
     prompt = log_item.get("Prompt")
     if isinstance(prompt, str):
         return prompt
+
+    return None
+
+
+def _extract_response_from_log(log_item: Dict[str, Any]) -> Optional[str]:
+    if not isinstance(log_item, dict):
+        return None
+
+    response = log_item.get("Response")
+    if isinstance(response, str):
+        return response
 
     return None
 
@@ -174,6 +235,94 @@ def count_rerun_input_tokens(
     return results
 
 
+def count_rerun_total_tokens(
+    msgdict: Dict[str, Any],
+    mkey: str = "gpt-oss",
+    token_counter: Optional[TokenCounter] = None,
+    token_encoder: Optional[TokenEncoder] = None,
+    output_token_counter: Optional[TokenCounter] = None,
+) -> Dict[str, Any]:
+    """
+    Count total LLM traffic tokens for each rerun: cached-aware input tokens
+    plus full output tokens for each logged response.
+    """
+    if token_counter is None or token_encoder is None:
+        default_counter, default_encoder = _load_token_counter(mkey)
+        if token_counter is None:
+            token_counter = default_counter
+        if token_encoder is None:
+            token_encoder = default_encoder
+    if output_token_counter is None:
+        output_token_counter = _load_text_token_counter(mkey)
+
+    results: Dict[str, Any] = {"model": mkey, "runs": {}, "grand_total_tokens": 0}
+
+    for run_key, run_value in msgdict.items():
+        if not str(run_key).startswith("run-") or not isinstance(run_value, dict):
+            continue
+
+        run_total = 0
+        epoch_breakdown: Dict[str, Any] = {}
+        previous_prompt_tokens: Optional[List[int]] = None
+
+        for epoch_key, epoch_value in run_value.items():
+            if not isinstance(epoch_value, dict):
+                continue
+
+            logs = epoch_value.get("Logs", [])
+            epoch_input_total = 0
+            epoch_output_total = 0
+            epoch_total = 0
+            prompt_count = 0
+            cached_prefix_tokens = 0
+
+            if isinstance(logs, list):
+                for log_item in logs:
+                    prompt = _extract_prompt_from_log(log_item)
+                    if prompt is None:
+                        continue
+                    prompt_tokens = token_encoder(prompt)
+                    if previous_prompt_tokens is None:
+                        common_prefix = 0
+                        incremental_input_tokens = token_counter(prompt)
+                    else:
+                        prefix_limit = min(len(previous_prompt_tokens), len(prompt_tokens))
+                        common_prefix = 0
+                        while (
+                            common_prefix < prefix_limit
+                            and previous_prompt_tokens[common_prefix] == prompt_tokens[common_prefix]
+                        ):
+                            common_prefix += 1
+                        incremental_input_tokens = len(prompt_tokens) - common_prefix
+
+                    response = _extract_response_from_log(log_item)
+                    output_tokens = output_token_counter(response) if response is not None else 0
+
+                    epoch_input_total += incremental_input_tokens
+                    epoch_output_total += output_tokens
+                    epoch_total += incremental_input_tokens + output_tokens
+                    cached_prefix_tokens += common_prefix
+                    prompt_count += 1
+                    previous_prompt_tokens = prompt_tokens
+
+            epoch_breakdown[epoch_key] = {
+                "prompt_count": prompt_count,
+                "input_tokens": epoch_input_total,
+                "output_tokens": epoch_output_total,
+                "total_tokens": epoch_total,
+                "cached_prefix_tokens": cached_prefix_tokens,
+            }
+            run_total += epoch_total
+
+        results["runs"][run_key] = {
+            "total_tokens": run_total,
+            "epochs": epoch_breakdown,
+        }
+        results["grand_total_tokens"] += run_total
+
+    return results
+
+
 def _extract_regex_from_log_path(path: str) -> str:
     basename = os.path.basename(path)
     prefix = "msgdict_regex="
@@ -235,29 +384,49 @@ def summarize_scaleup_log_for_pareto(
     mkey: str = "gpt-oss",
     token_counter: Optional[TokenCounter] = None,
     token_encoder: Optional[TokenEncoder] = None,
+    output_token_counter: Optional[TokenCounter] = None,
+    first_rerun_only: bool = False,
 ) -> Dict[str, Any]:
     with open(log_path, "r", encoding="utf-8") as f:
         msgdict = json.load(f)
 
-    token_stats = count_rerun_input_tokens(
+    token_stats = count_rerun_total_tokens(
         msgdict,
         mkey=mkey,
         token_counter=token_counter,
         token_encoder=token_encoder,
+        output_token_counter=output_token_counter,
     )
-    run_totals = [
-        run_stats["total_tokens"]
-        for run_stats in token_stats["runs"].values()
-        if isinstance(run_stats, dict)
-    ]
+    if first_rerun_only:
+        run_totals = []
+        run_zero_stats = token_stats["runs"].get("run-0")
+        if isinstance(run_zero_stats, dict):
+            run_totals.append(run_zero_stats["total_tokens"])
+    else:
+        run_totals = [
+            run_stats["total_tokens"]
+            for run_stats in token_stats["runs"].values()
+            if isinstance(run_stats, dict)
+        ]
     avg_tokens = float(np.mean(run_totals)) if run_totals else 0.0
     summary = msgdict.get("summary", {})
-    success_rate = _compute_success_rate(summary)
-    total_runs = sum(
-        1 for run_key, run_info in summary.items()
-        if str(run_key).startswith("run-") and isinstance(run_info, dict)
-    )
-    success_count = int(round(success_rate * total_runs))
+    if first_rerun_only:
+        run_zero_info = summary.get("run-0")
+        total_runs = 1 if isinstance(run_zero_info, dict) else 0
+        success_count = (
+            1
+            if isinstance(run_zero_info, dict)
+            and float(run_zero_info.get("final_accuracy", 0)) >= 1.0
+            else 0
+        )
+        success_rate = (success_count / total_runs) if total_runs else 0.0
+    else:
+        success_rate = _compute_success_rate(summary)
+        total_runs = sum(
+            1 for run_key, run_info in summary.items()
+            if str(run_key).startswith("run-") and isinstance(run_info, dict)
+        )
+        success_count = int(round(success_rate * total_runs))
 
     return {
         "path": log_path,
@@ -394,7 +563,109 @@ def _pareto_front(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sorted(front, key=lambda p: (p["avg_total_tokens"], -p["success_rate"]))
 
 
-def _aggregate_method_points(points: List[Dict[str, Any]], method_label: str, color: str) -> Optional[Dict[str, Any]]:
+def _convex_frontier_path(front: List[Dict[str, Any]]) -> List[Tuple[float, float]]:
+    if not front:
+        return []
+
+    plateau_endpoints: List[Tuple[float, float]] = []
+    idx = 0
+    while idx < len(front):
+        start_point = front[idx]
+        plateau_y = start_point["success_rate"]
+        plateau_start_x = start_point["avg_total_tokens"]
+        plateau_end_x = plateau_start_x
+        idx += 1
+        while idx < len(front) and front[idx]["success_rate"] == plateau_y:
+            plateau_end_x = front[idx]["avg_total_tokens"]
+            idx += 1
+        plateau_endpoints.append((plateau_start_x, plateau_y))
+        if plateau_end_x != plateau_start_x:
+            plateau_endpoints.append((plateau_end_x, plateau_y))
+
+    def _cross(
+        p1: Tuple[float, float],
+        p2: Tuple[float, float],
+        p3: Tuple[float, float],
+    ) -> float:
+        return (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0])
+
+    hull: List[Tuple[float, float]] = []
+    for point in plateau_endpoints:
+        while len(hull) >= 2 and _cross(hull[-2], hull[-1], point) >= 0:
+            hull.pop()
+        hull.append(point)
+
+    return hull
+
+
+def _plot_pareto_frontier(
+    ax,
+    front: List[Dict[str, Any]],
+    color: str,
+    linewidth: float,
+    alpha: float = 1.0,
+    zorder: int = 1,
+    overlay_black: bool = True,
+):
+    path = _convex_frontier_path(front)
+    if not path:
+        return
+
+    x_values = [point[0] for point in path]
+    y_values = [point[1] for point in path]
+
+    if len(path) == 1:
+        ax.hlines(
+            y_values[0],
+            x_values[0],
+            x_values[0],
+            color=color,
+            linewidth=linewidth,
+            linestyle="-",
+            alpha=alpha,
+            zorder=zorder,
+        )
+        if overlay_black:
+            ax.hlines(
+                y_values[0],
+                x_values[0],
+                x_values[0],
+                color="black",
+                linewidth=max(1.0, linewidth * 0.9),
+                linestyle="--",
+                alpha=min(1.0, alpha + 0.1),
+                zorder=zorder + 0.1,
+            )
+        return
+
+    ax.plot(
+        x_values,
+        y_values,
+        color=color,
+        linewidth=linewidth,
+        linestyle="-",
+        alpha=alpha,
+        zorder=zorder,
+    )
+    if overlay_black:
+        ax.plot(
+            x_values,
+            y_values,
+            color="black",
+            linewidth=max(1.0, linewidth * 0.9),
+            linestyle="--",
+            alpha=min(1.0, alpha + 0.1),
+            zorder=zorder + 0.1,
+        )
+
+
+def _aggregate_method_points(
+    points: List[Dict[str, Any]],
+    method_label: str,
+    color: str,
+    method_key: Optional[str] = None,
+    marker: str = "o",
+) -> Optional[Dict[str, Any]]:
     if not points:
         return None
 
@@ -409,8 +680,10 @@ def _aggregate_method_points(points: List[Dict[str, Any]], method_label: str, co
     avg_total_tokens = float(np.mean(pooled_run_tokens)) if pooled_run_tokens else 0.0
     success_rate = (total_success_count / total_runs) if total_runs else 0.0
     return {
+        "method_key": method_key,
         "label": method_label,
         "color": color,
+        "marker": marker,
         "avg_total_tokens": avg_total_tokens,
         "success_rate": success_rate,
         "num_msgdicts": len(points),
@@ -426,20 +699,25 @@ def _plot_aggregated_method_points(ax, aggregated_points: List[Dict[str, Any]]):
         ax.scatter(
             point["avg_total_tokens"],
             point["success_rate"],
-            s=70,
-            alpha=0.9,
+            s=88,
+            alpha=0.95,
             color=point["color"],
+            marker=point.get("marker", "o"),
+            edgecolor="black",
+            linewidth=0.6,
             label=point["label"],
         )
 
     front = _pareto_front(aggregated_points)
     if front:
-        ax.plot(
-            [point["avg_total_tokens"] for point in front],
-            [point["success_rate"] for point in front],
+        _plot_pareto_frontier(
+            ax,
+            front,
             color="black",
             linewidth=1.8,
-            linestyle="--",
+            alpha=0.92,
+            zorder=2,
+            overlay_black=True,
         )
 
 
@@ -447,6 +725,10 @@ def _format_token_tick(x: float, _: int) -> str:
     if abs(x) >= 1000:
         return f"{x/1000:.1f}k"
     return f"{int(x)}"
+
+
+def _format_token_tick_in_k(x: float, _: int) -> str:
+    return f"{x/1000:.1f}"
 
 
 def _set_readable_token_axis(ax, x_values: List[float]):
@@ -479,11 +761,11 @@ def _set_readable_token_axis(ax, x_values: List[float]):
             bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "alpha": 0.75, "edgecolor": "none"},
         )
 
-    ax.xaxis.set_major_formatter(FuncFormatter(_format_token_tick))
+    ax.xaxis.set_major_formatter(FuncFormatter(_format_token_tick_in_k))
 
 
 def _style_pareto_axis(ax, x_values: List[float]):
-    ax.set_xlabel("Average Total Input Tokens Across Reruns")
+    ax.set_xlabel("Average Total Tokens: Input + Output (K)")
     ax.set_ylabel("Success Run Ratio")
     ax.set_ylim(-0.02, 1.02)
     ax.grid(True, linestyle="--", alpha=0.4)
@@ -493,20 +775,14 @@ def _style_pareto_axis(ax, x_values: List[float]):
 def _plot_depth_overlay(
     ax,
     per_depth_points_by_method: Dict[str, List[Dict[str, Any]]],
-    method_specs: List[Tuple[str, str, str, str]],
+    setting_specs: List[Dict[str, str]],
+    difficulty_colors: Dict[int, str],
 ):
-    depth_markers = {
-        0: "o",
-        1: "s",
-        2: "^",
-        3: "D",
-        4: "P",
-    }
-    plotted_points: List[Dict[str, Any]] = []
     plotted_depths = set()
     points_by_depth: Dict[int, List[Dict[str, Any]]] = {}
 
-    for method_key, _, _, _ in method_specs:
+    for setting_spec in setting_specs:
+        method_key = setting_spec["key"]
         for point in per_depth_points_by_method.get(method_key, []):
             depth = point["depth"]
             points_by_depth.setdefault(depth, []).append({
@@ -514,7 +790,8 @@ def _plot_depth_overlay(
                 "method_key": method_key,
             })
 
-    for method_key, _, label, color in method_specs:
+    for setting_spec in setting_specs:
+        method_key = setting_spec["key"]
         method_points = sorted(
             per_depth_points_by_method.get(method_key, []),
             key=lambda p: p["depth"],
@@ -522,81 +799,77 @@ def _plot_depth_overlay(
         if not method_points:
             continue
 
+        ax.plot(
+            [point["avg_total_tokens"] for point in method_points],
+            [point["success_rate"] for point in method_points],
+            color="#9a9a9a",
+            linewidth=1.4,
+            linestyle="--",
+            alpha=0.85,
+            zorder=1,
+        )
+
         for point in method_points:
             depth = point["depth"]
             plotted_depths.add(depth)
-            marker = depth_markers.get(depth, "o")
+            color = difficulty_colors.get(depth, "#4c78a8")
             ax.scatter(
                 point["avg_total_tokens"],
                 point["success_rate"],
-                s=90,
-                alpha=0.95,
+                s=118,
+                alpha=0.96,
                 color=color,
-                marker=marker,
+                marker=setting_spec["marker"],
                 edgecolor="black",
-                linewidth=0.5,
+                linewidth=0.75,
+                zorder=3,
             )
-            ax.annotate(
-                f"d={depth}",
-                (point["avg_total_tokens"], point["success_rate"]),
-                textcoords="offset points",
-                xytext=(6, 5),
-                fontsize=8.5,
-                color=color,
-            )
-            plotted_points.append(point)
 
     for depth, depth_points in sorted(points_by_depth.items()):
         depth_front = _pareto_front(depth_points)
-        if len(depth_front) >= 2:
-            ax.plot(
-                [point["avg_total_tokens"] for point in depth_front],
-                [point["success_rate"] for point in depth_front],
-                color="dimgray",
-                linewidth=1.2,
-                alpha=0.65,
-            )
-
-    pareto_points = _pareto_front(plotted_points)
-    if pareto_points:
-        ax.plot(
-            [point["avg_total_tokens"] for point in pareto_points],
-            [point["success_rate"] for point in pareto_points],
-            color="black",
-            linewidth=1.8,
-            linestyle="--",
-            alpha=0.9,
+        if depth_front:
+            _plot_pareto_frontier(
+                ax,
+                depth_front,
+                color=difficulty_colors.get(depth, "#4c78a8"),
+                linewidth=1.7,
+                alpha=0.82,
+                zorder=2,
+                overlay_black=True,
         )
 
-    setting_handles = [
+    method_handles = [
+        Line2D(
+            [0], [0],
+            marker=setting_spec["marker"],
+            color="#666666",
+            markerfacecolor="white",
+            markeredgecolor="black",
+            markeredgewidth=0.8,
+            linewidth=0,
+            markersize=9,
+            label=setting_spec["label"],
+        )
+        for setting_spec in setting_specs
+    ]
+    difficulty_handles = [
         Line2D(
             [0], [0],
             marker="o",
-            color=color,
-            markerfacecolor=color,
+            color=difficulty_colors.get(depth, "#4c78a8"),
+            markerfacecolor=difficulty_colors.get(depth, "#4c78a8"),
             markeredgecolor="black",
             markeredgewidth=0.5,
-            linewidth=1.3,
-            label=label,
-        )
-        for _, _, label, color in method_specs
-    ]
-    depth_handles = [
-        Line2D(
-            [0], [0],
-            marker=depth_markers.get(depth, "o"),
-            color="gray",
-            markerfacecolor="white",
-            markeredgecolor="gray",
             linewidth=0,
-            label=f"depth={depth}",
+            markersize=8.5,
+            label=f"StarDepth={depth}",
         )
         for depth in sorted(plotted_depths)
     ]
 
-    legend1 = ax.legend(handles=setting_handles, loc="lower right", title="Setting")
+    legend1 = ax.legend(handles=method_handles, loc="lower right", title="Setting (shape)")
     ax.add_artist(legend1)
-    ax.legend(handles=depth_handles, loc="center right", title="Depth")
+    ax.legend(handles=difficulty_handles, loc="upper right", title="Difficulty (StarDepth)")
 
 
 def _build_method_specs(logs_root: str) -> List[Tuple[str, str, str, str]]:
@@ -615,6 +888,164 @@ def _build_method_specs(logs_root: str) -> List[Tuple[str, str, str, str]]:
             "#2ca02c",
         ),
     ]
+
+
+def _build_pareto_setting_specs(logs_root: str, task_type: str) -> List[Dict[str, str]]:
+    if task_type == "simplyrx":
+        return [
+            {
+                "key": "standard",
+                "path": os.path.join(logs_root, "std/reg"),
+                "label": "standard",
+                "marker": "X",
+                "color": "#9c755f",
+            },
+            {
+                "key": "ce_noreg",
+                "path": os.path.join(logs_root, "ce/noreg/agentic_reflection"),
+                "label": "ce/noreg",
+                "marker": "o",
+                "color": "#4c78a8",
+            },
+            {
+                "key": "reg_agentic",
+                "path": os.path.join(logs_root, "ce/reg/agentic_reflection"),
+                "label": "reg/agentic",
+                "marker": "s",
+                "color": "#f58518",
+            },
+            {
+                "key": "reg_single",
+                "path": os.path.join(logs_root, "ce/reg/single_inference"),
+                "label": "reg/single",
+                "marker": "^",
+                "color": "#54a24b",
+            },
+            {
+                "key": "reg_no_reflection",
+                "path": os.path.join(logs_root, "ce/reg/agentic_no_reflection"),
+                "label": "reg/no-reflection",
+                "marker": "D",
+                "color": "#e45756",
+            },
+            {
+                "key": "reg_no_repair_loop",
+                "path": os.path.join(logs_root, "ce/reg/agentic_no_repair_loop"),
+                "label": "reg/no-repair-loop",
+                "marker": "P",
+                "color": "#72b7b2",
+            },
+        ]
+
+    return [
+        {
+            "key": "std_reg",
+            "path": os.path.join(logs_root, "std/reg"),
+            "label": "std/reg",
+            "marker": "o",
+            "color": "#4c78a8",
+        },
+        {
+            "key": "ce_agentic",
+            "path": os.path.join(logs_root, "ce/reg/agentic_reflection"),
+            "label": "ce/reg/agentic",
+            "marker": "s",
+            "color": "#f58518",
+        },
+        {
+            "key": "ce_non_agentic",
+            "path": os.path.join(logs_root, "ce/reg/single_inference"),
+            "label": "ce/reg/single",
+            "marker": "^",
+            "color": "#54a24b",
+        },
+    ]
+
+
+def _build_difficulty_color_map(depths: List[int]) -> Dict[int, str]:
+    palette = [
+        "#4c78a8",
+        "#f58518",
+        "#54a24b",
+        "#e45756",
+        "#72b7b2",
+        "#b279a2",
+    ]
+    return {
+        depth: palette[idx % len(palette)]
+        for idx, depth in enumerate(sorted(depths))
+    }
+
+
+def _select_pareto_setting_specs(
+    setting_specs: List[Dict[str, str]],
+    keys: Optional[List[str]] = None,
+) -> List[Dict[str, str]]:
+    if keys is None:
+        return list(setting_specs)
+
+    key_set = set(keys)
+    return [setting_spec for setting_spec in setting_specs if setting_spec["key"] in key_set]
+
+
+def _build_per_depth_points_by_method(
+    all_points_by_method: Dict[str, List[Dict[str, Any]]],
+    setting_specs: List[Dict[str, str]],
+    depths: List[int],
+    difficulty_colors: Dict[int, str],
+) -> Dict[str, List[Dict[str, Any]]]:
+    per_depth_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
+    for setting_spec in setting_specs:
+        method_key = setting_spec["key"]
+        method_depth_points: List[Dict[str, Any]] = []
+        for depth in depths:
+            depth_points = [
+                point
+                for point in all_points_by_method.get(method_key, [])
+                if point.get("depth") == depth
+            ]
+            aggregated_point = _aggregate_method_points(
+                depth_points,
+                setting_spec["label"],
+                difficulty_colors.get(depth, setting_spec["color"]),
+                method_key=method_key,
+                marker=setting_spec["marker"],
+            )
+            if aggregated_point is not None:
+                aggregated_point["depth"] = depth
+                method_depth_points.append(aggregated_point)
+        per_depth_points_by_method[method_key] = method_depth_points
+
+    return per_depth_points_by_method
+
+
+def _load_pareto_points_by_setting(
+    setting_specs: List[Dict[str, str]],
+    depth_map: Dict[str, int],
+    mkey: str,
+    token_counter: TokenCounter,
+    token_encoder: TokenEncoder,
+    output_token_counter: TokenCounter,
+    first_rerun_only: bool = False,
+) -> Dict[str, List[Dict[str, Any]]]:
+    all_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
+    for setting_spec in setting_specs:
+        method_key = setting_spec["key"]
+        points: List[Dict[str, Any]] = []
+        for log_path in sorted(glob.glob(os.path.join(setting_spec["path"], "*.json"))):
+            point = summarize_scaleup_log_for_pareto(
+                log_path,
+                mkey=mkey,
+                token_counter=token_counter,
+                token_encoder=token_encoder,
+                output_token_counter=output_token_counter,
+                first_rerun_only=first_rerun_only,
+            )
+            point["depth"] = depth_map.get(point["regex"])
+            points.append(point)
+        all_points_by_method[method_key] = points
+
+    return all_points_by_method
 
 
 def _task_label(task_type: str) -> str:
@@ -1186,68 +1617,108 @@ def plot_pareto(
     metadata = _load_scaleup_regex_metadata(regex_list_path, task_type)
     depth_map = metadata["depth_map"]
     available_depths = metadata["depths"]
+    difficulty_colors = _build_difficulty_color_map(available_depths)
     token_counter, token_encoder = _load_token_counter(mkey)
+    output_token_counter = _load_text_token_counter(mkey)
     task_label = _task_label(task_type)
-    method_specs = _build_method_specs(logs_root)
+    all_setting_specs = _build_pareto_setting_specs(logs_root, task_type)
+    if task_type == "simplyrx":
+        primary_setting_specs = _select_pareto_setting_specs(
+            all_setting_specs,
+            ["standard", "reg_agentic", "reg_single"],
+        )
+    else:
+        primary_setting_specs = list(all_setting_specs)
 
-    all_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
-    for method_key, method_dir, _, _ in method_specs:
-        points: List[Dict[str, Any]] = []
-        for log_path in sorted(glob.glob(os.path.join(method_dir, "*.json"))):
-            point = summarize_scaleup_log_for_pareto(
-                log_path,
-                mkey=mkey,
-                token_counter=token_counter,
-                token_encoder=token_encoder,
-            )
-            point["depth"] = depth_map.get(point["regex"])
-            points.append(point)
-        all_points_by_method[method_key] = points
+    all_points_by_method = _load_pareto_points_by_setting(
+        all_setting_specs,
+        depth_map,
+        mkey,
+        token_counter,
+        token_encoder,
+        output_token_counter,
+        first_rerun_only=False,
+    )
 
     plt.figure(figsize=(8, 6))
     ax = plt.gca()
     aggregated_points: List[Dict[str, Any]] = []
-    for method_key, _, label, color in method_specs:
-        aggregated_point = _aggregate_method_points(all_points_by_method[method_key], label, color)
+    for setting_spec in primary_setting_specs:
+        method_key = setting_spec["key"]
+        aggregated_point = _aggregate_method_points(
+            all_points_by_method[method_key],
+            setting_spec["label"],
+            setting_spec["color"],
+            method_key=method_key,
+            marker=setting_spec["marker"],
+        )
         if aggregated_point is not None:
             aggregated_points.append(aggregated_point)
 
     _plot_aggregated_method_points(ax, aggregated_points)
     _style_pareto_axis(ax, [point["avg_total_tokens"] for point in aggregated_points])
     ax.set_title(f"Pareto Front for {task_label} Scaleup (task average)")
-    ax.legend()
+    ax.legend(title="Setting")
     plt.tight_layout()
     plt.savefig(os.path.join(outdir, "pareto_task_average.png"), dpi=300)
     plt.close()
 
-    per_depth_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
-    for method_key, _, label, color in method_specs:
-        method_depth_points: List[Dict[str, Any]] = []
-        for depth in available_depths:
-            depth_points = [
-                point
-                for point in all_points_by_method[method_key]
-                if point.get("depth") == depth
-            ]
-            aggregated_point = _aggregate_method_points(depth_points, label, color)
-            if aggregated_point is not None:
-                aggregated_point["depth"] = depth
-                method_depth_points.append(aggregated_point)
-        per_depth_points_by_method[method_key] = method_depth_points
+    per_depth_points_by_method = _build_per_depth_points_by_method(
+        all_points_by_method,
+        primary_setting_specs,
+        available_depths,
+        difficulty_colors,
+    )
 
     plt.figure(figsize=(9.5, 6.5))
     ax = plt.gca()
-    _plot_depth_overlay(ax, per_depth_points_by_method, method_specs)
+    _plot_depth_overlay(ax, per_depth_points_by_method, primary_setting_specs, difficulty_colors)
     overlay_x_values = [
         point["avg_total_tokens"]
         for method_points in per_depth_points_by_method.values()
         for point in method_points
     ]
     _style_pareto_axis(ax, overlay_x_values)
-    ax.set_title(f"Pareto Front for {task_label} Scaleup (all depths together)")
+    ax.set_title(f"Pareto Front for {task_label} Scaleup (all difficulties together)")
     plt.tight_layout()
     plt.savefig(os.path.join(outdir, "pareto_depth_overlay.png"), dpi=300)
     plt.close()
+
+    if task_type == "simplyrx":
+        depth_subset = [depth for depth in available_depths if depth in {1, 2, 3}]
+        first_rerun_points_by_method = _load_pareto_points_by_setting(
+            all_setting_specs,
+            depth_map,
+            mkey,
+            token_counter,
+            token_encoder,
+            output_token_counter,
+            first_rerun_only=True,
+        )
+        per_depth_points_all_settings = _build_per_depth_points_by_method(
+            first_rerun_points_by_method,
+            all_setting_specs,
+            depth_subset,
+            difficulty_colors,
+        )
+        plt.figure(figsize=(10.2, 6.8))
+        ax = plt.gca()
+        _plot_depth_overlay(ax, per_depth_points_all_settings, all_setting_specs, difficulty_colors)
+        overlay_x_values = [
+            point["avg_total_tokens"]
+            for method_points in per_depth_points_all_settings.values()
+            for point in method_points
+        ]
+        _style_pareto_axis(ax, overlay_x_values)
+        ax.set_title(
+            f"Pareto Front for {task_label} Scaleup (all settings, StarDepth=1/2/3, run-0 only)"
+        )
+        plt.tight_layout()
+        plt.savefig(
+            os.path.join(outdir, "pareto_depth_overlay_all_settings_depth_1_2_3.png"),
+            dpi=300,
+        )
+        plt.close()
 
     return all_points_by_method
 

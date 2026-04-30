@@ -26,10 +26,11 @@ MODEL_PATHS = {
     "gpt4": "gpt-4o",
     "gpt5": "gpt-5.4",
     "gpt-oss": "gpt-oss-120b",
+    "gpt-oss-api": "openai/gpt-oss-120b",
 }
 
 def is_vllm_model(mkey):
-    return mkey.startswith(("gpt-oss"))
+    return mkey == "gpt-oss"
 
 def is_api_model(mkey):
     if is_vllm_model(mkey):
@@ -71,7 +72,12 @@ def load_model_and_tokenizer(mkey, api_key):
 
     if is_api_model(mkey):
         tokenizer = None
-        if mkey.startswith("gpt"):
+        if mkey.startswith(("gpt-oss-api", "qw3-235b")):
+            oai_client = OpenAI(
+                api_key=select_api_key(api_key, "together"),
+                base_url="https://api.together.ai/v1",
+            )
+        elif mkey.startswith("gpt"):
             oai_client = OpenAI(api_key=select_api_key(api_key, "openai"))
             if mkey.startswith(("gpt3", "gpt4")):
                 tokenizer = tiktoken.encoding_for_model(mpath)
@@ -89,11 +95,6 @@ def load_model_and_tokenizer(mkey, api_key):
             oai_client = OpenAI(
                 api_key=select_api_key(api_key, "claude"),
                 base_url="https://api.anthropic.com/v1",
-            )
-        elif mkey.startswith("qw3-235b"):
-            oai_client = OpenAI(
-                api_key=select_api_key(api_key, "together"),
-                base_url="https://api.together.ai/v1",
             )
         else:
             raise ValueError(f"Unsupported api model key: {mkey}")
