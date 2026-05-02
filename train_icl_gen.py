@@ -94,10 +94,10 @@ def build_prompt_template(task_type, prompt_mode):
     if prompt_mode == "full":
         return full_prompt_template
     if prompt_mode == "naive_prompt":
-        return task_instr + TRAINING_DATA_INSTR
+        return task_instr + direct_output_format_instr + TRAINING_DATA_INSTR
     if prompt_mode == "only_input_instr":
-        return task_instr + input_instr + TRAINING_DATA_INSTR
-    if prompt_mode == "only_output_str":
+        return task_instr + input_instr + direct_output_format_instr + TRAINING_DATA_INSTR
+    if prompt_mode == "only_output_instr":
         return task_instr + syntax_instr + direct_output_format_instr + TRAINING_DATA_INSTR
     if prompt_mode == "input_output_instr":
         return (
@@ -390,7 +390,7 @@ def main(argv=None):
             "full",
             "naive_prompt",
             "only_input_instr",
-            "only_output_str",
+            "only_output_instr",
             "input_output_instr",
             "zero_prompt",
         ],

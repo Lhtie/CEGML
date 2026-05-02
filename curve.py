@@ -549,12 +549,8 @@ def _pareto_front(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             if i == j:
                 continue
             no_worse_x = other["avg_total_tokens"] <= point["avg_total_tokens"]
-            no_worse_y = other["success_rate"] >= point["success_rate"]
-            strictly_better = (
-                other["avg_total_tokens"] < point["avg_total_tokens"]
-                or other["success_rate"] > point["success_rate"]
-            )
-            if no_worse_x and no_worse_y and strictly_better:
+            strictly_better_y = other["success_rate"] > point["success_rate"]
+            if no_worse_x and strictly_better_y:
                 dominated = True
                 break
         if not dominated:
@@ -591,7 +587,11 @@ def _convex_frontier_path(front: List[Dict[str, Any]]) -> List[Tuple[float, floa
 
     hull: List[Tuple[float, float]] = []
     for point in plateau_endpoints:
-        while len(hull) >= 2 and _cross(hull[-2], hull[-1], point) >= 0:
+        while (
+            len(hull) >= 2
+            and hull[-2][1] != hull[-1][1]
+            and _cross(hull[-2], hull[-1], point) >= 0
+        ):
             hull.pop()
         hull.append(point)
 
@@ -699,12 +699,12 @@ def _plot_aggregated_method_points(ax, aggregated_points: List[Dict[str, Any]]):
         ax.scatter(
             point["avg_total_tokens"],
             point["success_rate"],
-            s=88,
+            s=165,
             alpha=0.95,
             color=point["color"],
             marker=point.get("marker", "o"),
             edgecolor="black",
-            linewidth=0.6,
+            linewidth=0.8,
             label=point["label"],
         )
 
@@ -714,7 +714,7 @@ def _plot_aggregated_method_points(ax, aggregated_points: List[Dict[str, Any]]):
             ax,
             front,
             color="black",
-            linewidth=1.8,
+            linewidth=2.3,
             alpha=0.92,
             zorder=2,
             overlay_black=True,
@@ -754,7 +754,7 @@ def _set_readable_token_axis(ax, x_values: List[float]):
             0.02,
             "x-axis trimmed for readability",
             transform=ax.transAxes,
-            fontsize=9,
+            fontsize=14,
             color="dimgray",
             ha="left",
             va="bottom",
@@ -765,10 +765,11 @@ def _set_readable_token_axis(ax, x_values: List[float]):
 
 
 def _style_pareto_axis(ax, x_values: List[float]):
-    ax.set_xlabel("Average Total Tokens: Input + Output (K)")
-    ax.set_ylabel("Success Run Ratio")
+    ax.set_xlabel("Average Total Tokens: Input + Output (K)", fontsize=20)
+    ax.set_ylabel("Success Run Ratio", fontsize=20)
     ax.set_ylim(-0.02, 1.02)
-    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.tick_params(axis="both", labelsize=17)
+    ax.grid(True, linestyle="--", alpha=0.32, linewidth=0.8)
     _set_readable_token_axis(ax, x_values)
 
 
@@ -777,6 +778,7 @@ def _plot_depth_overlay(
     per_depth_points_by_method: Dict[str, List[Dict[str, Any]]],
     setting_specs: List[Dict[str, str]],
     difficulty_colors: Dict[int, str],
+    difficulty_legend_loc: str = "upper right",
 ):
     plotted_depths = set()
     points_by_depth: Dict[int, List[Dict[str, Any]]] = {}
@@ -803,7 +805,7 @@ def _plot_depth_overlay(
             [point["avg_total_tokens"] for point in method_points],
             [point["success_rate"] for point in method_points],
             color="#9a9a9a",
-            linewidth=1.4,
+            linewidth=1.6,
             linestyle="--",
             alpha=0.85,
             zorder=1,
@@ -816,12 +818,12 @@ def _plot_depth_overlay(
             ax.scatter(
                 point["avg_total_tokens"],
                 point["success_rate"],
-                s=118,
+                s=190,
                 alpha=0.96,
                 color=color,
                 marker=setting_spec["marker"],
                 edgecolor="black",
-                linewidth=0.75,
+                linewidth=0.85,
                 zorder=3,
             )
 
@@ -832,7 +834,7 @@ def _plot_depth_overlay(
                 ax,
                 depth_front,
                 color=difficulty_colors.get(depth, "#4c78a8"),
-                linewidth=1.7,
+                linewidth=2.2,
                 alpha=0.82,
                 zorder=2,
                 overlay_black=True,
@@ -847,7 +849,7 @@ def _plot_depth_overlay(
             markeredgecolor="black",
             markeredgewidth=0.8,
             linewidth=0,
-            markersize=9,
+            markersize=15,
             label=setting_spec["label"],
         )
         for setting_spec in setting_specs
@@ -861,15 +863,27 @@ def _plot_depth_overlay(
             markeredgecolor="black",
             markeredgewidth=0.5,
             linewidth=0,
-            markersize=8.5,
+            markersize=14,
             label=f"StarDepth={depth}",
         )
         for depth in sorted(plotted_depths)
     ]
 
-    legend1 = ax.legend(handles=method_handles, loc="lower right", title="Setting (shape)")
+    legend1 = ax.legend(
+        handles=method_handles,
+        loc="lower right",
+        title="Setting (shape)",
+        fontsize=15,
+        title_fontsize=16,
+    )
     ax.add_artist(legend1)
-    ax.legend(handles=difficulty_handles, loc="upper right", title="Difficulty (StarDepth)")
+    ax.legend(
+        handles=difficulty_handles,
+        loc=difficulty_legend_loc,
+        title="Difficulty (StarDepth)",
+        fontsize=15,
+        title_fontsize=16,
+    )
 
 
 def _build_method_specs(logs_root: str) -> List[Tuple[str, str, str, str]]:
@@ -896,42 +910,42 @@ def _build_pareto_setting_specs(logs_root: str, task_type: str) -> List[Dict[str
             {
                 "key": "standard",
                 "path": os.path.join(logs_root, "std/reg"),
-                "label": "standard",
+                "label": "Standard",
                 "marker": "X",
                 "color": "#9c755f",
             },
             {
                 "key": "ce_noreg",
                 "path": os.path.join(logs_root, "ce/noreg/agentic_reflection"),
-                "label": "ce/noreg",
+                "label": "NoReg",
                 "marker": "o",
                 "color": "#4c78a8",
             },
             {
                 "key": "reg_agentic",
                 "path": os.path.join(logs_root, "ce/reg/agentic_reflection"),
-                "label": "reg/agentic",
+                "label": "Agentic",
                 "marker": "s",
                 "color": "#f58518",
             },
             {
                 "key": "reg_single",
                 "path": os.path.join(logs_root, "ce/reg/single_inference"),
-                "label": "reg/single",
+                "label": "Single",
                 "marker": "^",
                 "color": "#54a24b",
             },
             {
                 "key": "reg_no_reflection",
                 "path": os.path.join(logs_root, "ce/reg/agentic_no_reflection"),
-                "label": "reg/no-reflection",
+                "label": "NoReflection",
                 "marker": "D",
                 "color": "#e45756",
             },
             {
                 "key": "reg_no_repair_loop",
                 "path": os.path.join(logs_root, "ce/reg/agentic_no_repair_loop"),
-                "label": "reg/no-repair-loop",
+                "label": "NoRepairLoop",
                 "marker": "P",
                 "color": "#72b7b2",
             },
@@ -941,21 +955,21 @@ def _build_pareto_setting_specs(logs_root: str, task_type: str) -> List[Dict[str
         {
             "key": "std_reg",
             "path": os.path.join(logs_root, "std/reg"),
-            "label": "std/reg",
-            "marker": "o",
+            "label": "Standard",
+            "marker": "X",
             "color": "#4c78a8",
         },
         {
             "key": "ce_agentic",
             "path": os.path.join(logs_root, "ce/reg/agentic_reflection"),
-            "label": "ce/reg/agentic",
+            "label": "Agentic",
             "marker": "s",
             "color": "#f58518",
         },
         {
             "key": "ce_non_agentic",
             "path": os.path.join(logs_root, "ce/reg/single_inference"),
-            "label": "ce/reg/single",
+            "label": "Single",
             "marker": "^",
             "color": "#54a24b",
         },
@@ -1212,6 +1226,120 @@ def plot_solve_rate_by_states(
     ax.legend()
     plt.tight_layout()
     plt.savefig(os.path.join(outdir, "solve_rate_by_states_compare.png"), dpi=300)
+    plt.close()
+
+    return all_points_by_method
+
+
+def _aggregate_success_rate_by_cell(
+    points: List[Dict[str, Any]],
+    states: List[int],
+    depths: List[int],
+) -> np.ndarray:
+    z = np.full((len(depths), len(states)), np.nan, dtype=float)
+    state_to_idx = {state: idx for idx, state in enumerate(states)}
+    depth_to_idx = {depth: idx for idx, depth in enumerate(depths)}
+
+    success_counts: Dict[Tuple[int, int], int] = {}
+    total_counts: Dict[Tuple[int, int], int] = {}
+    for point in points:
+        state = point.get("state")
+        depth = point.get("depth")
+        if state is None or depth is None:
+            continue
+        cell = (state, depth)
+        success_counts[cell] = success_counts.get(cell, 0) + point.get("success_count", 0)
+        total_counts[cell] = total_counts.get(cell, 0) + point.get("total_runs", 0)
+
+    for (state, depth), total_runs in total_counts.items():
+        if total_runs <= 0:
+            continue
+        z[depth_to_idx[depth], state_to_idx[state]] = success_counts.get((state, depth), 0) / total_runs
+
+    return z
+
+
+def plot_solve_rate_heatmap(
+    logs_root: str, regex_list_path: str, outdir: str, task_type: str = "simplyrx",
+) -> Dict[str, List[Dict[str, Any]]]:
+    os.makedirs(outdir, exist_ok=True)
+
+    metadata = _load_scaleup_regex_metadata(regex_list_path, task_type)
+    depth_map = metadata["depth_map"]
+    state_map = metadata["state_map"]
+    available_depths = metadata["depths"]
+    available_states = metadata["states"]
+    method_specs = _build_method_specs(logs_root)
+    title_by_method = {
+        "std_reg": "Standard",
+        "ce_non_agentic": "Single Inference",
+        "ce_agentic": "Agentic",
+    }
+    plot_order = ["std_reg", "ce_non_agentic", "ce_agentic"]
+
+    all_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
+    z_values_by_method: Dict[str, np.ndarray] = {}
+
+    for method_key, method_dir, _, _ in method_specs:
+        points: List[Dict[str, Any]] = []
+        for log_path in sorted(glob.glob(os.path.join(method_dir, "*.json"))):
+            point = summarize_scaleup_log_for_solve_rate(log_path)
+            point["depth"] = depth_map.get(point["regex"])
+            point["state"] = state_map.get(point["regex"])
+            points.append(point)
+        all_points_by_method[method_key] = points
+        z_values_by_method[method_key] = _aggregate_success_rate_by_cell(
+            points, available_states, available_depths
+        )
+
+    fig, axes = plt.subplots(1, 3, figsize=(16.2, 5.1), constrained_layout=True)
+    cmap = plt.colormaps.get_cmap("YlOrRd").copy()
+    cmap.set_bad(color="#f2f2f2")
+    images = []
+
+    for ax, method_key in zip(axes, plot_order):
+        z = z_values_by_method.get(
+            method_key,
+            np.full((len(available_depths), len(available_states)), np.nan, dtype=float),
+        )
+        image = ax.imshow(
+            np.ma.masked_invalid(z),
+            origin="lower",
+            aspect="auto",
+            cmap=cmap,
+            vmin=0.0,
+            vmax=1.0,
+        )
+        images.append(image)
+
+        ax.set_title(title_by_method[method_key], fontsize=18)
+        ax.set_xlabel("#States", fontsize=16)
+        ax.set_ylabel("StarDepth", fontsize=16)
+        ax.set_xticks(range(len(available_states)))
+        ax.set_xticklabels(available_states, fontsize=13)
+        ax.set_yticks(range(len(available_depths)))
+        ax.set_yticklabels(available_depths, fontsize=13)
+
+        for row_idx, _ in enumerate(available_depths):
+            for col_idx, _ in enumerate(available_states):
+                value = z[row_idx, col_idx]
+                text = "NA" if not np.isfinite(value) else f"{value:.2f}"
+                color = "white" if np.isfinite(value) and value >= 0.62 else "black"
+                ax.text(
+                    col_idx,
+                    row_idx,
+                    text,
+                    ha="center",
+                    va="center",
+                    fontsize=11,
+                    color=color,
+                )
+
+    cbar = fig.colorbar(images[-1], ax=axes, shrink=0.86, pad=0.02)
+    cbar.set_label("Success Rate", fontsize=15)
+    cbar.ax.tick_params(labelsize=12)
+
+    plt.savefig(os.path.join(outdir, "solve_rate_heatmap_compare.png"), dpi=300, bbox_inches="tight")
     plt.close()
 
     return all_points_by_method
@@ -1657,8 +1785,8 @@ def plot_pareto(
 
     _plot_aggregated_method_points(ax, aggregated_points)
     _style_pareto_axis(ax, [point["avg_total_tokens"] for point in aggregated_points])
-    ax.set_title(f"Pareto Front for {task_label} Scaleup (task average)")
-    ax.legend(title="Setting")
+    ax.set_title(f"Pareto Front for {task_label} Scaleup (task average)", fontsize=21)
+    ax.legend(title="Setting", fontsize=15, title_fontsize=16)
     plt.tight_layout()
     plt.savefig(os.path.join(outdir, "pareto_task_average.png"), dpi=300)
     plt.close()
@@ -1672,14 +1800,19 @@ def plot_pareto(
 
     plt.figure(figsize=(9.5, 6.5))
     ax = plt.gca()
-    _plot_depth_overlay(ax, per_depth_points_by_method, primary_setting_specs, difficulty_colors)
+    _plot_depth_overlay(
+        ax,
+        per_depth_points_by_method,
+        primary_setting_specs,
+        difficulty_colors,
+        difficulty_legend_loc="upper right" if task_type == "simplyrx" else "lower left",
+    )
     overlay_x_values = [
         point["avg_total_tokens"]
         for method_points in per_depth_points_by_method.values()
         for point in method_points
     ]
     _style_pareto_axis(ax, overlay_x_values)
-    ax.set_title(f"Pareto Front for {task_label} Scaleup (all difficulties together)")
     plt.tight_layout()
     plt.savefig(os.path.join(outdir, "pareto_depth_overlay.png"), dpi=300)
     plt.close()
@@ -1703,16 +1836,19 @@ def plot_pareto(
         )
         plt.figure(figsize=(10.2, 6.8))
         ax = plt.gca()
-        _plot_depth_overlay(ax, per_depth_points_all_settings, all_setting_specs, difficulty_colors)
+        _plot_depth_overlay(
+            ax,
+            per_depth_points_all_settings,
+            all_setting_specs,
+            difficulty_colors,
+            difficulty_legend_loc="lower left",
+        )
         overlay_x_values = [
             point["avg_total_tokens"]
             for method_points in per_depth_points_all_settings.values()
             for point in method_points
         ]
         _style_pareto_axis(ax, overlay_x_values)
-        ax.set_title(
-            f"Pareto Front for {task_label} Scaleup (all settings, StarDepth=1/2/3, run-0 only)"
-        )
         plt.tight_layout()
         plt.savefig(
             os.path.join(outdir, "pareto_depth_overlay_all_settings_depth_1_2_3.png"),
@@ -2062,6 +2198,7 @@ def parse_args():
             "ce_composition_heatmaps",
             "solve_rate_by_stardepth",
             "solve_rate_by_states",
+            "solve_rate_heatmap",
             "mean_samples_by_stardepth",
             "median_samples_surface",
             "median_samples_heatmap",
@@ -2105,6 +2242,13 @@ if __name__ == "__main__":
         )
     elif args.plot_type == "solve_rate_by_states":
         plot_solve_rate_by_states(
+            logs_root=args.logs_root,
+            regex_list_path=args.regex_list_path,
+            outdir=args.outdir,
+            task_type=args.task_type,
+        )
+    elif args.plot_type == "solve_rate_heatmap":
+        plot_solve_rate_heatmap(
             logs_root=args.logs_root,
             regex_list_path=args.regex_list_path,
             outdir=args.outdir,
