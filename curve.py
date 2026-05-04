@@ -953,25 +953,46 @@ def _build_pareto_setting_specs(logs_root: str, task_type: str) -> List[Dict[str
 
     return [
         {
-            "key": "std_reg",
+            "key": "standard",
             "path": os.path.join(logs_root, "std/reg"),
             "label": "Standard",
             "marker": "X",
+            "color": "#9c755f",
+        },
+        {
+            "key": "ce_noreg",
+            "path": os.path.join(logs_root, "ce/noreg/agentic_reflection"),
+            "label": "NoReg",
+            "marker": "o",
             "color": "#4c78a8",
         },
         {
-            "key": "ce_agentic",
+            "key": "reg_agentic",
             "path": os.path.join(logs_root, "ce/reg/agentic_reflection"),
             "label": "Agentic",
             "marker": "s",
             "color": "#f58518",
         },
         {
-            "key": "ce_non_agentic",
+            "key": "reg_single",
             "path": os.path.join(logs_root, "ce/reg/single_inference"),
             "label": "Single",
             "marker": "^",
             "color": "#54a24b",
+        },
+        {
+            "key": "reg_no_reflection",
+            "path": os.path.join(logs_root, "ce/reg/agentic_no_reflection"),
+            "label": "NoReflection",
+            "marker": "D",
+            "color": "#e45756",
+        },
+        {
+            "key": "reg_no_repair_loop",
+            "path": os.path.join(logs_root, "ce/reg/agentic_no_repair_loop"),
+            "label": "NoRepairLoop",
+            "marker": "P",
+            "color": "#72b7b2",
         },
     ]
 
@@ -1750,13 +1771,10 @@ def plot_pareto(
     output_token_counter = _load_text_token_counter(mkey)
     task_label = _task_label(task_type)
     all_setting_specs = _build_pareto_setting_specs(logs_root, task_type)
-    if task_type == "simplyrx":
-        primary_setting_specs = _select_pareto_setting_specs(
-            all_setting_specs,
-            ["standard", "reg_agentic", "reg_single"],
-        )
-    else:
-        primary_setting_specs = list(all_setting_specs)
+    primary_setting_specs = _select_pareto_setting_specs(
+        all_setting_specs,
+        ["standard", "reg_agentic", "reg_single"],
+    )
 
     all_points_by_method = _load_pareto_points_by_setting(
         all_setting_specs,
@@ -1817,8 +1835,9 @@ def plot_pareto(
     plt.savefig(os.path.join(outdir, "pareto_depth_overlay.png"), dpi=300)
     plt.close()
 
-    if task_type == "simplyrx":
-        depth_subset = [depth for depth in available_depths if depth in {1, 2, 3}]
+    all_settings_depths = {1, 2, 3} if task_type == "simplyrx" else {0, 1, 2}
+    depth_subset = [depth for depth in available_depths if depth in all_settings_depths]
+    if depth_subset:
         first_rerun_points_by_method = _load_pareto_points_by_setting(
             all_setting_specs,
             depth_map,
@@ -1850,8 +1869,13 @@ def plot_pareto(
         ]
         _style_pareto_axis(ax, overlay_x_values)
         plt.tight_layout()
+        all_settings_filename = (
+            "pareto_depth_overlay_all_settings_depth_1_2_3.png"
+            if task_type == "simplyrx"
+            else "pareto_depth_overlay_all_settings_depth_0_1_2.png"
+        )
         plt.savefig(
-            os.path.join(outdir, "pareto_depth_overlay_all_settings_depth_1_2_3.png"),
+            os.path.join(outdir, all_settings_filename),
             dpi=300,
         )
         plt.close()

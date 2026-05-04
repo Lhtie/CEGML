@@ -150,7 +150,7 @@ def _run_model(mkey, model, tokenizer, msg, temp):
         if mkey.startswith(("gpt5", "gpt-5")):
             outputs = model(
                 inputs,
-                max_completion_tokens=32768,
+                max_completion_tokens=128000,
                 reasoning_effort="xhigh",
             )
         else:

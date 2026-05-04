@@ -58,6 +58,62 @@ python train_icl_gen.py --task_type simplyrx --regex '(((((a (b (a+a))) ((((a (c
 # regex_idx=3
 python train_icl_gen.py --task_type simplyrx --regex '((((((((b)*+c))*+b))* ((a c) (c (a)*))) a))*' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
 
+# #States=3, Stardepth=3
+# regex_idx=1
+python train_icl_gen.py --task_type simplyrx --regex '(((((b)*+c)+b) (((c ((a)* c)))*+(c+c))))*' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=2
+python train_icl_gen.py --task_type simplyrx --regex '(((((((b)* a)+(b)*))* a))*+(b)*)' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=3
+python train_icl_gen.py --task_type simplyrx --regex '(((b)* (((b (c)*))* (((b)*+b) b))))*' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+
+# #States=4, Stardepth=3
+# regex_idx=1
+python train_icl_gen.py --task_type simplyrx --regex '((c ((((a)* ((b (c)*))*)+((a+b)+(b)*)) (a)*)))*' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=2
+python train_icl_gen.py --task_type simplyrx --regex '((((a)*+(a+b))+((c ((a (c c)) (b)*)))*))*' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=3
+python train_icl_gen.py --task_type simplyrx --regex '((c a) (((b)* ((b)* (((b)* (b (a)*)))*)))*)' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+
+# #States=5, Stardepth=3
+# regex_idx=1
+python train_icl_gen.py --task_type simplyrx --regex '(((((c)* ((b)* (b c))))* b))*' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=2
+python train_icl_gen.py --task_type simplyrx --regex '(((b)* b) (((((b ((a (a b))+(c)*)))*+(b)*))* b))' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=3
+python train_icl_gen.py --task_type simplyrx --regex '(((((a)* (c)*))*+((b c) ((a b) c))))*' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+
+# #States=6, Stardepth=3
+# regex_idx=1
+python train_icl_gen.py --task_type simplyrx --regex '((((((c)*+c))* ((a)* a)) (a ((b b) c))))*' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=2
+python train_icl_gen.py --task_type simplyrx --regex '(((((((b)*+c) ((a)* ((b)* (c)*))))* (c a)))*+((a)*+c))' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=3
+python train_icl_gen.py --task_type simplyrx --regex '((((((c)*+c) c) (((a (c)*) a))*) a))*' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+
+# #States=7, Stardepth=3
+# regex_idx=1
+python train_icl_gen.py --task_type simplyrx --regex '((((c)* ((b)* c)) ((c (a (((b)* b))*)) (b)*)))*' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=2
+python train_icl_gen.py --task_type simplyrx --regex '((((((a)*+a) b)+(b)*)+((b)* (a)*))+((((b (b)*))* c))*)' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=3
+python train_icl_gen.py --task_type simplyrx --regex '(((a ((((((b c)+(c)*)+(a)*) (a (c)*)) (a)*))*) a))*' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+
+# #States=8, Stardepth=3
+# regex_idx=1
+python train_icl_gen.py --task_type simplyrx --regex '(((((((((c)*+b))* (b)*)+(b)*) a) b))*+((a+c) a))' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=2
+python train_icl_gen.py --task_type simplyrx --regex '((b (a c)) (((((b)*+(c)*))* ((c)* ((b b) ((a)*+a)))))*)' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=3
+python train_icl_gen.py --task_type simplyrx --regex '((b ((((((((c)* b))*+(b)*) b))*+(a)*)+c)) a)' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+
+# #States=9, Stardepth=3
+# regex_idx=1
+python train_icl_gen.py --task_type simplyrx --regex '((((b)* a) (((((c+c) (a c)) (c (c)*)))*+((b)*+c))))*' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=2
+python train_icl_gen.py --task_type simplyrx --regex '((((((b)* ((b (a c)) b)) ((b)* c)))*+((b+c) (a+c))))*' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=3
+python train_icl_gen.py --task_type simplyrx --regex '((((((b ((c)* (c)*)))*+(a (c)*)) (((a)* c) c)))* b)' --mkey gpt-oss --use_reg --tot_train_size 3000 --start_size 3 --scale_factor 2.0 --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+
 # Scale up w/ ce
 
 # #States=3, Stardepth=4
@@ -115,3 +171,59 @@ python train_icl_gen.py --task_type simplyrx --regex '((((((((((b)* a))*+b) c))*
 python train_icl_gen.py --task_type simplyrx --regex '(((((a (b (a+a))) ((((a (c)*))* a)+(a)*)))*+(b)*))*' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
 # regex_idx=3
 python train_icl_gen.py --task_type simplyrx --regex '((((((((b)*+c))*+b))* ((a c) (c (a)*))) a))*' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+
+# #States=3, Stardepth=3
+# regex_idx=1
+python train_icl_gen.py --task_type simplyrx --regex '(((((b)*+c)+b) (((c ((a)* c)))*+(c+c))))*' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=2
+python train_icl_gen.py --task_type simplyrx --regex '(((((((b)* a)+(b)*))* a))*+(b)*)' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=3
+python train_icl_gen.py --task_type simplyrx --regex '(((b)* (((b (c)*))* (((b)*+b) b))))*' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+
+# #States=4, Stardepth=3
+# regex_idx=1
+python train_icl_gen.py --task_type simplyrx --regex '((c ((((a)* ((b (c)*))*)+((a+b)+(b)*)) (a)*)))*' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=2
+python train_icl_gen.py --task_type simplyrx --regex '((((a)*+(a+b))+((c ((a (c c)) (b)*)))*))*' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=3
+python train_icl_gen.py --task_type simplyrx --regex '((c a) (((b)* ((b)* (((b)* (b (a)*)))*)))*)' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+
+# #States=5, Stardepth=3
+# regex_idx=1
+python train_icl_gen.py --task_type simplyrx --regex '(((((c)* ((b)* (b c))))* b))*' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=2
+python train_icl_gen.py --task_type simplyrx --regex '(((b)* b) (((((b ((a (a b))+(c)*)))*+(b)*))* b))' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=3
+python train_icl_gen.py --task_type simplyrx --regex '(((((a)* (c)*))*+((b c) ((a b) c))))*' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+
+# #States=6, Stardepth=3
+# regex_idx=1
+python train_icl_gen.py --task_type simplyrx --regex '((((((c)*+c))* ((a)* a)) (a ((b b) c))))*' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=2
+python train_icl_gen.py --task_type simplyrx --regex '(((((((b)*+c) ((a)* ((b)* (c)*))))* (c a)))*+((a)*+c))' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=3
+python train_icl_gen.py --task_type simplyrx --regex '((((((c)*+c) c) (((a (c)*) a))*) a))*' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+
+# #States=7, Stardepth=3
+# regex_idx=1
+python train_icl_gen.py --task_type simplyrx --regex '((((c)* ((b)* c)) ((c (a (((b)* b))*)) (b)*)))*' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=2
+python train_icl_gen.py --task_type simplyrx --regex '((((((a)*+a) b)+(b)*)+((b)* (a)*))+((((b (b)*))* c))*)' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=3
+python train_icl_gen.py --task_type simplyrx --regex '(((a ((((((b c)+(c)*)+(a)*) (a (c)*)) (a)*))*) a))*' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+
+# #States=8, Stardepth=3
+# regex_idx=1
+python train_icl_gen.py --task_type simplyrx --regex '(((((((((c)*+b))* (b)*)+(b)*) a) b))*+((a+c) a))' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=2
+python train_icl_gen.py --task_type simplyrx --regex '((b (a c)) (((((b)*+(c)*))* ((c)* ((b b) ((a)*+a)))))*)' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=3
+python train_icl_gen.py --task_type simplyrx --regex '((b ((((((((c)* b))*+(b)*) b))*+(a)*)+c)) a)' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+
+# #States=9, Stardepth=3
+# regex_idx=1
+python train_icl_gen.py --task_type simplyrx --regex '((((b)* a) (((((c+c) (a c)) (c (c)*)))*+((b)*+c))))*' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=2
+python train_icl_gen.py --task_type simplyrx --regex '((((((b)* ((b (a c)) b)) ((b)* c)))*+((b+c) (a+c))))*' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup
+# regex_idx=3
+python train_icl_gen.py --task_type simplyrx --regex '((((((b ((c)* (c)*)))*+(a (c)*)) (((a)* c) c)))* b)' --mkey gpt-oss --retries 3 --use_reg --use_ce --ce_epochs 12 --ce_batch_size 250 --ce_clustered --reasoning_mode agentic_reflection --rerun 1 --indir datasets/scaleup/regex_datasets --outdir logs/scaleup

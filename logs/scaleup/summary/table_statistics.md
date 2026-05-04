@@ -243,7 +243,8 @@ StarDepth：
 当前表中模型：
 
 - `gpt-oss`
-- `gpt5`
+- `gpt5.4-medium`
+- `gpt5.4-xhigh`
 - `qw3-235b`
 
 方法和 log 目录模式：
@@ -270,7 +271,8 @@ logs/scaleup/icl_gen_simplyrx/model=<MODEL>/ce/reg/agentic_reflection/
 特殊说明：
 
 - 当前表格对所有 model 都只统计每个 regex 的 first rerun，也就是 `run-0`。
-- `gpt5` 当前是 `NA`，因为 `model=gpt5` 还没有跑完，暂时不从未完成 logs 统计数值。
+- `gpt5.4-medium` 和 `gpt5.4-xhigh` 都使用 GPT-5.4；区别是 reasoning effort 分别为 `medium` 和 `xhigh`。
+- 如果某个 log 存在但 `summary` 是 `None` 或缺少 `summary["run-0"]["final_accuracy"]`，则该 regex 不计入 observed run；例如当前 `gpt5.4-xhigh / Standard / StarDepth=3` 有 1 个这种 log，因此该 cell 的分母是 `20`。
 - `qw3-235b` 当前已有 full coverage，因此直接从 `logs/scaleup/icl_gen_simplyrx/model=qw3-235b` 统计。
 
 ## `simplyrx_algorithm_components_ablation`
@@ -299,6 +301,14 @@ StarDepth：
   - `logs/scaleup/icl_gen_simplyrx/model=gpt-oss/std/reg/`
 - `single_inference`
   - `logs/scaleup/icl_gen_simplyrx/model=gpt-oss/ce/reg/single_inference/`
+- `noreg/single_inference`
+  - `logs/scaleup/icl_gen_simplyrx/model=gpt-oss/ce/noreg/single_inference/`
+  - 只统计文件名带 `_clustered` 后缀的 63 个 logs：
+
+```text
+msgdict_regex=<REGEX>_ceEpochs=12_ceBatch=250_clustered.json
+```
+
 - `noreg/agentic`
   - `logs/scaleup/icl_gen_simplyrx/model=gpt-oss/ce/noreg/agentic_reflection/`
 - `agentic_no_reflection`
@@ -331,6 +341,83 @@ StarDepth：
 ```text
 success rate (successful run-0s / observed run-0s)
 ```
+
+## `extrx_algorithm_components_ablation`
+
+文件：
+
+- `extrx_algorithm_components_ablation.md`
+- `extrx_algorithm_components_ablation.csv`
+- `extrx_algorithm_components_ablation.tex`
+
+用途：算法组件消融，比较 counterexamples、clustered counterexamples、regularization、reflection、repair loop 几个组件对 ExtRx 的影响。
+
+Domain：
+
+- `extrx`
+
+StarDepth：
+
+- `0`
+- `1`
+- `2`
+
+当前表中的 ablation 和 log 目录：
+
+- `standard`
+  - `logs/scaleup/icl_gen_extrx/model=gpt-oss/std/reg/`
+- `single_inference`
+  - `logs/scaleup/icl_gen_extrx/model=gpt-oss/ce/reg/single_inference/`
+  - 统计文件名带 `_clustered` 后缀的 logs：
+
+```text
+msgdict_regex=<REGEX>_ceEpochs=12_ceBatch=250_clustered.json
+```
+
+- `noreg/agentic_reflection`
+  - `logs/scaleup/icl_gen_extrx/model=gpt-oss/ce/noreg/agentic_reflection`
+  - 统计文件名带 `_clustered` 后缀的 logs：
+
+```text
+msgdict_regex=<REGEX>_ceEpochs=12_ceBatch=250_clustered.json
+```
+
+- `agentic_no_reflection`
+  - `logs/scaleup/icl_gen_extrx/model=gpt-oss/ce/reg/agentic_no_reflection/`
+- `agentic_no_repair_loop`
+  - `logs/scaleup/icl_gen_extrx/model=gpt-oss/ce/reg/agentic_no_repair_loop/`
+- `agentic_reflection`
+  - `logs/scaleup/icl_gen_extrx/model=gpt-oss/ce/reg/agentic_reflection/`
+
+CE-based rows 默认统计 clustered logs，即文件名为：
+
+```text
+msgdict_regex=<REGEX>_ceEpochs=12_ceBatch=250_clustered.json
+```
+
+组件列含义：
+
+- `CE`: 是否使用 counterexamples
+- `Regularization`: 是否使用 `reg`
+- `Reflection`: 是否有 agentic reflection
+- `Repair Loop`: 是否有 repair loop
+
+统计方式：
+
+1. 从 `regex_list.json` 取 ExtRx 中 `StarDepth=0,1,2`、所有 `#States`、每个 cell 前 3 个 regex。
+2. 每个 regex 只统计 `summary["run-0"]`。
+3. 成功条件是 `final_accuracy >= 1.0`。
+4. 每个 cell 显示：
+
+```text
+成功 run-0 数 / observed run-0 数
+```
+
+当前 full coverage：
+
+- `StarDepth=0`: `7 states * 3 regexes = 21`
+- `StarDepth=1`: `7 states * 3 regexes = 21`
+- `StarDepth=2`: `6 states * 3 regexes = 18`，因为 ExtRx 没有 `#States=9, StarDepth=2`
 
 ## `simplyrx_prompt_ablation`
 
@@ -414,30 +501,94 @@ success rate (successful run-0s / observed run-0s)
 
 Full coverage 时，每个 `StarDepth` 的分母是 `21`。如果某个 prompt variant / method 的 log 缺失，则 run-level 表中应报告 `NA` 或按 observed runs 显示实际分母；不要把缺失 log 误当成失败 run，除非表格明确声明使用保守估计。
 
-## `extrx_clustered_vs_nonclustered`
+## `clustered_vs_nonclustered`
 
 文件：
 
-- `extrx_clustered_vs_nonclustered.md`
-- `extrx_clustered_vs_nonclustered.csv`
-- `extrx_clustered_vs_nonclustered.tex`
+- `clustered_vs_nonclustered.md`
+- `clustered_vs_nonclustered.csv`
+- `clustered_vs_nonclustered.tex`
 
-用途：ExtRx 上 clustered counterexample 和 non-clustered counterexample 的比较。
+用途：在同一张表中比较 SimplyRx 和 ExtRx 上 clustered counterexamples 和 non-clustered counterexamples 对 agentic 方法的影响。表格上半部分是 SimplyRx，下半部分是 ExtRx。
 
 Domain：
 
+- `simplyrx`
 - `extrx`
 
 Model：
 
 - `gpt-oss`
 
+## SimplyRx
+
+StarDepth：
+
+- `1`
+- `2`
+- `3`
+
+方法和 log 目录：
+
+- `agentic_no_clustered`
+  - `logs/scaleup/icl_gen_simplyrx/model=gpt-oss/ce/reg/agentic_no_clustered/`
+  - 文件名没有 `_clustered` 后缀：
+
+```text
+msgdict_regex=<REGEX>_ceEpochs=12_ceBatch=250.json
+```
+
+- `agentic_reflection`
+  - `logs/scaleup/icl_gen_simplyrx/model=gpt-oss/ce/reg/agentic_reflection/`
+  - 统计文件名带 `_clustered` 后缀的 logs：
+
+```text
+msgdict_regex=<REGEX>_ceEpochs=12_ceBatch=250_clustered.json
+```
+
+统计方式：
+
+1. 统计 SimplyRx 的 `StarDepth=1,2,3`。
+2. 从 `regex_list.json` 取所有 `#States`、每个 cell 前 3 个 regex。
+3. 每个 regex 只统计 `summary["run-0"]`。
+4. 成功条件是 `final_accuracy >= 1.0`。
+5. 每个 cell 显示：
+
+```text
+成功 run-0 数 / observed run-0 数
+```
+
+当前 coverage：
+
+- `StarDepth=1`: 21 个 observed run-0
+- `StarDepth=2`: 21 个 observed run-0
+- `StarDepth=3`: 21 个 observed run-0
+
+## ExtRx
+
+StarDepth：
+
+- `0`
+- `1`
+- `2`
+
 方法和 log 目录：
 
 - `agentic_no_clustered`
   - `logs/scaleup/icl_gen_extrx/model=gpt-oss/ce/reg/agentic_no_clustered/`
+  - 文件名没有 `_clustered` 后缀：
+
+```text
+msgdict_regex=<REGEX>_ceEpochs=12_ceBatch=50.json
+```
+
 - `agentic_reflection`
   - `logs/scaleup/icl_gen_extrx/model=gpt-oss/ce/reg/agentic_reflection/`
+  - 统计文件名带 `_clustered` 后缀的 logs：
+
+```text
+msgdict_regex=<REGEX>_ceEpochs=12_ceBatch=250_clustered.json
+```
 
 统计方式：
 
@@ -468,7 +619,8 @@ Model：
   - `simplyrx_model_method_stardepth_1_2_3`
 - Algorithm ablation
   - `simplyrx_algorithm_components_ablation`
+  - `extrx_algorithm_components_ablation`
 - Prompt ablation
   - `simplyrx_prompt_ablation`
 - Clustered cex
-  - `extrx_clustered_vs_nonclustered`
+  - `clustered_vs_nonclustered`
