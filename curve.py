@@ -2,6 +2,7 @@ import os
 import json
 import glob
 import argparse
+import signal
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize, TwoSlopeNorm
@@ -13,6 +14,14 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 TokenCounter = Callable[[str], int]
 TokenEncoder = Callable[[str], List[int]]
+
+
+class _GuessEvalTimeout(Exception):
+    pass
+
+
+def _handle_guess_eval_timeout(signum, frame):
+    raise _GuessEvalTimeout()
 
 def _load_token_counter(mkey: str) -> Tuple[TokenCounter, TokenEncoder]:
     from modeling.llm import resolve_model_path
@@ -754,7 +763,7 @@ def _set_readable_token_axis(ax, x_values: List[float]):
             0.02,
             "x-axis trimmed for readability",
             transform=ax.transAxes,
-            fontsize=14,
+            fontsize=16,
             color="dimgray",
             ha="left",
             va="bottom",
@@ -765,10 +774,10 @@ def _set_readable_token_axis(ax, x_values: List[float]):
 
 
 def _style_pareto_axis(ax, x_values: List[float]):
-    ax.set_xlabel("Average Total Tokens: Input + Output (K)", fontsize=20)
-    ax.set_ylabel("Success Run Ratio", fontsize=20)
+    ax.set_xlabel("Average Total Tokens: Input + Output (K)", fontsize=24)
+    ax.set_ylabel("Success Run Ratio", fontsize=24)
     ax.set_ylim(-0.02, 1.02)
-    ax.tick_params(axis="both", labelsize=17)
+    ax.tick_params(axis="both", labelsize=20)
     ax.grid(True, linestyle="--", alpha=0.32, linewidth=0.8)
     _set_readable_token_axis(ax, x_values)
 
@@ -849,7 +858,7 @@ def _plot_depth_overlay(
             markeredgecolor="black",
             markeredgewidth=0.8,
             linewidth=0,
-            markersize=15,
+            markersize=17,
             label=setting_spec["label"],
         )
         for setting_spec in setting_specs
@@ -863,7 +872,7 @@ def _plot_depth_overlay(
             markeredgecolor="black",
             markeredgewidth=0.5,
             linewidth=0,
-            markersize=14,
+            markersize=16,
             label=f"StarDepth={depth}",
         )
         for depth in sorted(plotted_depths)
@@ -873,16 +882,16 @@ def _plot_depth_overlay(
         handles=method_handles,
         loc="lower right",
         title="Setting (shape)",
-        fontsize=15,
-        title_fontsize=16,
+        fontsize=18,
+        title_fontsize=19,
     )
     ax.add_artist(legend1)
     ax.legend(
         handles=difficulty_handles,
         loc=difficulty_legend_loc,
         title="Difficulty (StarDepth)",
-        fontsize=15,
-        title_fontsize=16,
+        fontsize=18,
+        title_fontsize=19,
     )
 
 
@@ -1095,6 +1104,17 @@ def _method_depth_offsets() -> Dict[str, float]:
     }
 
 
+def _sorted_epoch_keys(run_epochs: Dict[str, Any]) -> List[str]:
+    return sorted(
+        [
+            key
+            for key, value in run_epochs.items()
+            if str(key).startswith("epoch-") and isinstance(value, dict)
+        ],
+        key=lambda key: int(str(key).split("-")[1]),
+    )
+
+
 def plot_solve_rate_by_stardepth(
     logs_root: str, regex_list_path: str, outdir: str, task_type: str = "simplyrx",
 ) -> Dict[str, List[Dict[str, Any]]]:
@@ -1250,6 +1270,422 @@ def plot_solve_rate_by_states(
     plt.close()
 
     return all_points_by_method
+
+
+def _dataset_path_for_regex(dataset_dir: str, regex: str) -> str:
+    return os.path.join(
+        dataset_dir,
+        f"regex={regex}_trainMaxLen=32_evalMaxLen=32.json",
+    )
+
+
+def _score_guess_on_eval(
+    task,
+    guess: Optional[str],
+    eval_ex: List[str],
+    eval_labels: List[int],
+    timeout_seconds: float = 2.0,
+) -> float:
+    if not guess:
+        return 0.0
+
+    from tasks.utils import dfa_accepts_ex
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    try:
+        signal.signal(signal.SIGALRM, _handle_guess_eval_timeout)
+        signal.setitimer(signal.ITIMER_REAL, timeout_seconds)
+        if task.__class__.__name__ == "SimplyRegularLanguage":
+            from pyformlang.regular_expression import Regex
+
+            dfa_pred = Regex(guess).to_epsilon_nfa().to_deterministic().minimize()
+        else:
+            dfa_pred, _, _ = task.regex_to_pynini_via_pyformlang(guess)
+
+        if not eval_ex:
+            return 0.0
+
+        correct = sum(
+            int(int(dfa_accepts_ex(dfa_pred, ex)) == int(label))
+            for ex, label in zip(eval_ex, eval_labels)
+        )
+        return correct / len(eval_ex)
+    except Exception:
+        return 0.0
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+
+
+def _load_run_guess_eval_curves_for_log(
+    log_path: str,
+    task_type: str,
+    dataset_dir: str,
+    run_keys: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    from tasks.rl import ExtRegularLanguage, SimplyRegularLanguage
+
+    regex = _extract_regex_from_log_path(log_path)
+    dataset_path = _dataset_path_for_regex(dataset_dir, regex)
+    if not os.path.exists(dataset_path):
+        return []
+
+    with open(dataset_path, "r", encoding="utf-8") as f:
+        dataset = json.load(f)
+    eval_ex = dataset.get("eval_ex", [])
+    eval_labels = dataset.get("eval_labels", [])
+
+    if task_type == "extrx":
+        task = ExtRegularLanguage(regex, max_length=32, alphabet="[A-Za-z0-9#]")
+    else:
+        task = SimplyRegularLanguage(regex, max_length=32)
+
+    with open(log_path, "r", encoding="utf-8") as f:
+        msgdict = json.load(f)
+
+    score_cache: Dict[str, float] = {}
+    curves: List[Dict[str, Any]] = []
+    allowed_run_keys = set(run_keys) if run_keys is not None else None
+    for run_key, run_epochs in msgdict.items():
+        if not str(run_key).startswith("run-") or not isinstance(run_epochs, dict):
+            continue
+        if allowed_run_keys is not None and run_key not in allowed_run_keys:
+            continue
+
+        x_values: List[int] = []
+        y_values: List[float] = []
+        for epoch_key in _sorted_epoch_keys(run_epochs):
+            epoch = run_epochs[epoch_key]
+            sample_count = int(epoch.get("NumTrainingSamples", 0))
+            if sample_count <= 0:
+                continue
+            x_values.append(sample_count)
+            guess = epoch.get("CurrentGuess")
+            if guess not in score_cache:
+                score_cache[guess] = _score_guess_on_eval(task, guess, eval_ex, eval_labels)
+            y_values.append(
+                score_cache[guess]
+            )
+
+        if x_values:
+            curves.append({
+                "regex": regex,
+                "run_key": run_key,
+                "x_values": x_values,
+                "y_values": y_values,
+            })
+
+    return curves
+
+
+def _curve_values_at_budgets(
+    curve: Dict[str, Any],
+    budgets: List[int],
+) -> List[float]:
+    values: List[float] = []
+    x_values = curve["x_values"]
+    y_values = curve["y_values"]
+    idx = -1
+    for budget in budgets:
+        while idx + 1 < len(x_values) and x_values[idx + 1] <= budget:
+            idx += 1
+        values.append(float(y_values[idx]) if idx >= 0 else float("nan"))
+    return values
+
+
+def _sample_budget_method_specs(logs_root: str) -> List[Dict[str, str]]:
+    return [
+        {
+            "key": "standard",
+            "label": "Standard",
+            "path": os.path.join(logs_root, "std/reg"),
+            "color": "#4c78a8",
+        },
+        {
+            "key": "agentic",
+            "label": "Agentic",
+            "path": os.path.join(logs_root, "ce/reg/agentic_reflection"),
+            "color": "#f58518",
+        },
+    ]
+
+
+def _collect_sample_budget_guess_eval_curves(
+    logs_root: str,
+    regex_list_path: str,
+    task_type: str,
+    dataset_dir: str,
+    target_depths: Optional[List[int]] = None,
+    run_keys: Optional[List[str]] = None,
+) -> Dict[int, Dict[str, List[Dict[str, Any]]]]:
+    metadata = _load_scaleup_regex_metadata(regex_list_path, task_type)
+    depth_map = metadata["depth_map"]
+    available_depths = metadata["depths"]
+    if target_depths is not None:
+        requested_depths = set(target_depths)
+        available_depths = [depth for depth in available_depths if depth in requested_depths]
+    if not available_depths:
+        raise ValueError("No matching StarDepth values found for sample-budget plot.")
+
+    method_specs = _sample_budget_method_specs(logs_root)
+    curves_by_depth_method: Dict[int, Dict[str, List[Dict[str, Any]]]] = {
+        depth: {spec["key"]: [] for spec in method_specs}
+        for depth in available_depths
+    }
+    for spec in method_specs:
+        for log_path in sorted(glob.glob(os.path.join(spec["path"], "*.json"))):
+            regex = _extract_regex_from_log_path(log_path)
+            depth = depth_map.get(regex)
+            if depth not in curves_by_depth_method:
+                continue
+            curves = _load_run_guess_eval_curves_for_log(
+                log_path,
+                task_type=task_type,
+                dataset_dir=dataset_dir,
+                run_keys=run_keys,
+            )
+            for curve in curves:
+                curve["method"] = spec["key"]
+                curve["depth"] = depth
+            curves_by_depth_method[depth][spec["key"]].extend(curves)
+
+    return curves_by_depth_method
+
+
+def _draw_sample_budget_panel(
+    ax,
+    curves_by_method: Dict[str, List[Dict[str, Any]]],
+    method_specs: List[Dict[str, str]],
+    budgets: List[int],
+    title: str,
+    show_ylabel: bool = False,
+    show_legend: bool = False,
+):
+    for spec in method_specs:
+        curves = curves_by_method[spec["key"]]
+        if not curves:
+            continue
+        values = np.array(
+            [_curve_values_at_budgets(curve, budgets) for curve in curves],
+            dtype=float,
+        )
+        means = np.nanmean(values, axis=0)
+        counts = np.sum(np.isfinite(values), axis=0)
+        stds = np.nanstd(values, axis=0)
+        sems = np.divide(
+            stds,
+            np.sqrt(counts),
+            out=np.zeros_like(stds),
+            where=counts > 0,
+        )
+
+        ax.plot(
+            budgets,
+            means,
+            color=spec["color"],
+            linewidth=2.4,
+            marker="o",
+            markersize=5.4,
+            label=f"{spec['label']} (n={len(curves)})",
+            zorder=3,
+        )
+        ax.fill_between(
+            budgets,
+            np.clip(means - sems, 0.0, 1.0),
+            np.clip(means + sems, 0.0, 1.0),
+            color=spec["color"],
+            alpha=0.18,
+            linewidth=0,
+            zorder=2,
+        )
+
+    ax.set_title(title, fontsize=18)
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(budgets)
+    ax.set_xticklabels([str(budget) for budget in budgets], rotation=35, ha="right")
+    ax.set_ylim(-0.02, 1.02)
+    ax.set_xlabel("Sample Budget", fontsize=18)
+    if show_ylabel:
+        ax.set_ylabel("Eval Accuracy", fontsize=18)
+    ax.tick_params(axis="both", labelsize=10)
+    ax.grid(True, linestyle="--", alpha=0.32, linewidth=0.8)
+    if show_legend:
+        ax.legend(fontsize=13, loc="lower right")
+
+
+def plot_sample_budget_guess_eval_accuracy(
+    logs_root: str,
+    regex_list_path: str,
+    outdir: str,
+    task_type: str = "simplyrx",
+    dataset_dir: str = "datasets/scaleup/regex_datasets",
+    target_depths: Optional[List[int]] = None,
+) -> Dict[int, Dict[str, List[Dict[str, Any]]]]:
+    os.makedirs(outdir, exist_ok=True)
+
+    budgets = [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 3000]
+    method_specs = _sample_budget_method_specs(logs_root)
+    curves_by_depth_method = _collect_sample_budget_guess_eval_curves(
+        logs_root=logs_root,
+        regex_list_path=regex_list_path,
+        task_type=task_type,
+        dataset_dir=dataset_dir,
+        target_depths=target_depths,
+    )
+    available_depths = list(curves_by_depth_method)
+
+    ncols = min(3, len(available_depths))
+    nrows = int(np.ceil(len(available_depths) / ncols))
+    fig, axes = plt.subplots(
+        nrows,
+        ncols,
+        figsize=(5.4 * ncols, 4.3 * nrows),
+        sharex=True,
+        sharey=True,
+        constrained_layout=True,
+    )
+    axes_array = np.atleast_1d(axes).ravel()
+
+    for ax, depth in zip(axes_array, available_depths):
+        _draw_sample_budget_panel(
+            ax,
+            curves_by_depth_method[depth],
+            method_specs,
+            budgets,
+            title=f"StarDepth={depth}",
+            show_ylabel=False,
+            show_legend=True,
+        )
+
+    for ax in axes_array[len(available_depths):]:
+        ax.axis("off")
+
+    for ax in axes_array[-ncols:]:
+        if ax.has_data():
+            ax.set_xlabel("Sample Budget", fontsize=18)
+    for ax in axes_array[::ncols]:
+        if ax.has_data():
+            ax.set_ylabel("Eval Accuracy", fontsize=18)
+
+    depth_suffix = (
+        "all_stardepths"
+        if target_depths is None
+        else "stardepth_" + "_".join(str(depth) for depth in available_depths)
+    )
+    plt.savefig(
+        os.path.join(outdir, f"current_guess_eval_accuracy_sample_budget_{depth_suffix}.png"),
+        dpi=300,
+        bbox_inches="tight",
+    )
+    plt.close()
+
+    return curves_by_depth_method
+
+
+def plot_sample_budget_composite_rerun0(
+    regex_list_path: str,
+    outdir: str,
+    dataset_dir: str = "datasets/scaleup/regex_datasets",
+) -> List[Dict[str, Any]]:
+    os.makedirs(outdir, exist_ok=True)
+
+    budgets = [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 3000]
+    panels = [
+        {
+            "logs_root": "logs/scaleup/icl_gen_simplyrx/model=qw3-235b",
+            "task_type": "simplyrx",
+            "depth": 3,
+            "title": "Qwen3-235B",
+        },
+        {
+            "logs_root": "logs/scaleup/icl_gen_simplyrx/model=gpt5.4-medium",
+            "task_type": "simplyrx",
+            "depth": 3,
+            "title": "GPT-5.4 Medium",
+        },
+        {
+            "logs_root": "logs/scaleup/icl_gen_simplyrx/model=gpt-oss",
+            "task_type": "simplyrx",
+            "depth": 3,
+            "title": "GPT-oss-120B",
+        },
+        {
+            "logs_root": "logs/scaleup/icl_gen_extrx/model=gpt-oss",
+            "task_type": "extrx",
+            "depth": 2,
+            "title": "GPT-oss",
+        },
+    ]
+
+    fig, axes = plt.subplots(
+        1,
+        4,
+        figsize=(16.32, 5.76),
+        sharey=True,
+    )
+
+    fig.subplots_adjust(
+        left=0.05,
+        right=0.995,
+        bottom=0.18,
+        top=0.83,
+        wspace=0.07,
+    )
+
+    panel_results: List[Dict[str, Any]] = []
+    for idx, (ax, panel) in enumerate(zip(axes, panels)):
+        method_specs = _sample_budget_method_specs(panel["logs_root"])
+        curves_by_depth_method = _collect_sample_budget_guess_eval_curves(
+            logs_root=panel["logs_root"],
+            regex_list_path=regex_list_path,
+            task_type=panel["task_type"],
+            dataset_dir=dataset_dir,
+            target_depths=[panel["depth"]],
+            run_keys=["run-0"],
+        )
+        curves_by_method = curves_by_depth_method[panel["depth"]]
+        _draw_sample_budget_panel(
+            ax,
+            curves_by_method,
+            method_specs,
+            budgets,
+            title=panel["title"],
+            show_ylabel=(idx == 0),
+            show_legend=True,
+        )
+        panel_results.append({
+            "panel": panel,
+            "curves_by_method": curves_by_method,
+        })
+
+    axes[1].text(
+        0.5,
+        1.1,
+        "Simple(SD=3) with Different LLM Learners",
+        transform=axes[1].transAxes,
+        ha="center",
+        va="bottom",
+        fontsize=20,
+        weight="bold",
+    )
+    axes[3].text(
+        0.5,
+        1.1,
+        "Extended(SD=2)",
+        transform=axes[3].transAxes,
+        ha="center",
+        va="bottom",
+        fontsize=20,
+        weight="bold",
+    )
+
+    plt.savefig(
+        os.path.join(outdir, "current_guess_eval_accuracy_sample_budget_composite_rerun0.png"),
+        dpi=300,
+    )
+    plt.close()
+
+    return panel_results
 
 
 def _aggregate_success_rate_by_cell(
@@ -1803,8 +2239,8 @@ def plot_pareto(
 
     _plot_aggregated_method_points(ax, aggregated_points)
     _style_pareto_axis(ax, [point["avg_total_tokens"] for point in aggregated_points])
-    ax.set_title(f"Pareto Front for {task_label} Scaleup (task average)", fontsize=21)
-    ax.legend(title="Setting", fontsize=15, title_fontsize=16)
+    ax.set_title(f"Pareto Front for {task_label} Scaleup (task average)", fontsize=24)
+    ax.legend(title="Setting", fontsize=18, title_fontsize=19)
     plt.tight_layout()
     plt.savefig(os.path.join(outdir, "pareto_task_average.png"), dpi=300)
     plt.close()
@@ -2223,6 +2659,8 @@ def parse_args():
             "solve_rate_by_stardepth",
             "solve_rate_by_states",
             "solve_rate_heatmap",
+            "sample_budget_guess_eval_accuracy",
+            "sample_budget_composite_rerun0",
             "mean_samples_by_stardepth",
             "median_samples_surface",
             "median_samples_heatmap",
@@ -2231,8 +2669,15 @@ def parse_args():
     parser.add_argument("--task_type", type=str, default="simplyrx", choices=["simplyrx", "extrx"])
     parser.add_argument("--logs_root", type=str, default=None)
     parser.add_argument("--regex_list_path", type=str, default="datasets/scaleup/regex_list.json")
+    parser.add_argument("--dataset_dir", type=str, default="datasets/scaleup/regex_datasets")
     parser.add_argument("--outdir", type=str, default=None)
     parser.add_argument("--mkey", type=str, default="gpt-oss")
+    parser.add_argument(
+        "--sample_budget_depths",
+        type=str,
+        default=None,
+        help="Comma-separated StarDepth values for sample_budget_guess_eval_accuracy, e.g. 2 or 1,2,3.",
+    )
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -2277,6 +2722,25 @@ if __name__ == "__main__":
             regex_list_path=args.regex_list_path,
             outdir=args.outdir,
             task_type=args.task_type,
+        )
+    elif args.plot_type == "sample_budget_guess_eval_accuracy":
+        plot_sample_budget_guess_eval_accuracy(
+            logs_root=args.logs_root,
+            regex_list_path=args.regex_list_path,
+            outdir=args.outdir,
+            task_type=args.task_type,
+            dataset_dir=args.dataset_dir,
+            target_depths=(
+                [int(depth) for depth in args.sample_budget_depths.split(",")]
+                if args.sample_budget_depths
+                else None
+            ),
+        )
+    elif args.plot_type == "sample_budget_composite_rerun0":
+        plot_sample_budget_composite_rerun0(
+            regex_list_path=args.regex_list_path,
+            outdir=args.outdir,
+            dataset_dir=args.dataset_dir,
         )
     elif args.plot_type == "mean_samples_by_stardepth":
         plot_mean_samples_by_stardepth(

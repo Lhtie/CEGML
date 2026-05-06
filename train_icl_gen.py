@@ -4,6 +4,7 @@ import random
 import os
 import json
 import re
+import signal
 import numpy as np
 from tqdm import tqdm
 from types import SimpleNamespace
@@ -42,6 +43,15 @@ def extract_ans(res):
     if matches:
         return matches.group(1)
     return None
+
+def extract_all_ans(res):
+    if res is None:
+        return []
+    return [
+        match.strip()
+        for match in re.findall(r"<ans>\s*(.*?)\s*</ans>", res, re.DOTALL)
+        if match.strip()
+    ]
 
 def extract_reasoning(res):
     if res is None: return None
@@ -166,7 +176,17 @@ def build_repair_prompt(previous_reasoning, previous_regex, train_ex, train_labe
     return prompt
 
 
-def build_retry_prompt(task, msg, train_ex, train_labels, max_examples=16):
+def build_candidate_repair_prompt(candidate_count=10):
+    return (
+        "\nCANDIDATE REGEX GENERATION INSTRUCTION\n"
+        + f"- Do not return only one repaired regex. Generate exactly {candidate_count} diverse candidate regexes.\n"
+        + "- Wrap every candidate regex in its own <ans> and </ans> block.\n"
+        + "- You may include one concise shared <reasoning>...</reasoning> block before the candidates.\n"
+        + "- Do not include any text after the final </ans> block.\n\n"
+    )
+
+
+def build_retry_prompt(task, msg, train_ex, train_labels, max_examples=16, timeout_seconds=10):
     previous_regex = msg.get("Prediction")
     previous_reasoning = msg.get("Reasoning")
 
@@ -220,10 +240,17 @@ def build_retry_prompt(task, msg, train_ex, train_labels, max_examples=16):
 
 
 def uses_reflection_prompt(reasoning_mode):
-    return reasoning_mode in {"agentic_reflection", "agentic_no_repair_loop"}
+    return reasoning_mode in {
+        "agentic_reflection",
+        "agentic_no_repair_loop",
+        "agentic_candidate_repair",
+    }
 
 def uses_repair_loop(reasoning_mode):
     return reasoning_mode in {"agentic_reflection", "agentic_no_reflection"}
+
+def uses_candidate_repair(reasoning_mode):
+    return reasoning_mode == "agentic_candidate_repair"
 
 def run_episode(
     *,
@@ -285,17 +312,79 @@ def run_episode(
         retry_prompt, retry_done_score = "", 0.0
         best_retry_score = -1.0
         best_retry_msg = None
+        msg = None
         for retry_idx in range(config.retries):
             iter_prompt_kwargs = dict(prompt_kwargs)
-            if uses_reflection_prompt(config.reasoning_mode) or uses_repair_loop(config.reasoning_mode):
+            if uses_candidate_repair(config.reasoning_mode):
+                iter_prompt_kwargs["agentic_reflection_instr"] = (
+                    reflection_prompt
+                    + build_candidate_repair_prompt(
+                        candidate_count=config.candidate_repair_count,
+                    )
+                )
+            elif uses_reflection_prompt(config.reasoning_mode) or uses_repair_loop(config.reasoning_mode):
                 iter_prompt_kwargs["agentic_reflection_instr"] = (
                     reflection_prompt + retry_prompt
                 )
+
             msg = generate_fn(
                 prompt_template=prompt_template,
                 train_prompt=train_p,
                 prompt_format_kwargs=iter_prompt_kwargs,
+                answer_extractor=extract_all_ans if uses_candidate_repair(config.reasoning_mode) else extract_ans,
+                reasoning_extractor=extract_reasoning,
             )
+
+            if uses_candidate_repair(config.reasoning_mode):
+                candidates = msg.get("Prediction") or []
+                msg["IsCandidateRepairBatch"] = True
+                msg["CandidateCount"] = len(candidates)
+                msgs.append(msg)
+                if on_retry is not None:
+                    on_retry(epoch, msgs)
+
+                if len(candidates) == 0:
+                    msg["Error"] = "Not enough candidate regexes extracted from candidate repair response."
+                    break
+
+                for candidate_idx, candidate_regex in enumerate(candidates[:min(len(candidates), config.candidate_repair_count)]):
+                    candidate_msg = {
+                        **msg,
+                        "Prediction": candidate_regex,
+                        "Reasoning": msg.get("Reasoning"),
+                        "CandidateIndex": candidate_idx,
+                        "IsCandidateRepair": True,
+                    }
+                    print(f"Epoch {epoch}, Candidate {candidate_idx}\nPrediction: {candidate_regex}", flush=True)
+                    candidate_msg = teacher.judge_regex(
+                        msg=candidate_msg,
+                        fst_gt=fst_gt,
+                        train_ex=agg_train_ex,
+                        train_labels=agg_train_labels,
+                        eval_ex=data["eval_ex"],
+                        eval_labels=data["eval_labels"]
+                    )
+                    _, candidate_retry_score = build_retry_prompt(
+                        task=task,
+                        msg=candidate_msg,
+                        train_ex=agg_train_ex,
+                        train_labels=agg_train_labels,
+                    )
+                    candidate_msg["RepairScore"] = candidate_retry_score
+                    msgs.append(candidate_msg)
+                    if on_retry is not None:
+                        on_retry(epoch, msgs)
+
+                    if candidate_msg.get("Equivalent"):
+                        acc = max(acc, 1)
+                    if best_retry_msg is None or candidate_retry_score >= best_retry_score:
+                        best_retry_score = candidate_retry_score
+                        best_retry_msg = candidate_msg
+
+                    if candidate_retry_score >= 1.0:
+                        break
+                break
+
             print(f"Epoch {epoch}, Retry {retry_idx}\nPrediction: {msg['Prediction']}\nReasoning: {msg['Reasoning']}", flush=True)
             msg = teacher.judge_regex(
                 msg=msg,
@@ -332,9 +421,12 @@ def run_episode(
         if best_retry_msg is not None:
             current_guess = best_retry_msg.get("Prediction")
             current_guess_reasoning = best_retry_msg.get("Reasoning")
-        else:
+        elif msg is not None and not msg.get("IsCandidateRepairBatch"):
             current_guess = msg.get("Prediction")
             current_guess_reasoning = msg.get("Reasoning")
+        else:
+            current_guess = None
+            current_guess_reasoning = None
 
         epoch_result = {
             "Accuracy": acc,
@@ -404,8 +496,10 @@ def main(argv=None):
             "agentic_reflection",
             "agentic_no_reflection",
             "agentic_no_repair_loop",
+            "agentic_candidate_repair",
         ],
     )
+    parser.add_argument("--candidate_repair_count", type=int, default=10)
     parser.add_argument("--indir", type=str, default="datasets")
     parser.add_argument("--outdir", type=str, default="logs/opt_prompt")
     args = parser.parse_args(argv)
@@ -472,14 +566,16 @@ def main(argv=None):
             prompt_template,
             train_prompt,
             prompt_format_kwargs,
+            answer_extractor=extract_ans,
+            reasoning_extractor=extract_reasoning,
         ):
             return learner.generate(
                 prompt_template=prompt_template,
                 train_prompt=train_prompt,
                 prompt_format_kwargs=prompt_format_kwargs,
                 temp=args.temp,
-                answer_extractor=extract_ans,
-                reasoning_extractor=extract_reasoning,
+                answer_extractor=answer_extractor,
+                reasoning_extractor=reasoning_extractor,
             )
 
         def on_retry(epoch, msgs):
