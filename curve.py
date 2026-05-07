@@ -1317,6 +1317,30 @@ def _score_guess_on_eval(
         signal.signal(signal.SIGALRM, previous_handler)
 
 
+def _score_guess_by_diff_ratio(
+    task,
+    guess: Optional[str],
+    target_fst,
+    sigma,
+    diff_k: int = 8,
+    timeout_seconds: float = 2.0,
+) -> float:
+    if not guess:
+        return 1.0
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    try:
+        signal.signal(signal.SIGALRM, _handle_guess_eval_timeout)
+        signal.setitimer(signal.ITIMER_REAL, timeout_seconds)
+        _, guess_fst, _ = task.regex_to_pynini_via_pyformlang(guess, sigma=sigma)
+        return float(task.diff_ratio(target_fst, guess_fst, sigma, k=diff_k))
+    except Exception:
+        return 1.0
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+
+
 def _load_run_guess_eval_curves_for_log(
     log_path: str,
     task_type: str,
@@ -1366,6 +1390,63 @@ def _load_run_guess_eval_curves_for_log(
             y_values.append(
                 score_cache[guess]
             )
+
+        if x_values:
+            curves.append({
+                "regex": regex,
+                "run_key": run_key,
+                "x_values": x_values,
+                "y_values": y_values,
+            })
+
+    return curves
+
+
+def _load_run_guess_diff_ratio_curves_for_log(
+    log_path: str,
+    task_type: str,
+    run_keys: Optional[List[str]] = None,
+    diff_k: int = 8,
+) -> List[Dict[str, Any]]:
+    from tasks.rl import ExtRegularLanguage, SimplyRegularLanguage
+
+    regex = _extract_regex_from_log_path(log_path)
+    if task_type == "extrx":
+        task = ExtRegularLanguage(regex, max_length=32, alphabet="[A-Za-z0-9#]")
+    else:
+        task = SimplyRegularLanguage(regex, max_length=32)
+    _, target_fst, sigma = task.regex_to_pynini_via_pyformlang(regex)
+
+    with open(log_path, "r", encoding="utf-8") as f:
+        msgdict = json.load(f)
+
+    score_cache: Dict[str, float] = {}
+    curves: List[Dict[str, Any]] = []
+    allowed_run_keys = set(run_keys) if run_keys is not None else None
+    for run_key, run_epochs in msgdict.items():
+        if not str(run_key).startswith("run-") or not isinstance(run_epochs, dict):
+            continue
+        if allowed_run_keys is not None and run_key not in allowed_run_keys:
+            continue
+
+        x_values: List[int] = []
+        y_values: List[float] = []
+        for epoch_key in _sorted_epoch_keys(run_epochs):
+            epoch = run_epochs[epoch_key]
+            sample_count = int(epoch.get("NumTrainingSamples", 0))
+            if sample_count <= 0:
+                continue
+            x_values.append(sample_count)
+            guess = epoch.get("CurrentGuess")
+            if guess not in score_cache:
+                score_cache[guess] = _score_guess_by_diff_ratio(
+                    task,
+                    guess,
+                    target_fst,
+                    sigma,
+                    diff_k=diff_k,
+                )
+            y_values.append(score_cache[guess])
 
         if x_values:
             curves.append({
@@ -1452,6 +1533,48 @@ def _collect_sample_budget_guess_eval_curves(
     return curves_by_depth_method
 
 
+def _collect_sample_budget_guess_diff_ratio_curves(
+    logs_root: str,
+    regex_list_path: str,
+    task_type: str,
+    target_depths: Optional[List[int]] = None,
+    run_keys: Optional[List[str]] = None,
+    diff_k: int = 8,
+) -> Dict[int, Dict[str, List[Dict[str, Any]]]]:
+    metadata = _load_scaleup_regex_metadata(regex_list_path, task_type)
+    depth_map = metadata["depth_map"]
+    available_depths = metadata["depths"]
+    if target_depths is not None:
+        requested_depths = set(target_depths)
+        available_depths = [depth for depth in available_depths if depth in requested_depths]
+    if not available_depths:
+        raise ValueError("No matching StarDepth values found for sample-budget plot.")
+
+    method_specs = _sample_budget_method_specs(logs_root)
+    curves_by_depth_method: Dict[int, Dict[str, List[Dict[str, Any]]]] = {
+        depth: {spec["key"]: [] for spec in method_specs}
+        for depth in available_depths
+    }
+    for spec in method_specs:
+        for log_path in sorted(glob.glob(os.path.join(spec["path"], "*.json"))):
+            regex = _extract_regex_from_log_path(log_path)
+            depth = depth_map.get(regex)
+            if depth not in curves_by_depth_method:
+                continue
+            curves = _load_run_guess_diff_ratio_curves_for_log(
+                log_path,
+                task_type=task_type,
+                run_keys=run_keys,
+                diff_k=diff_k,
+            )
+            for curve in curves:
+                curve["method"] = spec["key"]
+                curve["depth"] = depth
+            curves_by_depth_method[depth][spec["key"]].extend(curves)
+
+    return curves_by_depth_method
+
+
 def _draw_sample_budget_panel(
     ax,
     curves_by_method: Dict[str, List[Dict[str, Any]]],
@@ -1511,6 +1634,31 @@ def _draw_sample_budget_panel(
     ax.grid(True, linestyle="--", alpha=0.32, linewidth=0.8)
     if show_legend:
         ax.legend(fontsize=13, loc="lower right")
+
+
+def _draw_sample_budget_diff_ratio_panel(
+    ax,
+    curves_by_method: Dict[str, List[Dict[str, Any]]],
+    method_specs: List[Dict[str, str]],
+    budgets: List[int],
+    title: str,
+    show_ylabel: bool = False,
+    show_legend: bool = False,
+    legend_loc: str = "upper right",
+):
+    _draw_sample_budget_panel(
+        ax,
+        curves_by_method,
+        method_specs,
+        budgets,
+        title=title,
+        show_ylabel=show_ylabel,
+        show_legend=show_legend,
+    )
+    if show_ylabel:
+        ax.set_ylabel("Regex Distance", fontsize=18)
+    if show_legend:
+        ax.legend(fontsize=13, loc=legend_loc)
 
 
 def plot_sample_budget_guess_eval_accuracy(
@@ -1681,6 +1829,113 @@ def plot_sample_budget_composite_rerun0(
 
     plt.savefig(
         os.path.join(outdir, "current_guess_eval_accuracy_sample_budget_composite_rerun0.png"),
+        dpi=300,
+    )
+    plt.close()
+
+    return panel_results
+
+
+def plot_sample_budget_diff_ratio_composite_rerun0(
+    regex_list_path: str,
+    outdir: str,
+    diff_k: int = 32,
+) -> List[Dict[str, Any]]:
+    os.makedirs(outdir, exist_ok=True)
+
+    budgets = [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 3000]
+    panels = [
+        {
+            "logs_root": "logs/scaleup/icl_gen_simplyrx/model=qw3-235b",
+            "task_type": "simplyrx",
+            "depth": 3,
+            "title": "Qwen3-235B",
+        },
+        {
+            "logs_root": "logs/scaleup/icl_gen_simplyrx/model=gpt5.4-medium",
+            "task_type": "simplyrx",
+            "depth": 3,
+            "title": "GPT-5.4 Medium",
+        },
+        {
+            "logs_root": "logs/scaleup/icl_gen_simplyrx/model=gpt-oss",
+            "task_type": "simplyrx",
+            "depth": 3,
+            "title": "GPT-oss-120B",
+        },
+        {
+            "logs_root": "logs/scaleup/icl_gen_extrx/model=gpt-oss",
+            "task_type": "extrx",
+            "depth": 2,
+            "title": "GPT-oss",
+        },
+    ]
+
+    fig, axes = plt.subplots(
+        1,
+        4,
+        figsize=(16.32, 5.76),
+        sharey=True,
+    )
+
+    fig.subplots_adjust(
+        left=0.05,
+        right=0.995,
+        bottom=0.18,
+        top=0.83,
+        wspace=0.07,
+    )
+
+    panel_results: List[Dict[str, Any]] = []
+    for idx, (ax, panel) in enumerate(zip(axes, panels)):
+        method_specs = _sample_budget_method_specs(panel["logs_root"])
+        curves_by_depth_method = _collect_sample_budget_guess_diff_ratio_curves(
+            logs_root=panel["logs_root"],
+            regex_list_path=regex_list_path,
+            task_type=panel["task_type"],
+            target_depths=[panel["depth"]],
+            run_keys=["run-0"],
+            diff_k=diff_k,
+        )
+        curves_by_method = curves_by_depth_method[panel["depth"]]
+        _draw_sample_budget_diff_ratio_panel(
+            ax,
+            curves_by_method,
+            method_specs,
+            budgets,
+            title=panel["title"],
+            show_ylabel=(idx == 0),
+            show_legend=True,
+            legend_loc=("lower left" if idx < 2 else "upper right"),
+        )
+        panel_results.append({
+            "panel": panel,
+            "curves_by_method": curves_by_method,
+        })
+
+    axes[1].text(
+        0.5,
+        1.1,
+        "Simple(SD=3) with Different LLM Learners",
+        transform=axes[1].transAxes,
+        ha="center",
+        va="bottom",
+        fontsize=20,
+        weight="bold",
+    )
+    axes[3].text(
+        0.5,
+        1.1,
+        "Extended(SD=2)",
+        transform=axes[3].transAxes,
+        ha="center",
+        va="bottom",
+        fontsize=20,
+        weight="bold",
+    )
+
+    plt.savefig(
+        os.path.join(outdir, "current_guess_diff_ratio_sample_budget_composite_rerun0.png"),
         dpi=300,
     )
     plt.close()
@@ -2661,6 +2916,7 @@ def parse_args():
             "solve_rate_heatmap",
             "sample_budget_guess_eval_accuracy",
             "sample_budget_composite_rerun0",
+            "sample_budget_diff_ratio_composite_rerun0",
             "mean_samples_by_stardepth",
             "median_samples_surface",
             "median_samples_heatmap",
@@ -2741,6 +2997,11 @@ if __name__ == "__main__":
             regex_list_path=args.regex_list_path,
             outdir=args.outdir,
             dataset_dir=args.dataset_dir,
+        )
+    elif args.plot_type == "sample_budget_diff_ratio_composite_rerun0":
+        plot_sample_budget_diff_ratio_composite_rerun0(
+            regex_list_path=args.regex_list_path,
+            outdir=args.outdir,
         )
     elif args.plot_type == "mean_samples_by_stardepth":
         plot_mean_samples_by_stardepth(
