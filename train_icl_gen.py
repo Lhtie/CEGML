@@ -284,6 +284,7 @@ def run_episode(
                     regex_gt=regex,
                     regex_gen=current_guess,
                     clustered=config.ce_clustered,
+                    generation_mode=config.ce_generation_mode,
                 )
                 if uses_reflection_prompt(config.reasoning_mode):
                     reflection_prompt = build_reflection_prompt(
@@ -475,6 +476,13 @@ def main(argv=None):
     parser.add_argument("--ce_batch_size", type=int, default=128)
     parser.add_argument("--ce_clustered", default=False, action="store_true")
     parser.add_argument(
+        "--ce_generation_mode",
+        type=str,
+        default="dfs",
+        choices=["dfs", "bfs", "random"],
+        help="Strategy used to generate counterexamples from the difference DFA.",
+    )
+    parser.add_argument(
         "--prompt_mode",
         type=str,
         default="full",
@@ -545,7 +553,9 @@ def main(argv=None):
         config_name += "reg/" if args.use_reg else "noreg/"
         config_name += f"{args.reasoning_mode}/"
         config_name += f"prompt={args.prompt_mode}/" if args.prompt_mode != "full" else ""
-        config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs}_ceBatch={args.ce_batch_size}{'_clustered' if args.ce_clustered else ''}.json"
+        ce_mode = f"_{args.ce_generation_mode}"
+        ce_clustered = "_clustered" if args.ce_clustered else ""
+        config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs}_ceBatch={args.ce_batch_size}{ce_mode}{ce_clustered}.json"
 
     generate_dataset(args, task_type=args.task_type, outdir=args.indir)
     dataset = os.path.join(

@@ -74,17 +74,35 @@ def _generate_counterexamples_worker(
     regex_gt,
     regex_gen,
     clustered,
+    generation_mode,
 ):
     try:
         dfa_gt, fst_gt, sigma = task.regex_to_pynini_via_pyformlang(regex_gt)
         dfa_gen, fst_gen, _ = task.regex_to_pynini_via_pyformlang(regex_gen, sigma)
 
-        if clustered:
-            ce_pos = task.k_witnesses_traverse(dfa_gt, dfa_gen, bs // 2)
-            ce_neg = task.k_witnesses_traverse(dfa_gen, dfa_gt, bs // 2)
+        if generation_mode == "dfs":
+            ce_pos = task.k_witnesses_dfs(
+                dfa_gt, dfa_gen, bs // 2, clustered=clustered
+            )
+            ce_neg = task.k_witnesses_dfs(
+                dfa_gen, dfa_gt, bs // 2, clustered=clustered
+            )
+        elif generation_mode == "random":
+            ce_pos = task.k_witnesses_sample(
+                dfa_gt, dfa_gen, bs // 2, clustered=clustered
+            )
+            ce_neg = task.k_witnesses_sample(
+                dfa_gen, dfa_gt, bs // 2, clustered=clustered
+            )
+        elif generation_mode == "bfs":
+            ce_pos = task.k_witnesses_bfs(
+                dfa_gt, dfa_gen, bs // 2, clustered=clustered
+            )
+            ce_neg = task.k_witnesses_bfs(
+                dfa_gen, dfa_gt, bs // 2, clustered=clustered
+            )
         else:
-            ce_pos = task.k_witnesses_sample(dfa_gt, dfa_gen, bs // 2)
-            ce_neg = task.k_witnesses_sample(dfa_gen, dfa_gt, bs // 2)
+            raise ValueError(f"Unknown counterexample generation mode: {generation_mode}")
 
         ce_x = ce_pos + ce_neg
         ce_y = [1] * len(ce_pos) + [0] * len(ce_neg)
@@ -173,7 +191,15 @@ class Teacher:
                 ce_y += [int(gt)] + y
         return ce_x, ce_y
     
-    def generate_counterexamples(self, bs, regex_gt, regex_gen, clustered=False, timeout_seconds=10):
+    def generate_counterexamples(
+        self,
+        bs,
+        regex_gt,
+        regex_gen,
+        clustered=False,
+        generation_mode="random",
+        timeout_seconds=10,
+    ):
         if timeout_seconds is not None and timeout_seconds > 0:
             try:
                 ctx = mp.get_context("fork")
@@ -184,7 +210,15 @@ class Teacher:
                 queue = ctx.Queue()
                 proc = ctx.Process(
                     target=_generate_counterexamples_worker,
-                    args=(queue, self.task, bs, regex_gt, regex_gen, clustered),
+                    args=(
+                        queue,
+                        self.task,
+                        bs,
+                        regex_gt,
+                        regex_gen,
+                        clustered,
+                        generation_mode,
+                    ),
                 )
                 proc.start()
                 proc.join(timeout_seconds)
@@ -210,6 +244,7 @@ class Teacher:
                 regex_gt,
                 regex_gen,
                 clustered,
+                generation_mode,
             )
             return inline_queue.value
     

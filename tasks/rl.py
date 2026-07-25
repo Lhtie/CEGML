@@ -165,29 +165,50 @@ class RegularLanguage:
                 attempts += 1
         return out
     
-    def k_witnesses_traverse(self, dfa_a: DeterministicFiniteAutomaton, dfa_b: DeterministicFiniteAutomaton, k: int=10):
-        """Return up to k clustered strings from loop-free state paths to final states in L(dfa_a) \\ L(dfa_b)."""
+    def k_witnesses_dfs(
+        self,
+        dfa_a: DeterministicFiniteAutomaton,
+        dfa_b: DeterministicFiniteAutomaton,
+        k: int = 10,
+        clustered: bool = True,
+    ):
+        """Return up to k disagreement witnesses from loop-free state paths."""
         diff_dfa = dfa_a.get_difference(dfa_b).minimize()
         if not diff_dfa.final_states or diff_dfa.start_state is None:
             return []
 
-        # Group by next-state only; multiple symbols on the same edge are merged
-        # into one char-class token.
-        next_state_cache = {}
+        # In clustered mode, symbols reaching the same next state are merged into
+        # one char-class token. Otherwise, every symbol is a separate frontier.
+        transitions_cache = {}
         token_cache = {}
 
-        def grouped_next_states(state):
-            if state in next_state_cache:
-                return next_state_cache[state]
-            outs = set()
+        def outgoing_transitions(state):
+            if state in transitions_cache:
+                return transitions_cache[state]
+
+            if clustered:
+                next_states = set()
+                for symbol in diff_dfa.symbols:
+                    nxt = diff_dfa._transition_function(state, symbol)
+                    if len(nxt) > 0:
+                        next_states.add(list(nxt)[0])
+                transitions = [
+                    (nxt, edge_token(state, nxt))
+                    for nxt in sorted(next_states, key=lambda s: str(s))
+                ]
+                transitions_cache[state] = transitions
+                return transitions
+
+            transitions = []
             for symbol in diff_dfa.symbols:
                 nxt = diff_dfa._transition_function(state, symbol)
                 if len(nxt) == 0:
                     continue
-                outs.add(list(nxt)[0])
-            ordered = sorted(outs, key=lambda s: str(s))
-            next_state_cache[state] = ordered
-            return ordered
+                token = symbol.value if hasattr(symbol, "value") else str(symbol)
+                transitions.append((list(nxt)[0], token))
+            transitions.sort(key=lambda item: (str(item[0]), item[1]))
+            transitions_cache[state] = transitions
+            return transitions
 
         def edge_token(state_a, state_b):
             key = (state_a, state_b)
@@ -219,13 +240,78 @@ class RegularLanguage:
                 break
 
             # Expand loop-free paths only (no repeated states on current path).
-            for nxt in grouped_next_states(cur):
+            for nxt, token in outgoing_transitions(cur):
                 if nxt in visited_states:
                     continue
-                token = edge_token(cur, nxt)
                 stack.append((nxt, token_path + [token], visited_states | {nxt}))
                 if len(stack) >= max_frontier:
                     break
+        return witnesses
+
+    def k_witnesses_bfs(
+        self,
+        dfa_a: DeterministicFiniteAutomaton,
+        dfa_b: DeterministicFiniteAutomaton,
+        k: int = 10,
+        clustered: bool = False,
+    ):
+        """Return up to k shortest disagreement witnesses using breadth-first search."""
+        diff_dfa = dfa_a.get_difference(dfa_b).minimize()
+        if not diff_dfa.final_states or diff_dfa.start_state is None:
+            return []
+
+        transitions_cache = {}
+
+        def outgoing_transitions(state):
+            if state in transitions_cache:
+                return transitions_cache[state]
+
+            next_state_to_symbols = {}
+            for symbol in diff_dfa.symbols:
+                nxt = diff_dfa._transition_function(state, symbol)
+                if len(nxt) == 0:
+                    continue
+                next_state = list(nxt)[0]
+                token = symbol.value if hasattr(symbol, "value") else str(symbol)
+                next_state_to_symbols.setdefault(next_state, []).append(token)
+
+            transitions = []
+            for next_state in sorted(next_state_to_symbols, key=lambda s: str(s)):
+                if clustered:
+                    token = dfa_edge_char_class(diff_dfa, state, next_state)
+                    transitions.append((next_state, token))
+                else:
+                    for token in sorted(next_state_to_symbols[next_state]):
+                        transitions.append((next_state, token))
+            transitions_cache[state] = transitions
+            return transitions
+
+        max_frontier = max(256, 8 * k, 4 * len(diff_dfa.states))
+        max_expansions = max_frontier * max(4, self.max_length)
+        witnesses = []
+        frontier = deque([(diff_dfa.start_state, [])])
+        expansions = 0
+
+        while frontier:
+            cur, token_path = frontier.popleft()
+
+            if cur in diff_dfa.final_states:
+                witnesses.append("".join(token_path))
+                if len(witnesses) >= k:
+                    return witnesses
+
+            if len(token_path) >= self.max_length:
+                continue
+
+            expansions += 1
+            if expansions > max_expansions:
+                break
+
+            for nxt, token in outgoing_transitions(cur):
+                if len(frontier) >= max_frontier:
+                    break
+                frontier.append((nxt, token_path + [token]))
+
         return witnesses
     
     def count_strings_of_length(self, fst: pynini.Fst, sigma: pynini.SymbolTable, length: int) -> int:
