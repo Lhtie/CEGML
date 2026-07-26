@@ -7,6 +7,10 @@ ARG BLACK_VERSION=v26.05.0
 # Set working directory
 WORKDIR /app
 
+# The PyTorch base image provides native dependencies such as fmt in Conda's
+# library directory. Make them visible to BLACK at build time and runtime.
+ENV LD_LIBRARY_PATH=/opt/conda/lib:/usr/local/lib:${LD_LIBRARY_PATH}
+
 # Install project and BLACK build/runtime dependencies.
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     --no-install-recommends \
@@ -46,10 +50,14 @@ RUN git clone \
         -DENABLE_FORMULAS_TESTS=NO \
     && cmake --build /tmp/black-sat/build --parallel \
     && cmake --install /tmp/black-sat/build \
+    && ldconfig \
+    && ln -sf /usr/local/bin/black /usr/bin/black \
     && rm -rf /tmp/black-sat
 
 # Fail the image build immediately if BLACK or its Z3 backend is unusable.
-RUN black -v \
+RUN command -v black \
+    && test -x /usr/bin/black \
+    && black -v \
     && test "$(black solve -f 'p & !p')" = "UNSAT" \
     && test "$(black solve -f 'F p')" = "SAT"
 
