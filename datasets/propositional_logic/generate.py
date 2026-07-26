@@ -148,6 +148,7 @@ def generate_dataset(
     formulas_per_depth: int,
     unary_probability: float,
     seed: int,
+    require_all_variables: bool = True,
     max_attempt_factor: int = 100,
 ) -> dict:
     if min_depth < 0:
@@ -173,6 +174,8 @@ def generate_dataset(
                 exact_depth=depth,
                 unary_probability=unary_probability,
             )
+            if require_all_variables and formula.variables != set(variables):
+                continue
             rendered = formula.render()
             if rendered in seen:
                 continue
@@ -210,6 +213,7 @@ def generate_dataset(
         "min_depth": min_depth,
         "max_depth": max_depth,
         "formulas_per_depth": formulas_per_depth,
+        "require_all_variables": require_all_variables,
         "num_formulas": sum(len(group["formulas"]) for group in depth_groups),
         "formula_groups": depth_groups,
     }
@@ -222,11 +226,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--variables",
         nargs="+",
-        default=["p", "q", "r"],
+        default=["p", "q", "r", "s", "t"],
         help="Atomic proposition names.",
     )
-    parser.add_argument("--min-depth", type=int, default=1)
-    parser.add_argument("--max-depth", type=int, default=5)
+    parser.add_argument("--min-depth", type=int, default=3)
+    parser.add_argument("--max-depth", type=int, default=7)
     parser.add_argument("--formulas-per-depth", type=int, default=25)
     parser.add_argument(
         "--unary-probability",
@@ -235,6 +239,11 @@ def parse_args() -> argparse.Namespace:
         help="Probability of choosing negation at a non-atomic grammar node.",
     )
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--allow-variable-subsets",
+        action="store_true",
+        help="Allow formulas that do not contain every configured variable.",
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -252,6 +261,7 @@ def main() -> None:
         formulas_per_depth=args.formulas_per_depth,
         unary_probability=args.unary_probability,
         seed=args.seed,
+        require_all_variables=not args.allow_variable_subsets,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8") as file:
