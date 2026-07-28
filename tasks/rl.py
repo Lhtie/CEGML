@@ -313,6 +313,90 @@ class RegularLanguage:
                 frontier.append((nxt, token_path + [token]))
 
         return witnesses
+
+    def k_witnesses_shortest(
+        self,
+        dfa_a: DeterministicFiniteAutomaton,
+        dfa_b: DeterministicFiniteAutomaton,
+        k: int = 10,
+        clustered: bool = False,
+    ):
+        """Return all disagreement witnesses at the shortest discovered length.
+
+        This is a BFS over the difference DFA. Once the first accepting state is
+        reached, its path length is the shortest counterexample length. We keep
+        collecting witnesses at exactly that length, and stop as soon as BFS
+        reaches a longer accepting witness.
+        """
+        diff_dfa = dfa_a.get_difference(dfa_b).minimize()
+        if not diff_dfa.final_states or diff_dfa.start_state is None:
+            return []
+
+        transitions_cache = {}
+
+        def outgoing_transitions(state):
+            if state in transitions_cache:
+                return transitions_cache[state]
+
+            next_state_to_symbols = {}
+            for symbol in diff_dfa.symbols:
+                nxt = diff_dfa._transition_function(state, symbol)
+                if len(nxt) == 0:
+                    continue
+                next_state = list(nxt)[0]
+                token = symbol.value if hasattr(symbol, "value") else str(symbol)
+                next_state_to_symbols.setdefault(next_state, []).append(token)
+
+            transitions = []
+            for next_state in sorted(next_state_to_symbols, key=lambda s: str(s)):
+                if clustered:
+                    token = dfa_edge_char_class(diff_dfa, state, next_state)
+                    transitions.append((next_state, token))
+                else:
+                    for token in sorted(next_state_to_symbols[next_state]):
+                        transitions.append((next_state, token))
+            transitions_cache[state] = transitions
+            return transitions
+
+        # "All shortest" can still be large for a non-clustered large alphabet,
+        # so keep the same bounded-search spirit as dfs/bfs witness generation.
+        max_frontier = max(1024, 16 * k, 8 * len(diff_dfa.states))
+        max_expansions = max_frontier * max(4, self.max_length)
+        witnesses = []
+        seen = set()
+        shortest_len = None
+        frontier = deque([(diff_dfa.start_state, [])])
+        expansions = 0
+
+        while frontier:
+            cur, token_path = frontier.popleft()
+            path_len = len(token_path)
+
+            if shortest_len is not None and path_len > shortest_len:
+                break
+
+            if cur in diff_dfa.final_states:
+                witness = "".join(token_path)
+                if shortest_len is None:
+                    shortest_len = path_len
+                if path_len == shortest_len and witness not in seen:
+                    seen.add(witness)
+                    witnesses.append(witness)
+                continue
+
+            if path_len >= self.max_length:
+                continue
+
+            expansions += 1
+            if expansions > max_expansions:
+                break
+
+            for nxt, token in outgoing_transitions(cur):
+                if len(frontier) >= max_frontier:
+                    break
+                frontier.append((nxt, token_path + [token]))
+
+        return witnesses
     
     def count_strings_of_length(self, fst: pynini.Fst, sigma: pynini.SymbolTable, length: int) -> int:
         """ Count number of strings of exactly given length accepted by fst. """

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate random LTL formulas grouped by exact syntax depth."""
+"""Generate random LTL formulas grouped by variable count and syntax depth."""
 
 from __future__ import annotations
 
@@ -88,6 +88,8 @@ def generate_formula(
 
 def generate_dataset(
     variables: Sequence[str],
+    min_variables: int,
+    max_variables: int,
     min_depth: int,
     max_depth: int,
     formulas_per_depth: int,
@@ -97,53 +99,74 @@ def generate_dataset(
 ) -> dict:
     rng = random.Random(seed)
     seen = set()
-    groups = []
-    for depth in range(min_depth, max_depth + 1):
-        records = []
-        attempts = 0
-        while len(records) < formulas_per_depth:
-            attempts += 1
-            if attempts > formulas_per_depth * 1000:
-                raise RuntimeError(
-                    f"Could not generate enough formulas at depth {depth}"
+    variable_groups = []
+    for num_variables in range(min_variables, max_variables + 1):
+        group_variables = list(variables[:num_variables])
+        depth_groups = []
+        for depth in range(min_depth, max_depth + 1):
+            records = []
+            attempts = 0
+            while len(records) < formulas_per_depth:
+                attempts += 1
+                if attempts > formulas_per_depth * 1000:
+                    raise RuntimeError(
+                        "Could not generate enough formulas with "
+                        f"{num_variables} variables at depth {depth}"
+                    )
+                formula = generate_formula(
+                    rng, group_variables, depth, unary_probability
                 )
-            formula = generate_formula(
-                rng, variables, depth, unary_probability
-            )
-            if require_all_variables and formula.variables != set(variables):
-                continue
-            rendered = formula.render()
-            if rendered in seen:
-                continue
-            seen.add(rendered)
-            records.append(
-                {
-                    "formula": rendered,
-                    "depth": formula.depth,
-                    "size": formula.size,
-                    "variables": sorted(formula.variables),
-                }
-            )
-        groups.append({"depth": depth, "formulas": records})
+                if (
+                    require_all_variables
+                    and formula.variables != set(group_variables)
+                ):
+                    continue
+                rendered = formula.render()
+                if rendered in seen:
+                    continue
+                seen.add(rendered)
+                records.append(
+                    {
+                        "formula": rendered,
+                        "depth": formula.depth,
+                        "size": formula.size,
+                        "num_variables": len(formula.variables),
+                        "variables": sorted(formula.variables),
+                    }
+                )
+            depth_groups.append({"depth": depth, "formulas": records})
+        variable_groups.append(
+            {
+                "num_variables": num_variables,
+                "variables": group_variables,
+                "depth_groups": depth_groups,
+            }
+        )
     return {
         "grammar": {
             "unary": list(UNARY_OPERATORS),
             "binary": list(BINARY_OPERATORS),
-            "variables": list(variables),
+            "variables": list(variables[:max_variables]),
         },
         "semantics": "infinite LTL over ultimately-periodic lasso traces",
         "seed": seed,
         "require_all_variables": require_all_variables,
-        "num_formulas": sum(len(group["formulas"]) for group in groups),
-        "formula_groups": groups,
+        "num_formulas": sum(
+            len(depth_group["formulas"])
+            for variable_group in variable_groups
+            for depth_group in variable_group["depth_groups"]
+        ),
+        "variable_groups": variable_groups,
     }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--variables", nargs="+", default=["p", "q", "r", "s", "t"]
+        "--variables", nargs="+", default=["p", "q", "r", "s"]
     )
+    parser.add_argument("--min-variables", type=int, default=1)
+    parser.add_argument("--max-variables", type=int, default=4)
     parser.add_argument("--min-depth", type=int, default=3)
     parser.add_argument("--max-depth", type=int, default=7)
     parser.add_argument("--formulas-per-depth", type=int, default=25)
@@ -158,8 +181,14 @@ def main() -> None:
         default=Path(__file__).with_name("formula_list.json"),
     )
     args = parser.parse_args()
+    if not 1 <= args.min_variables <= args.max_variables:
+        parser.error("require 1 <= --min-variables <= --max-variables")
+    if args.max_variables > len(args.variables):
+        parser.error("--max-variables exceeds the supplied variable names")
     data = generate_dataset(
         args.variables,
+        args.min_variables,
+        args.max_variables,
         args.min_depth,
         args.max_depth,
         args.formulas_per_depth,

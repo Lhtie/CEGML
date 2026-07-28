@@ -479,7 +479,7 @@ def main(argv=None):
         "--ce_generation_mode",
         type=str,
         default="dfs",
-        choices=["dfs", "bfs", "random"],
+        choices=["dfs", "bfs", "shortest", "random"],
         help="Strategy used to generate counterexamples from the difference DFA.",
     )
     parser.add_argument(

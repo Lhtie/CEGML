@@ -3,6 +3,7 @@ import json
 import glob
 import argparse
 import signal
+import re
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize, TwoSlopeNorm
@@ -395,6 +396,7 @@ def summarize_scaleup_log_for_pareto(
     token_encoder: Optional[TokenEncoder] = None,
     output_token_counter: Optional[TokenCounter] = None,
     first_rerun_only: bool = False,
+    success_tokens_only: bool = False,
 ) -> Dict[str, Any]:
     with open(log_path, "r", encoding="utf-8") as f:
         msgdict = json.load(f)
@@ -406,19 +408,30 @@ def summarize_scaleup_log_for_pareto(
         token_encoder=token_encoder,
         output_token_counter=output_token_counter,
     )
+    summary = msgdict.get("summary", {})
+
+    def _run_is_success(run_key: str) -> bool:
+        run_info = summary.get(run_key)
+        return (
+            isinstance(run_info, dict)
+            and float(run_info.get("final_accuracy", 0)) >= 1.0
+        )
+
     if first_rerun_only:
         run_totals = []
         run_zero_stats = token_stats["runs"].get("run-0")
-        if isinstance(run_zero_stats, dict):
+        if isinstance(run_zero_stats, dict) and (
+            not success_tokens_only or _run_is_success("run-0")
+        ):
             run_totals.append(run_zero_stats["total_tokens"])
     else:
         run_totals = [
             run_stats["total_tokens"]
-            for run_stats in token_stats["runs"].values()
+            for run_key, run_stats in token_stats["runs"].items()
             if isinstance(run_stats, dict)
+            and (not success_tokens_only or _run_is_success(str(run_key)))
         ]
     avg_tokens = float(np.mean(run_totals)) if run_totals else 0.0
-    summary = msgdict.get("summary", {})
     if first_rerun_only:
         run_zero_info = summary.get("run-0")
         total_runs = 1 if isinstance(run_zero_info, dict) else 0
@@ -443,6 +456,7 @@ def summarize_scaleup_log_for_pareto(
         "avg_total_tokens": avg_tokens,
         "success_rate": success_rate,
         "run_token_totals": run_totals,
+        "success_tokens_only": success_tokens_only,
         "success_count": success_count,
         "total_runs": total_runs,
     }
@@ -1071,6 +1085,7 @@ def _load_pareto_points_by_setting(
     token_encoder: TokenEncoder,
     output_token_counter: TokenCounter,
     first_rerun_only: bool = False,
+    success_tokens_only: bool = False,
 ) -> Dict[str, List[Dict[str, Any]]]:
     all_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
     for setting_spec in setting_specs:
@@ -1084,12 +1099,130 @@ def _load_pareto_points_by_setting(
                 token_encoder=token_encoder,
                 output_token_counter=output_token_counter,
                 first_rerun_only=first_rerun_only,
+                success_tokens_only=success_tokens_only,
             )
             point["depth"] = depth_map.get(point["regex"])
             points.append(point)
         all_points_by_method[method_key] = points
 
     return all_points_by_method
+
+
+def _parse_regex_depths_from_run_script(
+    script_path: str,
+    task_type: str,
+) -> Dict[str, int]:
+    depth_map: Dict[str, int] = {}
+    current_depth: Optional[int] = None
+
+    import shlex
+
+    with open(script_path, "r", encoding="utf-8") as f:
+        for line in f:
+            depth_match = re.search(r"Stardepth=(\d+)", line)
+            if depth_match:
+                current_depth = int(depth_match.group(1))
+                continue
+            if (
+                not line.startswith("python ")
+                or f"--task_type {task_type}" not in line
+                or "--regex" not in line
+                or current_depth is None
+            ):
+                continue
+
+            args = shlex.split(line)
+            regex = args[args.index("--regex") + 1]
+            depth_map.setdefault(regex, current_depth)
+
+    return depth_map
+
+
+def _load_pareto_points_for_explicit_logs(
+    setting_specs: List[Dict[str, str]],
+    regex_depth_map: Dict[str, int],
+    mkey: str,
+    token_counter: TokenCounter,
+    token_encoder: TokenEncoder,
+    output_token_counter: TokenCounter,
+    success_tokens_only: bool = False,
+) -> Tuple[Dict[str, List[Dict[str, Any]]], Dict[str, int]]:
+    all_points_by_method: Dict[str, List[Dict[str, Any]]] = {}
+    missing_counts: Dict[str, int] = {}
+
+    for setting_spec in setting_specs:
+        method_key = setting_spec["key"]
+        points: List[Dict[str, Any]] = []
+        missing = 0
+        for regex, depth in regex_depth_map.items():
+            log_path = os.path.join(
+                setting_spec["path"],
+                f"msgdict_regex={regex}{setting_spec['suffix']}",
+            )
+            if not os.path.exists(log_path):
+                missing += 1
+                continue
+            point = summarize_scaleup_log_for_pareto(
+                log_path,
+                mkey=mkey,
+                token_counter=token_counter,
+                token_encoder=token_encoder,
+                output_token_counter=output_token_counter,
+                first_rerun_only=False,
+                success_tokens_only=success_tokens_only,
+            )
+            point["depth"] = depth
+            points.append(point)
+        all_points_by_method[method_key] = points
+        missing_counts[method_key] = missing
+
+    return all_points_by_method, missing_counts
+
+
+def _load_token_counters_with_fallback(mkey: str) -> Tuple[TokenCounter, TokenEncoder, TokenCounter, bool]:
+    try:
+        token_counter, token_encoder = _load_token_counter(mkey)
+        output_token_counter = _load_text_token_counter(mkey)
+        return token_counter, token_encoder, output_token_counter, False
+    except Exception as exc:
+        print(
+            f"Warning: could not load tokenizer for `{mkey}` ({exc}). "
+            "Using approximate regex token counts for this plot."
+        )
+
+    def approx_encode(text: str) -> List[int]:
+        tokens = re.findall(r"\w+|[^\w\s]", text, flags=re.UNICODE)
+        return [hash(token) for token in tokens]
+
+    def approx_count(text: str) -> int:
+        return len(approx_encode(text))
+
+    def approx_chat_encode(prompt: str) -> List[int]:
+        return [hash("<user>")] + approx_encode(prompt) + [hash("<assistant>")]
+
+    def approx_chat_count(prompt: str) -> int:
+        return len(approx_chat_encode(prompt))
+
+    return approx_chat_count, approx_chat_encode, approx_count, True
+
+
+def _filter_regex_depths_to_common_logs(
+    regex_depth_map: Dict[str, int],
+    setting_specs: List[Dict[str, str]],
+) -> Dict[str, int]:
+    filtered: Dict[str, int] = {}
+    for regex, depth in regex_depth_map.items():
+        if all(
+            os.path.exists(
+                os.path.join(
+                    setting_spec["path"],
+                    f"msgdict_regex={regex}{setting_spec['suffix']}",
+                )
+            )
+            for setting_spec in setting_specs
+        ):
+            filtered[regex] = depth
+    return filtered
 
 
 def _task_label(task_type: str) -> str:
@@ -2450,7 +2583,12 @@ def plot_median_samples_heatmap(
 
 
 def plot_pareto(
-    logs_root: str, regex_list_path: str, outdir: str, mkey: str, task_type: str = "simplyrx",
+    logs_root: str,
+    regex_list_path: str,
+    outdir: str,
+    mkey: str,
+    task_type: str = "simplyrx",
+    success_tokens_only: bool = False,
 ) -> Dict[str, List[Dict[str, Any]]]:
     os.makedirs(outdir, exist_ok=True)
 
@@ -2475,6 +2613,7 @@ def plot_pareto(
         token_encoder,
         output_token_counter,
         first_rerun_only=False,
+        success_tokens_only=success_tokens_only,
     )
 
     plt.figure(figsize=(8, 6))
@@ -2537,6 +2676,7 @@ def plot_pareto(
             token_encoder,
             output_token_counter,
             first_rerun_only=True,
+            success_tokens_only=success_tokens_only,
         )
         per_depth_points_all_settings = _build_per_depth_points_by_method(
             first_rerun_points_by_method,
@@ -2572,6 +2712,191 @@ def plot_pareto(
         plt.close()
 
     return all_points_by_method
+
+
+def _epoch_pareto_setting_specs(logs_root: str, task_type: str) -> List[Dict[str, str]]:
+    single_root = os.path.join(logs_root, "ce/reg/single_inference")
+    agentic_root = os.path.join(logs_root, "ce/reg/agentic_reflection")
+
+    if task_type == "simplyrx":
+        agentic_path = os.path.join(agentic_root, "dfs")
+    else:
+        agentic_path = agentic_root
+
+    return [
+        {
+            "key": "single_epoch12",
+            "path": single_root,
+            "suffix": "_ceEpochs=12_ceBatch=250_clustered.json",
+            "label": "Single epoch=12",
+            "marker": "^",
+            "color": "#54a24b",
+        },
+        {
+            "key": "single_epoch36",
+            "path": os.path.join(single_root, "epochs=36"),
+            "suffix": "_ceEpochs=36_ceBatch=250_dfs_clustered.json",
+            "label": "Single epoch=36",
+            "marker": "D",
+            "color": "#4c78a8",
+        },
+        {
+            "key": "agentic_epoch12",
+            "path": agentic_path,
+            "suffix": "_ceEpochs=12_ceBatch=250_clustered.json",
+            "label": "Agentic epoch=12",
+            "marker": "s",
+            "color": "#f58518",
+        },
+    ]
+
+
+def _draw_epoch_pareto_panel(
+    ax,
+    panel: Dict[str, Any],
+    mkey: str,
+    token_counter: TokenCounter,
+    token_encoder: TokenEncoder,
+    output_token_counter: TokenCounter,
+    success_tokens_only: bool = True,
+) -> Dict[str, Any]:
+    task_type = panel["task_type"]
+    setting_specs = _epoch_pareto_setting_specs(panel["logs_root"], task_type)
+    regex_depth_map = _parse_regex_depths_from_run_script(panel["script"], task_type)
+    if panel.get("common_only", True):
+        regex_depth_map = _filter_regex_depths_to_common_logs(regex_depth_map, setting_specs)
+    available_depths = sorted(set(regex_depth_map.values()))
+    difficulty_colors = _build_difficulty_color_map(available_depths)
+
+    all_points_by_method, missing_counts = _load_pareto_points_for_explicit_logs(
+        setting_specs,
+        regex_depth_map,
+        mkey,
+        token_counter,
+        token_encoder,
+        output_token_counter,
+        success_tokens_only=success_tokens_only,
+    )
+    per_depth_points_by_method = _build_per_depth_points_by_method(
+        all_points_by_method,
+        setting_specs,
+        available_depths,
+        difficulty_colors,
+    )
+    _plot_depth_overlay(
+        ax,
+        per_depth_points_by_method,
+        setting_specs,
+        difficulty_colors,
+        difficulty_legend_loc="lower left",
+    )
+    overlay_x_values = [
+        point["avg_total_tokens"]
+        for method_points in per_depth_points_by_method.values()
+        for point in method_points
+    ]
+    _style_pareto_axis(ax, overlay_x_values)
+    ax.set_title(f"{panel['title']} (n={len(regex_depth_map)} regex)", fontsize=22)
+
+    return {
+        "regex_count": len(regex_depth_map),
+        "depths": available_depths,
+        "missing_counts": missing_counts,
+        "points_by_method": all_points_by_method,
+        "per_depth_points_by_method": per_depth_points_by_method,
+    }
+
+
+def plot_pareto_epoch_comparison(
+    outdir: str,
+    mkey: str = "gpt-oss",
+    simplyrx_logs_root: str = "logs/scaleup/icl_gen_simplyrx/model=gpt-oss",
+    extrx_logs_root: str = "logs/scaleup/icl_gen_extrx/model=gpt-oss",
+    simplyrx_ablation_script: str = "datasets/scaleup/run_scripts/simplyrx_ablation.sh",
+    extrx_script: str = "datasets/scaleup/run_scripts/extrx_main.sh",
+    success_tokens_only: bool = True,
+) -> Dict[str, Any]:
+    os.makedirs(outdir, exist_ok=True)
+
+    token_counter, token_encoder, output_token_counter, used_approx_tokens = (
+        _load_token_counters_with_fallback(mkey)
+    )
+
+    panels = [
+        {
+            "task_type": "simplyrx",
+            "title": "SimplyRx Ablation",
+            "logs_root": simplyrx_logs_root,
+            "script": simplyrx_ablation_script,
+            "common_only": True,
+        },
+        {
+            "task_type": "extrx",
+            "title": "ExtRx Full",
+            "logs_root": extrx_logs_root,
+            "script": extrx_script,
+            "common_only": True,
+        },
+    ]
+
+    fig, axes = plt.subplots(1, 2, figsize=(17.2, 6.8), sharey=True)
+    results: Dict[str, Any] = {}
+
+    for ax, panel in zip(axes, panels):
+        results[panel["task_type"]] = _draw_epoch_pareto_panel(
+            ax,
+            panel,
+            mkey,
+            token_counter,
+            token_encoder,
+            output_token_counter,
+            success_tokens_only=success_tokens_only,
+        )
+
+    axes[1].set_ylabel("")
+    if used_approx_tokens:
+        fig.text(
+            0.5,
+            0.01,
+            "Token axis uses approximate regex token counts because the model tokenizer was unavailable.",
+            ha="center",
+            va="bottom",
+            fontsize=13,
+            color="dimgray",
+        )
+    plt.tight_layout()
+    plt.savefig(os.path.join(outdir, "pareto_epoch_comparison.png"), dpi=300)
+    plt.close()
+
+    for panel in panels:
+        fig_single, ax_single = plt.subplots(1, 1, figsize=(9.2, 6.8))
+        _draw_epoch_pareto_panel(
+            ax_single,
+            panel,
+            mkey,
+            token_counter,
+            token_encoder,
+            output_token_counter,
+            success_tokens_only=success_tokens_only,
+        )
+        if used_approx_tokens:
+            fig_single.text(
+                0.5,
+                0.01,
+                "Token axis uses approximate regex token counts because the model tokenizer was unavailable.",
+                ha="center",
+                va="bottom",
+                fontsize=12,
+                color="dimgray",
+            )
+        plt.tight_layout()
+        plt.savefig(
+            os.path.join(outdir, f"pareto_epoch_comparison_{panel['task_type']}.png"),
+            dpi=300,
+        )
+        plt.close()
+
+    return results
 
 
 def plot_ce_composition_heatmaps(
@@ -2910,6 +3235,7 @@ def parse_args():
         default="pareto",
         choices=[
             "pareto",
+            "pareto_epoch_compare",
             "ce_composition_heatmaps",
             "solve_rate_by_stardepth",
             "solve_rate_by_states",
@@ -2928,6 +3254,14 @@ def parse_args():
     parser.add_argument("--dataset_dir", type=str, default="datasets/scaleup/regex_datasets")
     parser.add_argument("--outdir", type=str, default=None)
     parser.add_argument("--mkey", type=str, default="gpt-oss")
+    parser.add_argument(
+        "--pareto_success_tokens_only",
+        action="store_true",
+        help=(
+            "For Pareto plots, compute average token cost using only runs whose "
+            "final_accuracy is 1. Success rate is still computed over all runs."
+        ),
+    )
     parser.add_argument(
         "--sample_budget_depths",
         type=str,
@@ -2950,6 +3284,13 @@ if __name__ == "__main__":
             outdir=args.outdir,
             mkey=args.mkey,
             task_type=args.task_type,
+            success_tokens_only=args.pareto_success_tokens_only,
+        )
+    elif args.plot_type == "pareto_epoch_compare":
+        plot_pareto_epoch_comparison(
+            outdir=args.outdir,
+            mkey=args.mkey,
+            success_tokens_only=True,
         )
     elif args.plot_type == "ce_composition_heatmaps":
         plot_ce_composition_heatmaps(

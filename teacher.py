@@ -101,6 +101,13 @@ def _generate_counterexamples_worker(
             ce_neg = task.k_witnesses_bfs(
                 dfa_gen, dfa_gt, bs // 2, clustered=clustered
             )
+        elif generation_mode == "shortest":
+            ce_pos = task.k_witnesses_shortest(
+                dfa_gt, dfa_gen, bs // 2, clustered=clustered
+            )
+            ce_neg = task.k_witnesses_shortest(
+                dfa_gen, dfa_gt, bs // 2, clustered=clustered
+            )
         else:
             raise ValueError(f"Unknown counterexample generation mode: {generation_mode}")
 
