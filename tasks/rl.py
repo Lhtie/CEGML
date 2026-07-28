@@ -490,13 +490,14 @@ class SimplyRegularLanguage(RegularLanguage):
         return strings
     
     def regex_to_pynini_via_pyformlang(self, rx: str, sigma=None):
-        re = Regex(rx)
-        nfa = re.to_epsilon_nfa()
-        dfa = nfa.to_deterministic().minimize()
+        dfa = self.regex_to_dfa(rx)
         if sigma is None:
             sigma = self.sigma_from_chars([s.value for s in self.sigma])
         fst = self.dfa_to_pynini_fst(dfa, sigma)
         return dfa, fst, sigma
+
+    def regex_to_dfa(self, rx: str):
+        return Regex(rx).to_epsilon_nfa().to_deterministic().minimize()
     
 class PythonRegularLanguage(RegularLanguage):
     def __init__(self, regex_str, max_length):
@@ -511,13 +512,14 @@ class PythonRegularLanguage(RegularLanguage):
         self.num_categories = 2     # positive | negative
     
     def regex_to_pynini_via_pyformlang(self, rx: str, sigma: pynini.SymbolTable=None):
-        re = PythonRegex(rx)
-        nfa = re.to_epsilon_nfa()
-        dfa = nfa.to_deterministic().minimize()
+        dfa = self.regex_to_dfa(rx)
         if sigma is None:
             sigma = self.sigma_from_chars([s.value for s in self.sigma])
         fst = self.dfa_to_pynini_fst(dfa, sigma)
         return dfa, fst, sigma
+
+    def regex_to_dfa(self, rx: str):
+        return PythonRegex(rx).to_epsilon_nfa().to_deterministic().minimize()
     
 class ExtRegularLanguage(RegularLanguage):
     def __init__(self, regex_str, max_length, alphabet=None, debug=False):
@@ -537,12 +539,14 @@ class ExtRegularLanguage(RegularLanguage):
         self.num_categories = 2
         
     def regex_to_pynini_via_pyformlang(self, rx: str, sigma: pynini.SymbolTable=None):
-        regex_tree = split_regex_into_atoms(rx)
-        dfa = build_dfa(regex_tree, self.sigma)
+        dfa = self.regex_to_dfa(rx)
         if sigma is None:
             sigma = self.sigma_from_chars([s.value for s in self.sigma])
         fst = self.dfa_to_pynini_fst(dfa, sigma)
         return dfa, fst, sigma
+
+    def regex_to_dfa(self, rx: str):
+        return build_dfa(split_regex_into_atoms(rx), self.sigma)
 
 if __name__ == "__main__":
     nl = ExtRegularLanguage(

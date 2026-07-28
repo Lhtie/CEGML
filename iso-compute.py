@@ -252,7 +252,7 @@ def run_iso_episode(
     runid,
 ):
     regex = task.regex_str
-    _, fst_gt, _ = task.regex_to_pynini_via_pyformlang(regex)
+    dfa_gt = task.regex_to_dfa(regex)
     agg_train_ex, agg_train_labels = [], []
     current_guess = None
     current_guess_reasoning = None
@@ -320,7 +320,8 @@ def run_iso_episode(
         )
         msg = teacher.judge_regex(
             msg=msg,
-            fst_gt=fst_gt,
+            fst_gt=None,
+            dfa_gt=dfa_gt,
             train_ex=agg_train_ex,
             train_labels=agg_train_labels,
             eval_ex=data["eval_ex"],
@@ -356,7 +357,8 @@ def run_iso_episode(
             )
             cont_msg = teacher.judge_regex(
                 msg=cont_msg,
-                fst_gt=fst_gt,
+                fst_gt=None,
+                dfa_gt=dfa_gt,
                 train_ex=agg_train_ex,
                 train_labels=agg_train_labels,
                 eval_ex=data["eval_ex"],

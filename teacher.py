@@ -41,6 +41,7 @@ def _judge_regex_worker(
     eval_ex,
     eval_labels,
     sigma,
+    dfa_gt,
 ):
     def score_examples(dfa_pred, examples, labels):
         if len(examples) == 0:
@@ -51,12 +52,15 @@ def _judge_regex_worker(
 
     pred = msg.get("Prediction")
     try:
-        if sigma is None:
-            dfa_pred, fst_pred, sigma_cur = task.regex_to_pynini_via_pyformlang(pred)
+        if dfa_gt is not None:
+            dfa_pred = task.regex_to_dfa(pred)
+            eq, witness = _equivalent_dfa_and_witness(dfa_gt, dfa_pred)
         else:
-            dfa_pred, fst_pred, sigma_cur = task.regex_to_pynini_via_pyformlang(pred, sigma)
-
-        eq, witness = task.equivalent_and_witness(fst_gt, fst_pred, sigma_cur)
+            if sigma is None:
+                dfa_pred, fst_pred, sigma_cur = task.regex_to_pynini_via_pyformlang(pred)
+            else:
+                dfa_pred, fst_pred, sigma_cur = task.regex_to_pynini_via_pyformlang(pred, sigma)
+            eq, witness = task.equivalent_and_witness(fst_gt, fst_pred, sigma_cur)
         result = dict(msg)
         result["Equivalent"] = eq
         result["Witness"] = witness
@@ -65,6 +69,39 @@ def _judge_regex_worker(
         queue.put(("ok", result))
     except Exception as e:
         queue.put(("error", str(e)))
+
+
+def _equivalent_dfa_and_witness(dfa_a, dfa_b):
+    """Pure-Python DFA equivalence check with a shortest disagreement witness."""
+    alphabet = {
+        symbol.value if hasattr(symbol, "value") else str(symbol)
+        for symbol in set(dfa_a.symbols) | set(dfa_b.symbols)
+    }
+
+    def next_state(dfa, state, symbol):
+        if state is None:
+            return None
+        states = dfa._transition_function(state, Symbol(symbol))
+        return next(iter(states), None)
+
+    def accepting(dfa, state):
+        return state is not None and state in dfa.final_states
+
+    start = (dfa_a.start_state, dfa_b.start_state)
+    queue = deque([(start[0], start[1], "")])
+    visited = {start}
+    while queue:
+        state_a, state_b, witness = queue.popleft()
+        if accepting(dfa_a, state_a) != accepting(dfa_b, state_b):
+            return False, witness
+        for symbol in sorted(alphabet):
+            next_a = next_state(dfa_a, state_a, symbol)
+            next_b = next_state(dfa_b, state_b, symbol)
+            pair = (next_a, next_b)
+            if pair not in visited:
+                visited.add(pair)
+                queue.append((next_a, next_b, witness + symbol))
+    return True, None
 
 
 def _generate_counterexamples_worker(
@@ -77,8 +114,12 @@ def _generate_counterexamples_worker(
     generation_mode,
 ):
     try:
-        dfa_gt, fst_gt, sigma = task.regex_to_pynini_via_pyformlang(regex_gt)
-        dfa_gen, fst_gen, _ = task.regex_to_pynini_via_pyformlang(regex_gen, sigma)
+        if hasattr(task, "regex_to_dfa"):
+            dfa_gt = task.regex_to_dfa(regex_gt)
+            dfa_gen = task.regex_to_dfa(regex_gen)
+        else:
+            dfa_gt, _, sigma = task.regex_to_pynini_via_pyformlang(regex_gt)
+            dfa_gen, _, _ = task.regex_to_pynini_via_pyformlang(regex_gen, sigma)
 
         if generation_mode == "dfs":
             ce_pos = task.k_witnesses_dfs(
@@ -290,6 +331,7 @@ class Teacher:
         train_ex, train_labels, eval_ex, eval_labels,
         sigma=None,
         timeout_seconds=10,
+        dfa_gt=None,
     ):
         try:
             if self.use_multiprocessing and timeout_seconds is not None and timeout_seconds > 0:
@@ -308,6 +350,7 @@ class Teacher:
                             train_ex, train_labels,
                             eval_ex, eval_labels,
                             sigma,
+                            dfa_gt,
                         ),
                     )
                     proc.start()
@@ -337,6 +380,7 @@ class Teacher:
                     eval_ex=eval_ex,
                     eval_labels=eval_labels,
                     sigma=sigma,
+                    dfa_gt=dfa_gt,
                 )
         except Exception as e:
             msg["Error"] = f"Error compiling regex: {e}"
