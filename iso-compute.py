@@ -261,27 +261,39 @@ def run_iso_episode(
 
     for epoch in range(args.ce_epochs):
         reflection_prompt = ""
-        try:
-            train_ex, train_labels = teacher.generate_counterexamples(
-                bs=args.ce_batch_size,
-                regex_gt=regex,
-                regex_gen=current_guess,
-                clustered=args.ce_clustered,
-                generation_mode=args.ce_generation_mode,
-            )
-            reflection_prompt = build_reflection_prompt(
-                current_guess_reasoning,
-                current_guess,
-                train_ex,
-                train_labels,
-            )
-        except Exception as e:
-            print(
-                f"Cannot generate counterexamples at epoch {epoch}: {e}, "
-                f"use {args.ce_start_size} random examples instead."
-            )
-            train_ex = data["train_ex"][epoch * args.ce_start_size : (epoch + 1) * args.ce_start_size]
-            train_labels = data["train_labels"][epoch * args.ce_start_size : (epoch + 1) * args.ce_start_size]
+        if current_guess is None:
+            train_ex = data["train_ex"][
+                epoch * args.ce_start_size : (epoch + 1) * args.ce_start_size
+            ]
+            train_labels = data["train_labels"][
+                epoch * args.ce_start_size : (epoch + 1) * args.ce_start_size
+            ]
+        else:
+            try:
+                train_ex, train_labels = teacher.generate_counterexamples(
+                    bs=args.ce_batch_size,
+                    regex_gt=regex,
+                    regex_gen=current_guess,
+                    clustered=args.ce_clustered,
+                    generation_mode=args.ce_generation_mode,
+                )
+                reflection_prompt = build_reflection_prompt(
+                    current_guess_reasoning,
+                    current_guess,
+                    train_ex,
+                    train_labels,
+                )
+            except Exception as e:
+                print(
+                    f"Cannot generate counterexamples at epoch {epoch}: {e}, "
+                    f"use {args.ce_start_size} random examples instead."
+                )
+                train_ex = data["train_ex"][
+                    epoch * args.ce_start_size : (epoch + 1) * args.ce_start_size
+                ]
+                train_labels = data["train_labels"][
+                    epoch * args.ce_start_size : (epoch + 1) * args.ce_start_size
+                ]
 
         agg_train_ex += train_ex
         agg_train_labels += train_labels
@@ -437,7 +449,11 @@ def main() -> None:
     full_log = load_json(full_path)
 
     model, tokenizer = load_model_and_tokenizer(args.mkey, api_key)
-    teacher = Teacher(task)
+    # Forking after vLLM has started duplicates its engine handles into the
+    # judge worker. When that worker exits, vLLM may shut down the engine owned
+    # by the parent process. Run these short operations inline for vLLM; the
+    # existing SIGALRM-based timeout remains active in Teacher.
+    teacher = Teacher(task, use_multiprocessing=not use_vllm)
     learner = LearnerForICLGen(args.mkey, model, tokenizer, task)
 
     generate_dataset(args, task_type=args.task_type, outdir=args.indir)

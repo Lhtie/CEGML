@@ -13,8 +13,8 @@ means that the learned DFA is strictly equivalent to the target DFA.
 | RPNI | Passive, 1500 examples | Running | — | — | — |
 | Blue-Fringe | Passive, 1500 examples | Running | — | — | — |
 | L* | Active, exact EQ | 63/63 | 100.0% (21/21) | 100.0% (21/21) | 100.0% (21/21) |
-| CVC5-CEGIS | SMT + exact CE, max 30 rounds | 23/63 completed | 38.1% (8/21) | 33.3% (7/21) | 23.8% (5/21) |
+| CVC5-CEGIS | SMT + exact CE, max 10 rounds | 63/63 | 9.5% (2/21) | 14.3% (3/21) | 14.3% (3/21) |
 
-For CVC5-CEGIS, every unfinished regex is counted as a failure, so all three
-star-depth columns use the full denominator of 21. RPNI and Blue-Fringe are
-still running and are intentionally left blank.
+CVC5-CEGIS was run on all 63 regexes with a reduced 10-round limit for faster
+coverage. RPNI and Blue-Fringe are still running and are intentionally left
+blank.

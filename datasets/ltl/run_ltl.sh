@@ -56,9 +56,9 @@ python train_icl_gen_ltl.py --task_type ltl --formula '((q -> (q & p)) & p)' --v
 
 # 2 variables, depth 4, example 2
 # CE
-python train_icl_gen_ltl.py --task_type ltl --formula '!(X(X((p U q))))' --variables p q --mkey gpt-oss --use_reg --use_ce --ce_epochs 10 --ce_batch_size 16 --ce_generation_mode search --reasoning_mode agentic_reflection --retries 3 --rerun 1 --tot_train_size 128 --eval_size 128 --min_trace_length 1 --max_trace_length 8 --indir datasets/ltl/traces --outdir logs/ltl
+python train_icl_gen_ltl.py --task_type ltl --formula '!(F(X((p R q))))' --variables p q --mkey gpt-oss --use_reg --use_ce --ce_epochs 10 --ce_batch_size 16 --ce_generation_mode search --reasoning_mode agentic_reflection --retries 3 --rerun 1 --tot_train_size 128 --eval_size 128 --min_trace_length 1 --max_trace_length 8 --indir datasets/ltl/traces --outdir logs/ltl
 # Standard (no CE)
-python train_icl_gen_ltl.py --task_type ltl --formula '!(X(X((p U q))))' --variables p q --mkey gpt-oss --use_reg --tot_train_size 384 --eval_size 128 --start_size 3 --scale_factor 2.0 --rerun 1 --min_trace_length 1 --max_trace_length 8 --indir datasets/ltl/traces --outdir logs/ltl
+python train_icl_gen_ltl.py --task_type ltl --formula '!(F(X((p R q))))' --variables p q --mkey gpt-oss --use_reg --tot_train_size 384 --eval_size 128 --start_size 3 --scale_factor 2.0 --rerun 1 --min_trace_length 1 --max_trace_length 8 --indir datasets/ltl/traces --outdir logs/ltl
 
 # 2 variables, depth 3, example 3
 # CE

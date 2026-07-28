@@ -118,8 +118,9 @@ def _generate_counterexamples_worker(
         queue.put(("error", str(e)))
 
 class Teacher:
-    def __init__(self, task):
+    def __init__(self, task, use_multiprocessing=True):
         self.task = task
+        self.use_multiprocessing = use_multiprocessing
 
     def _get_final_state(self, dfa, string):
         current_state = dfa.start_state
@@ -207,7 +208,7 @@ class Teacher:
         generation_mode="random",
         timeout_seconds=10,
     ):
-        if timeout_seconds is not None and timeout_seconds > 0:
+        if self.use_multiprocessing and timeout_seconds is not None and timeout_seconds > 0:
             try:
                 ctx = mp.get_context("fork")
             except ValueError:
@@ -291,7 +292,7 @@ class Teacher:
         timeout_seconds=10,
     ):
         try:
-            if timeout_seconds is not None and timeout_seconds > 0:
+            if self.use_multiprocessing and timeout_seconds is not None and timeout_seconds > 0:
                 try:
                     ctx = mp.get_context("fork")
                 except ValueError:

@@ -56,6 +56,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Resume from completed regexes in --out.",
     )
+    parser.add_argument(
+        "--retry_failed",
+        action="store_true",
+        help="With --resume, rerun completed regexes that are not equivalent.",
+    )
     parser.add_argument("--max_length", type=int, default=32)
     parser.add_argument(
         "--out",
@@ -255,6 +260,21 @@ def main() -> None:
     if args.resume and args.out.exists():
         checkpoint = json.loads(args.out.read_text(encoding="utf-8"))
         results = checkpoint.get("results", [])
+        if args.retry_failed:
+            failed_regexes = {
+                result["regex"]
+                for result in results
+                if not result["metrics"]["equivalent"]
+            }
+            results = [
+                result
+                for result in results
+                if result["regex"] not in failed_regexes
+            ]
+            print(
+                f"Retrying {len(failed_regexes)} previously failed result(s).",
+                flush=True,
+            )
         print(f"Resuming with {len(results)} completed result(s).", flush=True)
     completed_regexes = {result["regex"] for result in results}
 
