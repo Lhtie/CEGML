@@ -342,7 +342,7 @@ def run_iso_episode(
         ):
             if continue_used_tokens > per_round_budget:
                 break
-            continue_prompt = build_continue_prompt(
+            continue_prompt = make_continue_prompt(
                 previous_msg,
                 token_budget=per_round_budget,
                 used_tokens=continue_used_tokens,
