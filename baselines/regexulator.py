@@ -194,6 +194,7 @@ def run_regexulator_search(
     max_depth: int = 3,
     branching_factor: int = 2,
     max_generation_calls: int = 16,
+    time_limit_seconds: Optional[float] = 180.0,
     start_examples: int = 10,
     improve_examples: int = 5,
     max_compile_repairs: int = 1,
@@ -203,6 +204,11 @@ def run_regexulator_search(
     seed: int = 0,
 ) -> dict[str, Any]:
     started_at = time.perf_counter()
+    deadline = (
+        started_at + time_limit_seconds
+        if time_limit_seconds is not None and time_limit_seconds > 0
+        else None
+    )
     rng = random.Random(seed)
     alphabet = sorted(str(symbol.value) for symbol in task.sigma)
     target_dfa = task.dfa
@@ -224,6 +230,15 @@ def run_regexulator_search(
     best_node_id: Optional[int] = None
     successful_node_id: Optional[int] = None
 
+    def time_limit_reached() -> bool:
+        return deadline is not None and time.perf_counter() >= deadline
+
+    def can_generate() -> bool:
+        return (
+            generation_calls < max_generation_calls
+            and not time_limit_reached()
+        )
+
     def count_tokens(text: Optional[str]) -> int:
         if not text:
             return 0
@@ -244,7 +259,7 @@ def run_regexulator_search(
     ) -> Optional[int]:
         nonlocal generation_calls, total_prompt_tokens, total_response_tokens
         nonlocal best_node_id, successful_node_id
-        if generation_calls >= max_generation_calls:
+        if not can_generate():
             return None
 
         call_started_at = time.perf_counter()
@@ -344,7 +359,7 @@ def run_regexulator_search(
             current_id is not None
             and not nodes[current_id].valid
             and repairs < max_compile_repairs
-            and generation_calls < max_generation_calls
+            and can_generate()
         ):
             invalid = nodes[current_id]
             current_id = generate_node(
@@ -372,7 +387,7 @@ def run_regexulator_search(
 
     while (
         frontier
-        and generation_calls < max_generation_calls
+        and can_generate()
         and successful_node_id is None
     ):
         _, _, parent_id = heapq.heappop(frontier)
@@ -403,8 +418,19 @@ def run_regexulator_search(
 
     selected_id = successful_node_id if successful_node_id is not None else best_node_id
     selected = nodes[selected_id] if selected_id is not None else None
+    timed_out = time_limit_reached()
+    if successful_node_id is not None:
+        stop_reason = "equivalent"
+    elif timed_out:
+        stop_reason = "time_limit"
+    elif generation_calls >= max_generation_calls:
+        stop_reason = "call_limit"
+    else:
+        stop_reason = "frontier_exhausted"
     return {
         "equivalent": successful_node_id is not None,
+        "timed_out": timed_out,
+        "stop_reason": stop_reason,
         "successful_call": (
             nodes[successful_node_id].generation_call
             if successful_node_id is not None

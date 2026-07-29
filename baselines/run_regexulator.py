@@ -6,8 +6,11 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import signal
 import statistics
 import sys
+import time
+from contextlib import contextmanager
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -50,6 +53,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_depth", type=int, default=3)
     parser.add_argument("--branching_factor", type=int, default=2)
     parser.add_argument("--max_generation_calls", type=int, default=16)
+    parser.add_argument(
+        "--time_limit_seconds",
+        type=float,
+        default=180.0,
+        help="Overall wall-clock limit for each regex; <=0 disables it.",
+    )
     parser.add_argument("--start_examples", type=int, default=10)
     parser.add_argument("--improve_examples", type=int, default=5)
     parser.add_argument("--max_compile_repairs", type=int, default=1)
@@ -101,6 +110,26 @@ def stratified_split(
     )
 
 
+@contextmanager
+def generation_deadline(seconds: float | None):
+    """Interrupt a blocking local generation when its regex budget expires."""
+    if seconds is None or seconds <= 0:
+        yield
+        return
+
+    def handle_timeout(signum, frame):
+        raise TimeoutError("Regexulator per-regex time limit reached")
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    signal.signal(signal.SIGALRM, handle_timeout)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+
+
 def run_one(
     regex: str,
     args: argparse.Namespace,
@@ -119,9 +148,26 @@ def run_one(
         args.seed,
     )
     task = SimplyRegularLanguage(regex, max_length=args.max_length)
+    search_started_at = time.perf_counter()
+    deadline = (
+        search_started_at + args.time_limit_seconds
+        if args.time_limit_seconds > 0
+        else None
+    )
 
     def generate(prompt: str, temperature: float) -> dict[str, Any]:
-        response = run_model(args.mkey, model, tokenizer, prompt, temp=temperature)
+        remaining = (
+            max(0.0, deadline - time.perf_counter())
+            if deadline is not None
+            else None
+        )
+        if remaining is not None and remaining <= 0:
+            response = None
+        else:
+            with generation_deadline(remaining):
+                response = run_model(
+                    args.mkey, model, tokenizer, prompt, temp=temperature
+                )
         return {
             "Response": response,
             "Prediction": extract_ans(response),
@@ -140,6 +186,7 @@ def run_one(
         max_depth=args.max_depth,
         branching_factor=args.branching_factor,
         max_generation_calls=args.max_generation_calls,
+        time_limit_seconds=args.time_limit_seconds,
         start_examples=args.start_examples,
         improve_examples=args.improve_examples,
         max_compile_repairs=args.max_compile_repairs,
@@ -223,6 +270,7 @@ def write_checkpoint(
             "max_depth": args.max_depth,
             "branching_factor": args.branching_factor,
             "max_generation_calls": args.max_generation_calls,
+            "time_limit_seconds": args.time_limit_seconds,
             "start_examples": args.start_examples,
             "improve_examples": args.improve_examples,
             "max_compile_repairs": args.max_compile_repairs,
@@ -272,6 +320,7 @@ def main() -> None:
         metrics = result["metrics"]
         print(
             f"  equivalent={metrics['equivalent']} "
+            f"stop={metrics['stop_reason']} "
             f"calls={metrics['generation_calls']} "
             f"valid={metrics['valid_candidates']} "
             f"val_acc={metrics['selected_validation_accuracy']:.4f} "
