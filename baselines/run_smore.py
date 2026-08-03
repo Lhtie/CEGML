@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import statistics
 import sys
+import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +37,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_iterations", type=int, default=5)
     parser.add_argument("--max_hole_candidates", type=int, default=192)
     parser.add_argument("--max_combinations", type=int, default=50000)
+    parser.add_argument(
+        "--time_limit_seconds",
+        type=float,
+        default=200.0,
+        help="Total wall-clock budget for each target regex; <=0 disables it.",
+    )
     parser.add_argument("--temp", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--limit", type=int, default=None)
@@ -41,6 +50,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--retry_failed", action="store_true")
     parser.add_argument("--out", type=Path, default=Path("logs/summary/smore_type_erased_simplyrx.json"))
     return parser.parse_args()
+
+
+@contextmanager
+def generation_deadline(seconds: float | None):
+    """Interrupt a blocking model generation when the regex budget expires."""
+    if seconds is None or seconds <= 0:
+        yield
+        return
+
+    def handle_timeout(signum, frame):
+        raise TimeoutError("Smore per-regex time limit reached")
+
+    previous = signal.getsignal(signal.SIGALRM)
+    signal.signal(signal.SIGALRM, handle_timeout)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
 
 
 def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
@@ -73,6 +102,7 @@ def checkpoint(path: Path, regexes: list[str], results: list[dict[str, Any]], ar
             "max_iterations": args.max_iterations,
             "max_hole_candidates": args.max_hole_candidates,
             "max_combinations": args.max_combinations,
+            "time_limit_seconds": args.time_limit_seconds,
             "temperature": args.temp,
             "seed": args.seed,
             "hole_type": "Default (ignored)",
@@ -93,9 +123,21 @@ def run_one(regex: str, args: argparse.Namespace, model, tokenizer) -> dict[str,
     data = load_dataset(path)
     capped = cap_training_examples(data, args.max_train_examples, args.seed)
     task = SimplyRegularLanguage(regex, max_length=args.max_length)
+    deadline = (
+        time.perf_counter() + args.time_limit_seconds
+        if args.time_limit_seconds > 0
+        else None
+    )
 
     def generate(prompt: str, temperature: float) -> dict[str, Any]:
-        response = run_model(args.mkey, model, tokenizer, prompt, temp=temperature)
+        remaining = max(0.0, deadline - time.perf_counter()) if deadline is not None else None
+        if remaining is not None and remaining <= 0:
+            return {"Response": None, "Sketch": None}
+        try:
+            with generation_deadline(remaining):
+                response = run_model(args.mkey, model, tokenizer, prompt, temp=temperature)
+        except TimeoutError:
+            response = None
         return {"Response": response, "Sketch": extract_sketch(response)}
 
     metrics = run_smore_search(
@@ -111,6 +153,7 @@ def run_one(regex: str, args: argparse.Namespace, model, tokenizer) -> dict[str,
         max_hole_candidates=args.max_hole_candidates,
         max_combinations=args.max_combinations,
         temperature=args.temp,
+        time_limit_seconds=args.time_limit_seconds,
     )
     return {
         "regex": regex,
@@ -148,7 +191,7 @@ def main() -> None:
         m = result["metrics"]
         print(
             f"  equivalent={m['equivalent']} consistent={m['consistent']} "
-            f"iterations={m['iterations']} train={m['train_accuracy']:.4f} "
+            f"stop={m['stop_reason']} iterations={m['iterations']} train={m['train_accuracy']:.4f} "
             f"eval={m['eval_accuracy']:.4f} regex={m['selected_regex']}",
             flush=True,
         )

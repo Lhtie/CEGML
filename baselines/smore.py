@@ -195,6 +195,7 @@ def synthesize_completion(
     labels: list[int],
     library: list[str],
     max_combinations: int,
+    deadline: Optional[float] = None,
 ) -> tuple[Optional[str], Any, float, int, Optional[str]]:
     """Enumerate hole assignments and return a consistent or best candidate."""
     if len(holes) > 3:
@@ -207,6 +208,8 @@ def synthesize_completion(
     last_error = None
     alphabet = sorted(str(symbol.value) for symbol in task.sigma)
     for values in assignments:
+        if deadline is not None and time.perf_counter() >= deadline:
+            break
         if tried >= max_combinations:
             break
         tried += 1
@@ -240,8 +243,14 @@ def run_smore_search(
     max_hole_candidates: int = 192,
     max_combinations: int = 50000,
     temperature: float = 0.0,
+    time_limit_seconds: Optional[float] = 200.0,
 ) -> dict[str, Any]:
     started = time.perf_counter()
+    deadline = (
+        started + time_limit_seconds
+        if time_limit_seconds is not None and time_limit_seconds > 0
+        else None
+    )
     alphabet = sorted(str(symbol.value) for symbol in task.sigma)
     library = completion_library(alphabet, max_hole_candidates)
     attempts: list[SketchAttempt] = []
@@ -252,6 +261,8 @@ def run_smore_search(
     best: Optional[SketchAttempt] = None
 
     for iteration in range(max_iterations):
+        if deadline is not None and time.perf_counter() >= deadline:
+            break
         prompt = (
             initial_prompt(alphabet, train_examples, train_labels, max_prompt_examples)
             if iteration == 0
@@ -285,6 +296,7 @@ def run_smore_search(
                 labels=train_labels,
                 library=library,
                 max_combinations=max_combinations,
+                deadline=deadline,
             )
             valid_sketch = dfa is not None
         except Exception as exc:
@@ -324,6 +336,13 @@ def run_smore_search(
         previous_mistakes = _mistakes(dfa, train_examples, train_labels) if dfa is not None else []
 
     selected = best
+    timed_out = deadline is not None and time.perf_counter() >= deadline
+    if timed_out:
+        stop_reason = "time_limit"
+    elif selected and selected.consistent:
+        stop_reason = "training_consistent"
+    else:
+        stop_reason = "iteration_limit"
     return {
         "equivalent": bool(selected and selected.equivalent),
         "consistent": bool(selected and selected.consistent),
@@ -334,6 +353,8 @@ def run_smore_search(
         "eval_accuracy": selected.eval_accuracy if selected else 0.0,
         "witness": selected.witness if selected else None,
         "iterations": len(attempts),
+        "timed_out": timed_out,
+        "stop_reason": stop_reason,
         "completion_library_size": len(library),
         "total_combinations_tried": sum(a.combinations_tried for a in attempts),
         "prompt_tokens": prompt_tokens,
