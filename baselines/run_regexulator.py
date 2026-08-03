@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--time_limit_seconds",
         type=float,
-        default=180.0,
+        default=200.0,
         help="Overall wall-clock limit for each regex; <=0 disables it.",
     )
     parser.add_argument("--start_examples", type=int, default=10)

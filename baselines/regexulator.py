@@ -194,7 +194,7 @@ def run_regexulator_search(
     max_depth: int = 3,
     branching_factor: int = 2,
     max_generation_calls: int = 16,
-    time_limit_seconds: Optional[float] = 180.0,
+    time_limit_seconds: Optional[float] = 200.0,
     start_examples: int = 10,
     improve_examples: int = 5,
     max_compile_repairs: int = 1,
