@@ -59,8 +59,19 @@ def _count_tokens(tokenizer, text: Optional[str]) -> int:
 def extract_sketch(response: Optional[str]) -> Optional[str]:
     if not response:
         return None
-    match = re.search(r"<sketch>\s*(.*?)\s*</sketch>", response, re.DOTALL | re.IGNORECASE)
-    return match.group(1).strip() if match else None
+    # Reasoning models often quote the requested format first, e.g.
+    # ``<sketch>...</sketch>``, and put the actual answer in a later tag.  The
+    # last tagged block is therefore the answer, not the first one.
+    matches = re.findall(
+        r"<sketch>\s*(.*?)\s*</sketch>", response, re.DOTALL | re.IGNORECASE
+    )
+    if not matches:
+        return None
+    sketch = matches[-1].strip()
+    if sketch.startswith("```") and sketch.endswith("```"):
+        sketch = re.sub(r"^```[^\n]*\n?", "", sketch)
+        sketch = re.sub(r"\n?```$", "", sketch).strip()
+    return sketch
 
 
 def normalize_sketch(sketch: str) -> tuple[str, list[str]]:
@@ -165,6 +176,9 @@ def repair_prompt(
     previous_candidate: Optional[str],
     mistakes: list[tuple[str, int, int]],
     error: Optional[str],
+    examples: list[str],
+    labels: list[int],
+    example_limit: int,
 ) -> str:
     feedback = "\n".join(
         f"{s if s else 'epsilon'}: expected {expected}, got {actual}"
@@ -182,8 +196,13 @@ Best symbolic completion: {previous_candidate}
 Failure information:
 {feedback}
 
+Original labeled examples (string, label):
+{_format_examples(examples, labels, example_limit)}
+
 Change the high-level structure so bounded symbolic hole completion can satisfy
-the examples. Do not use semantic predicates or any operator outside SimplyRx."""
+the examples. Holes must use exactly the form {{{{H0:Default}}}}. Do not use
+ellipsis, question-mark holes, semantic predicates, or operators outside
+SimplyRx."""
 
 
 def synthesize_completion(
@@ -266,7 +285,16 @@ def run_smore_search(
         prompt = (
             initial_prompt(alphabet, train_examples, train_labels, max_prompt_examples)
             if iteration == 0
-            else repair_prompt(alphabet, previous_sketch, previous_candidate, previous_mistakes, previous_error)
+            else repair_prompt(
+                alphabet,
+                previous_sketch,
+                previous_candidate,
+                previous_mistakes,
+                previous_error,
+                train_examples,
+                train_labels,
+                max_prompt_examples,
+            )
         )
         call_started = time.perf_counter()
         message = generate(prompt, temperature)
