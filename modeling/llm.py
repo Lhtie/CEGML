@@ -118,8 +118,9 @@ def load_model_and_tokenizer(mkey, api_key):
 def get_model_input_device(model):
     return model.get_input_embeddings().weight.device
 
-def _run_model(mkey, model, tokenizer, msg, temp):
+def _run_model(mkey, model, tokenizer, msg, temp, max_tokens=None):
     msgdict = [{"role": "user", "content": msg}]
+    generation_limit = max_tokens if max_tokens is not None else 32768
     if is_vllm_model(mkey):
         prompt = tokenizer.apply_chat_template(
             msgdict,
@@ -129,7 +130,7 @@ def _run_model(mkey, model, tokenizer, msg, temp):
         from vllm import SamplingParams
 
         sampling_params = SamplingParams(
-            max_tokens=32768,
+            max_tokens=generation_limit,
             temperature=max(temp, 0.0),
         )
         outputs = model.generate([prompt], sampling_params)
@@ -150,18 +151,18 @@ def _run_model(mkey, model, tokenizer, msg, temp):
         if mkey.startswith(("gpt5", "gpt-5")):
             outputs = model(
                 inputs,
-                max_completion_tokens=32768,    # can be set up to 128k for gpt-5.4
+                max_completion_tokens=generation_limit,
                 reasoning_effort="xhigh",
             )
         else:
-            outputs = model(inputs, max_tokens=32768, temperature=temp)
+            outputs = model(inputs, max_tokens=generation_limit, temperature=temp)
         res = outputs.choices[0].message.content
         print(f"usage: {outputs.usage}")
         return res
 
     outputs = model.generate(
         inputs,
-        max_new_tokens=32768,
+        max_new_tokens=generation_limit,
         do_sample=True,
         pad_token_id=tokenizer.eos_token_id,
         eos_token_id=tokenizer.eos_token_id,
@@ -169,9 +170,9 @@ def _run_model(mkey, model, tokenizer, msg, temp):
     )
     return tokenizer.decode(outputs[0][len(inputs[0]):], skip_special_tokens=True)
 
-def run_model(mkey, model, tokenizer, msg, temp=0.3):
+def run_model(mkey, model, tokenizer, msg, temp=0.3, max_tokens=None):
     try:
-        return _run_model(mkey, model, tokenizer, msg, temp)
+        return _run_model(mkey, model, tokenizer, msg, temp, max_tokens=max_tokens)
     except Exception as e:
         print(f"Error running model: {e}")
         return None

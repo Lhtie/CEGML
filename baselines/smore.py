@@ -130,6 +130,57 @@ def instantiate_sketch(sketch: str, assignment: dict[str, str]) -> str:
     return result
 
 
+def validate_candidate_syntax(regex: str, alphabet: list[str]) -> None:
+    """Validate the restricted SimplyRx grammar (where ``+`` is only union)."""
+    validate_simplyrx_regex(regex, alphabet)
+    tokens = re.findall(r"epsilon|[()+*]|[^\s]", regex)
+    position = 0
+
+    def peek() -> Optional[str]:
+        return tokens[position] if position < len(tokens) else None
+
+    def parse_atom() -> None:
+        nonlocal position
+        token = peek()
+        if token in set(alphabet) | {"epsilon"}:
+            position += 1
+            return
+        if token == "(":
+            position += 1
+            parse_union()
+            if peek() != ")":
+                raise ValueError("Unmatched '(' in SimplyRx expression")
+            position += 1
+            return
+        raise ValueError(f"Expected a SimplyRx atom, found {token!r}")
+
+    def parse_repeat() -> None:
+        nonlocal position
+        parse_atom()
+        if peek() == "*":
+            position += 1
+
+    def starts_atom() -> bool:
+        return peek() in set(alphabet) | {"epsilon", "("}
+
+    def parse_concat() -> None:
+        if not starts_atom():
+            raise ValueError(f"Expected a concatenation operand, found {peek()!r}")
+        while starts_atom():
+            parse_repeat()
+
+    def parse_union() -> None:
+        nonlocal position
+        parse_concat()
+        while peek() == "+":
+            position += 1
+            parse_concat()
+
+    parse_union()
+    if position != len(tokens):
+        raise ValueError(f"Unexpected SimplyRx token {tokens[position]!r}")
+
+
 def _mistakes(dfa, examples: list[str], labels: list[int], limit: int = 16) -> list[tuple[str, int, int]]:
     result = []
     for example, label in zip(examples, labels):
@@ -234,8 +285,18 @@ def synthesize_completion(
         tried += 1
         candidate = instantiate_sketch(sketch, dict(zip(holes, values)))
         try:
-            validate_simplyrx_regex(candidate, alphabet)
+            validate_candidate_syntax(candidate, alphabet)
             dfa = task.regex_to_dfa(candidate)
+            candidate_alphabet = {
+                str(symbol.value) for symbol in dfa.symbols
+            }
+            unexpected = candidate_alphabet - set(alphabet)
+            if unexpected:
+                raise ValueError(
+                    "Candidate introduced symbols outside the character "
+                    f"alphabet: {sorted(unexpected)}. Put spaces between "
+                    "concatenated letters."
+                )
             score = accuracy(dfa, examples, labels)
         except Exception as exc:
             last_error = str(exc)

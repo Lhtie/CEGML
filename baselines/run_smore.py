@@ -35,8 +35,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_train_examples", type=int, default=1500)
     parser.add_argument("--max_prompt_examples", type=int, default=80)
     parser.add_argument("--max_iterations", type=int, default=5)
-    parser.add_argument("--max_hole_candidates", type=int, default=192)
-    parser.add_argument("--max_combinations", type=int, default=50000)
+    parser.add_argument(
+        "--max_hole_candidates",
+        type=int,
+        default=64,
+        help="Bounded completion library size; 64 avoids cubic sketch blow-up.",
+    )
+    parser.add_argument(
+        "--max_combinations",
+        type=int,
+        default=5000,
+        help="Maximum symbolic assignments tried per sketch iteration.",
+    )
+    parser.add_argument(
+        "--max_generation_tokens",
+        type=int,
+        default=2048,
+        help="Maximum output tokens for each sketch-generation call.",
+    )
     parser.add_argument(
         "--time_limit_seconds",
         type=float,
@@ -102,6 +118,7 @@ def checkpoint(path: Path, regexes: list[str], results: list[dict[str, Any]], ar
             "max_iterations": args.max_iterations,
             "max_hole_candidates": args.max_hole_candidates,
             "max_combinations": args.max_combinations,
+            "max_generation_tokens": args.max_generation_tokens,
             "time_limit_seconds": args.time_limit_seconds,
             "temperature": args.temp,
             "seed": args.seed,
@@ -135,7 +152,14 @@ def run_one(regex: str, args: argparse.Namespace, model, tokenizer) -> dict[str,
             return {"Response": None, "Sketch": None}
         try:
             with generation_deadline(remaining):
-                response = run_model(args.mkey, model, tokenizer, prompt, temp=temperature)
+                response = run_model(
+                    args.mkey,
+                    model,
+                    tokenizer,
+                    prompt,
+                    temp=temperature,
+                    max_tokens=args.max_generation_tokens,
+                )
         except TimeoutError:
             response = None
         return {"Response": response, "Sketch": extract_sketch(response)}
