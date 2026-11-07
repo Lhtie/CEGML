@@ -82,7 +82,8 @@ def summarize_label_counts(labels):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--task_type", type=str, default="simplyrx", choices=["simplyrx", "extrx"])
+    parser.add_argument("--task_type", type=str, default="simplyrx", choices=["simplyrx", "extrx", "cryptography", "list_functions", "instruction_induction", "scan"])
+    parser.add_argument("--benchmark_id", type=str, default=None, help="Cipher family:row, list function ID, instruction task name, or SCAN split")
     parser.add_argument("--regex", type=str, default="(a(b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*")
     parser.add_argument("--max_length", type=int, default=32)
     parser.add_argument("--eval_max_length", type=int, default=32)
@@ -92,6 +93,8 @@ if __name__ == "__main__":
     parser.add_argument("--scale_factor", type=float, default=2.0)
     parser.add_argument("--eval_size", type=int, default=32)
     parser.add_argument("--eval_batch_size", type=int, default=4)
+    parser.add_argument("--ce_batch_size", type=int, default=8,
+                        help="Maximum mistakes added per benchmark round (default 8)")
     parser.add_argument("--seed", type=int, default=43)
     parser.add_argument("--temp", type=float, default=0.0)
     parser.add_argument("--retries", type=int, default=3)
@@ -100,6 +103,10 @@ if __name__ == "__main__":
     parser.add_argument("--indir", type=str, default="datasets/")
     parser.add_argument("--outdir", type=str, default="logs/")
     args = parser.parse_args()
+    if args.task_type in {"cryptography", "list_functions", "instruction_induction", "scan"}:
+        from benchmarks.icl import run_icl
+        run_icl(args)
+        raise SystemExit(0)
     use_vllm = is_vllm_model(args.mkey)
 
     np.random.seed(args.seed)

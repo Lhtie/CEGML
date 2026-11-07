@@ -16,6 +16,9 @@ from teacher import Teacher
 from dataset import generate_dataset
 from keysecrets import api_key
 from tasks.utils import dfa_accepts_ex
+from tasks.benchmarks import BenchmarkTask
+from prompting.benchmarks import PROMPTS as BENCHMARK_PROMPTS, REGULARIZATION as BENCHMARK_REGULARIZATION
+from modeling.llm import run_model
 from prompting.rl import (
     AGENTIC_REFLECTION_INSTR,
     AGENTIC_REPAIR_INSTR,
@@ -456,7 +459,8 @@ def run_episode(
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--task_type", type=str, default="extrx", choices=["simplyrx", "extrx"])
+    parser.add_argument("--task_type", type=str, default="extrx", choices=["simplyrx", "extrx", "cryptography", "list_functions", "instruction_induction", "scan"])
+    parser.add_argument("--benchmark_id", type=str, default=None, help="Cipher family:row, list function ID, instruction task name, or SCAN split")
     parser.add_argument("--regex", type=str, default="[A-Za-z0-9#]*z[A-Za-z]*[A-Za-z0-9#]*")
     parser.add_argument("--max_length", type=int, default=32)
     parser.add_argument("--eval_max_length", type=int, default=32)
@@ -473,7 +477,8 @@ def main(argv=None):
     parser.add_argument("--use_ce", default=False, action="store_true")
     parser.add_argument("--ce_epochs", type=int, default=8)
     parser.add_argument("--ce_start_size", type=int, default=8)
-    parser.add_argument("--ce_batch_size", type=int, default=128)
+    parser.add_argument("--ce_batch_size", type=int, default=None,
+                        help="Maximum counterexamples per benchmark round (default 8); regex default 128")
     parser.add_argument("--ce_clustered", default=False, action="store_true")
     parser.add_argument(
         "--ce_generation_mode",
@@ -511,6 +516,12 @@ def main(argv=None):
     parser.add_argument("--indir", type=str, default="datasets")
     parser.add_argument("--outdir", type=str, default="logs/opt_prompt")
     args = parser.parse_args(argv)
+    if args.task_type in BENCHMARK_PROMPTS:
+        if args.ce_batch_size is None:
+            args.ce_batch_size = 8
+        return run_benchmark(args)
+    if args.ce_batch_size is None:
+        args.ce_batch_size = 128
     
     args.outdir = os.path.join(args.outdir, f"icl_gen_{args.task_type}")
     use_vllm = is_vllm_model(args.mkey)
@@ -616,6 +627,113 @@ def main(argv=None):
         }
         msgdict["summary"] = finish_states
         savejson(msgdict, config_name)
+
+def run_benchmark(args, model=None, tokenizer=None, response_fn=None):
+    """Run the non-regex benchmarks with the same CE/baseline controls."""
+    defaults = {"cryptography": "caesar:0", "list_functions": "c102",
+                "instruction_induction": "antonyms", "scan": "simple"}
+    benchmark_id = args.benchmark_id or defaults[args.task_type]
+    task = BenchmarkTask(args.task_type, benchmark_id, seed=args.seed, eval_size=args.eval_size)
+    if response_fn is None:
+        if model is None:
+            model, tokenizer = load_model_and_tokenizer(args.mkey, api_key)
+        response_fn = lambda prompt: run_model(args.mkey, model, tokenizer, prompt, temp=args.temp)
+    outdir = os.path.join(args.outdir, f"icl_gen_{args.task_type}", f"model={args.mkey}",
+                          "ce" if args.use_ce else "std", "reg" if args.use_reg else "noreg")
+    os.makedirs(outdir, exist_ok=True)
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]", "_", benchmark_id)
+    path = os.path.join(outdir, f"{safe_id}.json")
+    results = {"task_type": args.task_type, "benchmark_id": benchmark_id,
+               "oracle": task.oracle_name, "runs": []}
+    for runid in range(args.rerun):
+        rng = random.Random(args.seed + runid)
+        train = list(task.train)
+        rng.shuffle(train)
+        seen = []
+        previous = None
+        logs = []
+        epochs = args.ce_epochs if args.use_ce else len(log_scaling(min(args.tot_train_size, len(train)), args.start_size, args.scale_factor))
+        for epoch in range(epochs):
+            if args.use_ce:
+                additions, equivalence = task.counterexamples(
+                    previous, args.ce_start_size if previous is None else args.ce_batch_size,
+                    llm_call=response_fn)
+                if not additions and previous is not None:
+                    if equivalence is True:
+                        logs.append({"epoch": epoch, "Prediction": previous, "Equivalent": True,
+                                     "scoreEvalSet": task.score(previous, args.eval_size), "NoCounterexample": True})
+                        break
+                    # An incomplete oracle cannot certify equivalence. Supply fresh
+                    # labeled examples and continue the refinement loop.
+                    if args.task_type == "list_functions":
+                        additions = []
+                        for x in task._list_pool(args.ce_start_size):
+                            try:
+                                pair = (x, task.reference_output(x))
+                            except Exception:
+                                continue
+                            if pair not in seen:
+                                additions.append(pair)
+                            if len(additions) >= args.ce_start_size:
+                                break
+                    else:
+                        additions = [pair for pair in train if pair not in seen][:args.ce_start_size]
+                    if not additions:
+                        logs.append({"epoch": epoch, "Prediction": previous, "Equivalent": None,
+                                     "NoCounterexample": True})
+                        break
+            else:
+                target_size = log_scaling(min(args.tot_train_size, len(train)), args.start_size, args.scale_factor)[epoch]
+                additions = train[len(seen):target_size]
+            for pair in additions:
+                if pair not in seen:
+                    seen.append(pair)
+            examples = "\n".join(task.format_pair(x, y) for x, y in seen)
+            feedback = ""
+            if args.use_ce and previous is not None:
+                feedback = "Previous hypothesis: " + previous + "\nNew counterexamples follow. Revise the hypothesis.\n"
+            attempts = []
+            for _retry in range(max(1, args.retries)):
+                prompt = BENCHMARK_PROMPTS[args.task_type].replace("{feedback}", feedback).replace("{examples}", examples)
+                if args.use_reg:
+                    prompt = BENCHMARK_REGULARIZATION + prompt
+                response = response_fn(prompt)
+                candidate = extract_ans(response)
+                error = None
+                if candidate is None:
+                    error = "No <ans> block was found"
+                elif args.task_type != "instruction_induction":
+                    try:
+                        task.predict(candidate, seen[0][0])
+                    except Exception as exc:
+                        error = str(exc)
+                attempts.append({"Response": response, "Prediction": candidate, "Error": error})
+                if error is None:
+                    break
+                feedback += f"Previous attempt failed: {error}. Return a corrected answer.\n"
+            msg = {"epoch": epoch, "Prompt": prompt, "Response": response, "Prediction": candidate,
+                   "NumTrainingSamples": len(seen), "Counterexamples": additions if args.use_ce else [],
+                   "Equivalent": None, "scoreEvalSet": None, "Attempts": attempts}
+            if candidate is not None and error is None:
+                try:
+                    if args.use_ce:
+                        _, equivalent = task.counterexamples(candidate, 1, llm_call=response_fn)
+                        msg["Equivalent"] = equivalent
+                        if args.task_type == "instruction_induction":
+                            msg["OracleResponse"] = getattr(task, "last_oracle_response", None)
+                    msg["scoreEvalSet"] = task.score(candidate, args.eval_size)
+                    previous = candidate
+                except Exception as exc:
+                    msg["Error"] = str(exc)
+            logs.append(msg)
+            results["runs"] = results["runs"][:runid] + [logs]
+            savejson(results, path)
+            if msg["Equivalent"] is True:
+                break
+        results["runs"] = results["runs"][:runid] + [logs]
+    savejson(results, path)
+    return results
+
 
 if __name__ == "__main__":
     main()

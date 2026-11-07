@@ -2,6 +2,7 @@ import torch
 import argparse
 import random
 import numpy as np
+import sys
 from tqdm import tqdm
 
 from modeling.rnn import RNN
@@ -13,6 +14,15 @@ from curve import plot_accuracy_curve
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 if __name__ == "__main__":
+    # The program-induction benchmarks use the LLM path in train_icl_gen.
+    # Its default is the no-counterexample baseline.
+    benchmark_kinds = {"cryptography", "list_functions", "instruction_induction", "scan"}
+    if "--task_type" in sys.argv:
+        task_index = sys.argv.index("--task_type")
+        if task_index + 1 < len(sys.argv) and sys.argv[task_index + 1] in benchmark_kinds:
+            from train_icl_gen import main as run_icl
+            run_icl(sys.argv[1:])
+            sys.exit(0)
     parser = argparse.ArgumentParser()
     parser.add_argument("--regex", type=str, default="(a(a)*b)*")        # (a b + b a) (a + b b + c)* (a c + b a)
     parser.add_argument("--max_length", type=int, default=8)

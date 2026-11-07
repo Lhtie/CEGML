@@ -15,6 +15,8 @@ settings. The main experiments use two regex domains:
 |-- train_icl_gen.py                  # Main LLM regex-learning experiment runner
 |-- curve.py                          # Result aggregation and plotting
 |-- dataset.py                        # Dataset generation utilities
+|-- datasets/BENCHMARKS.md            # Cryptography, List Functions, Instruction Induction, and SCAN
+|-- benchmarks/                       # Registry and CLI for the four added benchmarks
 |-- teacher.py                        # Counterexample and verifier feedback
 |-- learner.py                        # LLM learner wrapper
 |-- tasks/
