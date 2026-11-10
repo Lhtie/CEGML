@@ -5,7 +5,6 @@ import json
 import random
 import re
 import signal
-import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -31,32 +30,59 @@ def _read_jsonl(path):
         return [json.loads(line) for line in stream]
 
 
+def _smt_solver(script):
+    """Load an SMT query through cvc5's Python API, without a CLI process."""
+    import cvc5
+
+    solver = cvc5.Solver()
+    solver.setOption("incremental", "true")
+    solver.setOption("produce-models", "true")
+    solver.setOption("tlimit-per", "10000")
+    parser = cvc5.InputParser(solver)
+    parser.setStringInput(cvc5.InputLanguage.SMT_LIB_2_6,
+                          "\n".join(script), "benchmark")
+    symbols = parser.getSymbolManager()
+    while True:
+        command = parser.nextCommand()
+        if command.isNull():
+            break
+        output = command.invoke(solver, symbols)
+        if output and output.lstrip().startswith("(error"):
+            raise RuntimeError("cvc5 query failed: " + output)
+    terms = {str(term): term for term in symbols.getDeclaredTerms()}
+    return solver, terms
+
+
 def _smt_choice(disagreements, limit):
     """Ask cvc5 for indices of disagreements in an explicitly bounded domain."""
-    if not disagreements:
+    if not disagreements or limit <= 0:
         return []
+    from cvc5 import Kind
+
     count = max(disagreements) + 1
-    script = ["(set-logic QF_LIA)", "(set-option :produce-models true)", "(declare-const i Int)",
-              f"(assert (and (<= 0 i) (< i {count})))",
-              "(assert (or " + " ".join(f"(= i {j})" for j in disagreements) + "))"]
+    solver, terms = _smt_solver([
+        "(set-logic QF_LIA)", "(declare-const i Int)",
+        f"(assert (and (<= 0 i) (< i {count})))",
+        "(assert (or " + " ".join(f"(= i {j})" for j in disagreements) + "))",
+    ])
     found = []
     for _ in range(min(limit, len(disagreements))):
-        query = "\n".join(script + ["(check-sat)", "(get-value (i))"])
-        result = subprocess.run(["cvc5", "--lang=smt2"], input=query, text=True,
-                                capture_output=True, timeout=10, check=False)
-        if result.returncode or not result.stdout.startswith("sat"):
+        result = solver.checkSat()
+        if result.isUnsat():
             break
-        match = re.search(r"\(\(i\s+(\d+)\)\)", result.stdout)
-        if not match:
-            break
-        index = int(match.group(1))
+        if not result.isSat():
+            raise RuntimeError("cvc5 returned unknown: " + str(result))
+        index = solver.getValue(terms["i"]).getIntegerValue()
         found.append(index)
-        script.append(f"(assert (not (= i {index})))")
+        solver.assertFormula(solver.mkTerm(
+            Kind.DISTINCT, terms["i"], solver.mkInteger(index)))
     return found
 
 
 def _crypto_smt(reference, candidate, limit):
     """Prove or refute equality of two finite alphabet substitutions with QF_LIA."""
+    from cvc5 import Kind
+
     alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
     def mapping(spec):
         return [ord(BenchmarkTask._apply_cipher(spec, ch)) for ch in alphabet]
@@ -66,22 +92,22 @@ def _crypto_smt(reference, candidate, limit):
         for i in range(len(values) - 2, -1, -1):
             expr = f"(ite (= i {i}) {values[i]} {expr})"
         return expr
-    script = ["(set-logic QF_LIA)", "(set-option :produce-models true)",
-              "(declare-const i Int)", f"(assert (and (<= 0 i) (< i {len(alphabet)})))",
-              f"(assert (not (= {expression(left)} {expression(right)})))"]
+    solver, terms = _smt_solver([
+        "(set-logic QF_LIA)", "(declare-const i Int)",
+        f"(assert (and (<= 0 i) (< i {len(alphabet)})))",
+        f"(assert (not (= {expression(left)} {expression(right)})))",
+    ])
     witnesses = []
     for _ in range(limit):
-        result = subprocess.run(["cvc5", "--lang=smt2"],
-                                input="\n".join(script + ["(check-sat)", "(get-value (i))"]),
-                                capture_output=True, text=True, timeout=10, check=False)
-        if result.stdout.startswith("unsat"):
+        result = solver.checkSat()
+        if result.isUnsat():
             return witnesses, not witnesses
-        match = re.search(r"\(\(i\s+(\d+)\)\)", result.stdout)
-        if result.returncode or not match:
-            raise RuntimeError("Cryptography SMT solver failed: " + result.stderr[:200])
-        index = int(match.group(1))
+        if not result.isSat():
+            raise RuntimeError("cvc5 returned unknown: " + str(result))
+        index = solver.getValue(terms["i"]).getIntegerValue()
         witnesses.append(alphabet[index])
-        script.append(f"(assert (not (= i {index})))")
+        solver.assertFormula(solver.mkTerm(
+            Kind.DISTINCT, terms["i"], solver.mkInteger(index)))
     return witnesses, False if witnesses else None
 
 
@@ -137,25 +163,17 @@ def _list_sequence_smt(reference, candidate):
     for length in range(3, 9):
         names = [f"v{i}" for i in range(length)]
         xexpr = "(seq.++ " + " ".join(f"(seq.unit {v})" for v in names) + ")"
-        script = ["(set-logic ALL)", "(set-option :produce-models true)"]
+        script = ["(set-logic ALL)"]
         script += [f"(declare-const {v} Int)" for v in names]
         script += [f"(assert (and (<= 0 {v}) (<= {v} 100)))" for v in names]
-        script += [f"(define-fun x () (Seq Int) {xexpr})", f"(assert (not (= {left} {right})))",
-                   "(check-sat)", "(get-value (" + " ".join(names) + "))"]
-        result = subprocess.run(["cvc5", "--lang=smt2"], input="\n".join(script),
-                                capture_output=True, text=True, timeout=10, check=False)
-        if result.returncode:
-            raise RuntimeError(result.stderr[:300])
-        if result.stdout.startswith("sat"):
-            values = []
-            for name in names:
-                match = re.search(r"\(" + name + r"\s+(\d+)\)", result.stdout)
-                if not match:
-                    raise RuntimeError("Could not parse cvc5 list witness")
-                values.append(int(match.group(1)))
-            return values
-        if not result.stdout.startswith("unsat"):
-            raise RuntimeError("cvc5 returned unknown")
+        script += [f"(define-fun x () (Seq Int) {xexpr})",
+                   f"(assert (not (= {left} {right})))"]
+        solver, terms = _smt_solver(script)
+        result = solver.checkSat()
+        if result.isSat():
+            return [solver.getValue(terms[name]).getIntegerValue() for name in names]
+        if not result.isUnsat():
+            raise RuntimeError("cvc5 returned unknown: " + str(result))
     return None
 
 
@@ -347,7 +365,7 @@ class BenchmarkTask:
                 witness = _list_sequence_smt(self.reference_source, candidate)
                 if witness is not None:
                     symbolic_pairs = [(witness, self.reference_output(witness))]
-            except (ValueError, RuntimeError, subprocess.TimeoutExpired):
+            except (ValueError, RuntimeError):
                 pass
             pool = []
             for x in self._list_pool():

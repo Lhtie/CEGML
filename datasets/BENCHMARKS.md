@@ -40,4 +40,4 @@ Instruction Induction's LLM oracle is heuristic. It requests up to `--ce_batch_s
 
 Candidate list and SCAN programs are restricted to a small Python subset and run with a per-input timeout. These limits may reject otherwise valid hypotheses.
 
-The two SMT oracles require the `cvc5` command-line program. The project Dockerfile installs it separately from the Python bindings in `requirements.txt`.
+The two SMT oracles use the `cvc5` Python API installed by `requirements.txt`. No separate `cvc5` command-line program is required. Solver queries have a 10-second per-check time limit.
