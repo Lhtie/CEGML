@@ -1,8 +1,13 @@
 """Prompts for the four input/output program induction benchmarks."""
+from benchmarks.list_functions import PROMPT as LIST_FUNCTIONS_PROMPT
 
 PROMPTS = {
-    "cryptography": """Infer the character substitution from the examples. The rule is one of Caesar shift, Atbash, or QWERTY keyboard substitution and preserves case. Return JSON in <ans> tags: {\"cipher\": \"caesar\", \"shift\": 3} or {\"cipher\": \"atbash\"} or {\"cipher\": \"keyboard\"}.\n{feedback}\nExamples (JSON input => JSON output):\n{examples}\n""",
-    "list_functions": """Infer the function mapping an integer list to an integer list. Write a Python function named transform(x). Use only arithmetic, comparisons, loops, comprehensions, slicing, and built-in list operations. Wrap only the complete function in <ans> tags.\n{feedback}\nExamples (JSON input => JSON output):\n{examples}\n""",
+    "cryptography": """Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.
+{feedback}
+{examples}
+Return a Python function named fn(x), without the function call.
+""",
+    "list_functions": LIST_FUNCTIONS_PROMPT,
     "instruction_induction": """Infer the natural-language instruction that maps each input to its output. Return one concise instruction in <ans> tags.\n{feedback}\nExamples (JSON input => JSON output):\n{examples}\n""",
     "scan": """Infer a compositional interpreter for SCAN commands. Write Python function transform(x) taking a command string and returning its action sequence as a space-separated string. Use Python standard syntax only. Wrap the complete function in <ans> tags.\n{feedback}\nExamples (JSON input => JSON output):\n{examples}\n""",
 }

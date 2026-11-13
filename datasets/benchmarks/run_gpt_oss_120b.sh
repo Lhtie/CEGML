@@ -8,7 +8,7 @@ set -euo pipefail
 # Preview, filter, or pass runner options:
 #   python -m benchmarks.run_suite --runner icl_gen --suite all --dry-run
 #   python -m benchmarks.run_suite --runner icl_gen --suite all --task list_functions -- --retries 3
-# Smaller stratified suite (136 jobs per runner):
+# Smaller stratified suite (94 jobs per runner):
 #   python -m benchmarks.run_suite --runner icl_gen --suite balanced
 # Use runner "both" for both direct ICL and rule generation.
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)

@@ -1,5 +1,7 @@
 # logs/benchmarks 结果分析
 
+> 日志迁移更新：原日志现已转换为共享 pipeline 的结构，并按首次已有 Equivalent=true 截断。本文及原指标文件仍是迁移前快照；迁移与备份见 [说明](../../benchmark_log_migrations/migration_summary_zh.md)。
+
 ## 结论
 
 当前目录只有 **4 个任务实例 × std/CE 两种方法 × 各 1 个 run，共 8 份日志**，模型均为 gpt-oss，均带 regularization。它们来自规则/程序生成路径 icl_gen，而不是直接预测每条输入输出的 ICL。这批结果可用于检查 pipeline 和观察个案，尚不足以得出跨 benchmark 的方法优劣结论。

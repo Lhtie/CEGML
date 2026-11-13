@@ -30,7 +30,7 @@ class CounterexampleBatch:
 
 
 BENCHMARKS = {
-    "cryptography": BenchmarkSpec("cryptography", "cvc5 substitution"),
+    "cryptography": BenchmarkSpec("cryptography", "cvc5 bounded symbolic Python"),
     "list_functions": BenchmarkSpec("list_functions", "cvc5 sequence and bounded search"),
     "instruction_induction": BenchmarkSpec("instruction_induction", "LLM judge"),
     "scan": BenchmarkSpec("scan", "exhaustive enumeration"),
@@ -58,10 +58,12 @@ class BenchmarkHandle:
     def counterexamples(self, hypothesis: str, limit: int = 8, **oracle_options: Any) -> CounterexampleBatch:
         if limit < 0:
             raise ValueError("limit must be non-negative")
-        pairs, equivalent = self.task.counterexamples(hypothesis, limit=limit, **oracle_options)
+        verdict = self.task.verify(hypothesis, limit=limit, **oracle_options)
+        if verdict.error:
+            raise RuntimeError(verdict.error)
         return CounterexampleBatch(
-            [x for x, _ in pairs], [y for _, y in pairs],
-            False if pairs else equivalent,
+            [x for x, _ in verdict.counterexamples], [y for _, y in verdict.counterexamples],
+            verdict.equivalent,
         )
 
 

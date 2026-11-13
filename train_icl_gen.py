@@ -266,9 +266,21 @@ def run_episode(
     generate_fn,
     on_retry=None,
     on_epoch_end=None,
+    adapter=None,
 ):
-    regex = task.regex_str
-    _, fst_gt, _ = task.regex_to_pynini_via_pyformlang(regex)
+    if adapter is None:
+        regex = task.regex_str
+        _, fst_gt, _ = task.regex_to_pynini_via_pyformlang(regex)
+        format_pair = lambda ex, label: train_data_template.format(ex, label)
+        reflection_builder = build_reflection_prompt
+        retry_builder = build_retry_prompt
+        candidate_builder = build_candidate_repair_prompt
+    else:
+        regex, fst_gt = adapter.reference()
+        format_pair = adapter.format_pair
+        reflection_builder = adapter.reflection_prompt
+        retry_builder = adapter.retry_prompt
+        candidate_builder = adapter.candidate_prompt
     accs = []
     agg_train_ex, agg_train_labels = [], []
     num_samples = log_scaling(config.tot_train_size, config.start_size, config.scale_factor)
@@ -290,7 +302,7 @@ def run_episode(
                     generation_mode=config.ce_generation_mode,
                 )
                 if uses_reflection_prompt(config.reasoning_mode):
-                    reflection_prompt = build_reflection_prompt(
+                    reflection_prompt = reflection_builder(
                         current_guess_reasoning,
                         current_guess,
                         train_ex,
@@ -309,7 +321,7 @@ def run_episode(
         agg_train_ex += train_ex
         agg_train_labels += train_labels
         train_p = "\n".join(
-            [train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)]
+            [format_pair(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)]
         )
 
         msgs, acc = [], 0
@@ -322,7 +334,7 @@ def run_episode(
             if uses_candidate_repair(config.reasoning_mode):
                 iter_prompt_kwargs["agentic_reflection_instr"] = (
                     reflection_prompt
-                    + build_candidate_repair_prompt(
+                    + candidate_builder(
                         candidate_count=config.candidate_repair_count,
                     )
                 )
@@ -368,7 +380,7 @@ def run_episode(
                         eval_ex=data["eval_ex"],
                         eval_labels=data["eval_labels"]
                     )
-                    _, candidate_retry_score = build_retry_prompt(
+                    _, candidate_retry_score = retry_builder(
                         task=task,
                         msg=candidate_msg,
                         train_ex=agg_train_ex,
@@ -405,7 +417,7 @@ def run_episode(
                 on_retry(epoch, msgs)
             
             if uses_repair_loop(config.reasoning_mode):
-                retry_prompt, retry_done_score = build_retry_prompt(
+                retry_prompt, retry_done_score = retry_builder(
                     task=task,
                     msg=msg,
                     train_ex=agg_train_ex,
@@ -461,6 +473,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--task_type", type=str, default="extrx", choices=["simplyrx", "extrx", "cryptography", "list_functions", "instruction_induction", "scan"])
     parser.add_argument("--benchmark_id", type=str, default=None, help="Cipher family:row, list function ID, instruction task name, or SCAN split")
+    parser.add_argument("--crypto-ood-ratio", type=float, default=0.0)
     parser.add_argument("--regex", type=str, default="[A-Za-z0-9#]*z[A-Za-z]*[A-Za-z0-9#]*")
     parser.add_argument("--max_length", type=int, default=32)
     parser.add_argument("--eval_max_length", type=int, default=32)
@@ -629,11 +642,16 @@ def main(argv=None):
         savejson(msgdict, config_name)
 
 def run_benchmark(args, model=None, tokenizer=None, response_fn=None):
-    """Run the non-regex benchmarks with the same CE/baseline controls."""
+    """Adapt benchmarks to the original regex run_episode controller."""
+    from benchmarks.episode import BenchmarkEpisodeAdapter
+
     defaults = {"cryptography": "caesar:0", "list_functions": "c102",
                 "instruction_induction": "antonyms", "scan": "simple"}
     benchmark_id = args.benchmark_id or defaults[args.task_type]
-    task = BenchmarkTask(args.task_type, benchmark_id, seed=args.seed, eval_size=args.eval_size)
+    task_options = dict(crypto_setting=getattr(args, "crypto_setting", "paper"),
+                        crypto_ood_ratio=getattr(args, "crypto_ood_ratio", 0.0))
+    first_task = BenchmarkTask(args.task_type, benchmark_id, seed=args.seed,
+                               eval_size=args.eval_size, **task_options)
     if response_fn is None:
         if model is None:
             model, tokenizer = load_model_and_tokenizer(args.mkey, api_key)
@@ -641,95 +659,67 @@ def run_benchmark(args, model=None, tokenizer=None, response_fn=None):
     outdir = os.path.join(args.outdir, f"icl_gen_{args.task_type}", f"model={args.mkey}",
                           "ce" if args.use_ce else "std", "reg" if args.use_reg else "noreg")
     os.makedirs(outdir, exist_ok=True)
-    safe_id = re.sub(r"[^A-Za-z0-9_.-]", "_", benchmark_id)
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]", "_", benchmark_id) + getattr(first_task, "log_suffix", "")
     path = os.path.join(outdir, f"{safe_id}.json")
     results = {"task_type": args.task_type, "benchmark_id": benchmark_id,
-               "oracle": task.oracle_name, "runs": []}
+               "pipeline": "regex_run_episode", "runs": []}
     for runid in range(args.rerun):
-        rng = random.Random(args.seed + runid)
+        task = (first_task if runid == 0 else BenchmarkTask(args.task_type, benchmark_id,
+                seed=args.seed + runid, eval_size=args.eval_size, **task_options))
+        results["oracle"] = task.oracle_name
+        if getattr(task, "task_settings", None):
+            results["TaskSettings"] = task.task_settings
         train = list(task.train)
-        rng.shuffle(train)
-        seen = []
-        previous = None
+        if getattr(task, "shuffle_training", True):
+            random.Random(args.seed + runid).shuffle(train)
+        config_values = dict(vars(args))
+        config_values.update(
+            tot_train_size=min(args.tot_train_size, len(train)),
+            reasoning_mode=getattr(args, "reasoning_mode", "agentic_reflection"),
+            candidate_repair_count=getattr(args, "candidate_repair_count", 10),
+            ce_clustered=getattr(args, "ce_clustered", False),
+            ce_generation_mode=getattr(args, "ce_generation_mode", "dfs"),
+            retries=max(1, args.retries),
+        )
+        config_values.update(getattr(task, "episode_defaults", {}))
+        config = SimpleNamespace(**config_values)
+        data = {"train_ex": [x for x, _ in train], "train_labels": [y for _, y in train],
+                "eval_ex": [x for x, _ in task.eval], "eval_labels": [y for _, y in task.eval]}
+        adapter = BenchmarkEpisodeAdapter(task, config, data, response_fn)
         logs = []
-        epochs = args.ce_epochs if args.use_ce else len(log_scaling(min(args.tot_train_size, len(train)), args.start_size, args.scale_factor))
-        for epoch in range(epochs):
-            if args.use_ce:
-                additions, equivalence = task.counterexamples(
-                    previous, args.ce_start_size if previous is None else args.ce_batch_size,
-                    llm_call=response_fn)
-                if not additions and previous is not None:
-                    if equivalence is True:
-                        logs.append({"epoch": epoch, "Prediction": previous, "Equivalent": True,
-                                     "scoreEvalSet": task.score(previous, args.eval_size), "NoCounterexample": True})
-                        break
-                    # An incomplete oracle cannot certify equivalence. Supply fresh
-                    # labeled examples and continue the refinement loop.
-                    if args.task_type == "list_functions":
-                        additions = []
-                        for x in task._list_pool(args.ce_start_size):
-                            try:
-                                pair = (x, task.reference_output(x))
-                            except Exception:
-                                continue
-                            if pair not in seen:
-                                additions.append(pair)
-                            if len(additions) >= args.ce_start_size:
-                                break
-                    else:
-                        additions = [pair for pair in train if pair not in seen][:args.ce_start_size]
-                    if not additions:
-                        logs.append({"epoch": epoch, "Prediction": previous, "Equivalent": None,
-                                     "NoCounterexample": True})
-                        break
-            else:
-                target_size = log_scaling(min(args.tot_train_size, len(train)), args.start_size, args.scale_factor)[epoch]
-                additions = train[len(seen):target_size]
-            for pair in additions:
-                if pair not in seen:
-                    seen.append(pair)
-            examples = "\n".join(task.format_pair(x, y) for x, y in seen)
-            feedback = ""
-            if args.use_ce and previous is not None:
-                feedback = "Previous hypothesis: " + previous + "\nNew counterexamples follow. Revise the hypothesis.\n"
-            attempts = []
-            for _retry in range(max(1, args.retries)):
-                prompt = BENCHMARK_PROMPTS[args.task_type].replace("{feedback}", feedback).replace("{examples}", examples)
-                if args.use_reg:
-                    prompt = BENCHMARK_REGULARIZATION + prompt
-                response = response_fn(prompt)
-                candidate = extract_ans(response)
-                error = None
-                if candidate is None:
-                    error = "No <ans> block was found"
-                elif args.task_type != "instruction_induction":
-                    try:
-                        task.predict(candidate, seen[0][0])
-                    except Exception as exc:
-                        error = str(exc)
-                attempts.append({"Response": response, "Prediction": candidate, "Error": error})
-                if error is None:
-                    break
-                feedback += f"Previous attempt failed: {error}. Return a corrected answer.\n"
-            msg = {"epoch": epoch, "Prompt": prompt, "Response": response, "Prediction": candidate,
-                   "NumTrainingSamples": len(seen), "Counterexamples": additions if args.use_ce else [],
-                   "Equivalent": None, "scoreEvalSet": None, "Attempts": attempts}
-            if candidate is not None and error is None:
-                try:
-                    if args.use_ce:
-                        _, equivalent = task.counterexamples(candidate, 1, llm_call=response_fn)
-                        msg["Equivalent"] = equivalent
-                        if args.task_type == "instruction_induction":
-                            msg["OracleResponse"] = getattr(task, "last_oracle_response", None)
-                    msg["scoreEvalSet"] = task.score(candidate, args.eval_size)
-                    previous = candidate
-                except Exception as exc:
-                    msg["Error"] = str(exc)
-            logs.append(msg)
+
+        def generate_fn(prompt_template, train_prompt, prompt_format_kwargs,
+                        answer_extractor=extract_ans, reasoning_extractor=extract_reasoning):
+            prompt = prompt_template.replace("{feedback}", prompt_format_kwargs.get("agentic_reflection_instr", ""))
+            prompt = prompt.replace("{examples}", train_prompt)
+            default_output_instruction = ("\nFirst give a concise explanation in <reasoning>...</reasoning>, "
+                       + ("then each complete candidate in its own <ans>...</ans> block.\n"
+                          if answer_extractor is extract_all_ans else
+                          "then the complete candidate in <ans>...</ans>.\n"))
+            prompt += getattr(task, "output_instruction", default_output_instruction)
+            if args.use_reg and getattr(task, "allow_regularization", True):
+                prompt = BENCHMARK_REGULARIZATION + prompt
+            response = response_fn(prompt)
+            return {"Prompt": prompt, "Response": response,
+                    "Prediction": task.extract_candidate(response, answer_extractor,
+                                                         multiple=answer_extractor is extract_all_ans),
+                    "Reasoning": reasoning_extractor(response)}
+
+        def on_retry(epoch, msgs):
+            # Same incremental checkpoint callback as the regex entry point.
+            partial = {"epoch": epoch, "Logs": msgs, "InProgress": True}
+            results["runs"] = results["runs"][:runid] + [logs + [partial]]
+            savejson(results, path)
+
+        def on_epoch_end(epoch, epoch_result):
+            logs.append(adapter.epoch_record(epoch, epoch_result))
             results["runs"] = results["runs"][:runid] + [logs]
             savejson(results, path)
-            if msg["Equivalent"] is True:
-                break
+
+        run_episode(config=config, task=task, data=data, teacher=adapter,
+                    prompt_template=getattr(task, "prompt_template", BENCHMARK_PROMPTS[args.task_type]), prompt_kwargs={},
+                    generate_fn=generate_fn, on_retry=on_retry, on_epoch_end=on_epoch_end,
+                    adapter=adapter)
         results["runs"] = results["runs"][:runid] + [logs]
     savejson(results, path)
     return results

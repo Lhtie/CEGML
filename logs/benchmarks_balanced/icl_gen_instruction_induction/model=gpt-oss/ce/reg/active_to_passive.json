@@ -1,0 +1,114 @@
+{
+    "task_type": "instruction_induction",
+    "benchmark_id": "active_to_passive",
+    "oracle": "LLM",
+    "runs": [
+        [
+            {
+                "epoch": 0,
+                "Prompt": "REGULARIZATION\nPrefer a concise rule or program that explains all examples. Avoid unnecessary special cases.\n\nInfer the natural-language instruction that maps each input to its output. Return one concise instruction in <ans> tags.\n\nExamples (JSON input => JSON output):\n\"The tourist supported the authors.\" => \"The authors were supported by the tourist.\"\n\"The athlete contacted the tourists.\" => \"The tourists were contacted by the athlete.\"\n\"The judges believed the bankers.\" => \"The bankers were believed by the judges.\"\n\"The president encouraged the actor.\" => \"The actor was encouraged by the president.\"\n\"The lawyers believed the authors.\" => \"The authors were believed by the lawyers.\"\n\"The senator advised the doctors.\" => \"The doctors were advised by the senator.\"\n\"The authors advised the student.\" => \"The student was advised by the authors.\"\n\"The secretaries believed the tourists.\" => \"The tourists were believed by the secretaries.\"\n",
+                "Response": "analysisWe need to infer the transformation rule: It takes an active voice sentence \"Subject verb Object.\" and converts to passive voice: \"Object was/were verb-ed by Subject.\" Need to handle plural vs singular? In examples, subjects and objects are plural nouns (tourist, authors, etc). The verb forms: \"supported\", \"contacted\", \"believed\", \"encouraged\", \"advised\". In passive they become \"were supported\", \"were contacted\", etc. So rule: Convert active voice sentence with subject, transitive verb, object into passive voice, using appropriate form of \"to be\" (was/were) matching number of original object, and past participle same as verb (same as given). Add \"by\" + original subject.\n\nThus concise instruction: \"Rewrite the sentence in passive voice, moving the object to the subject position, using the appropriate form of 'to be' (was/were) followed by the verb’s past participle, and add 'by' before the original subject.\"\n\nReturn in <ans> tags.\n\nassistantfinal<ans>Rewrite each active‑voice sentence as a passive‑voice sentence: place the original object first, use “was” if the object is singular or “were” if plural, follow it with the verb’s past participle, and add “by” plus the original subject.</ans>",
+                "Prediction": "Rewrite each active‑voice sentence as a passive‑voice sentence: place the original object first, use “was” if the object is singular or “were” if plural, follow it with the verb’s past participle, and add “by” plus the original subject.",
+                "NumTrainingSamples": 8,
+                "Counterexamples": [
+                    [
+                        "The tourist supported the authors.",
+                        "The authors were supported by the tourist."
+                    ],
+                    [
+                        "The athlete contacted the tourists.",
+                        "The tourists were contacted by the athlete."
+                    ],
+                    [
+                        "The judges believed the bankers.",
+                        "The bankers were believed by the judges."
+                    ],
+                    [
+                        "The president encouraged the actor.",
+                        "The actor was encouraged by the president."
+                    ],
+                    [
+                        "The lawyers believed the authors.",
+                        "The authors were believed by the lawyers."
+                    ],
+                    [
+                        "The senator advised the doctors.",
+                        "The doctors were advised by the senator."
+                    ],
+                    [
+                        "The authors advised the student.",
+                        "The student was advised by the authors."
+                    ],
+                    [
+                        "The secretaries believed the tourists.",
+                        "The tourists were believed by the secretaries."
+                    ]
+                ],
+                "Equivalent": true,
+                "scoreEvalSet": null,
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to infer the transformation rule: It takes an active voice sentence \"Subject verb Object.\" and converts to passive voice: \"Object was/were verb-ed by Subject.\" Need to handle plural vs singular? In examples, subjects and objects are plural nouns (tourist, authors, etc). The verb forms: \"supported\", \"contacted\", \"believed\", \"encouraged\", \"advised\". In passive they become \"were supported\", \"were contacted\", etc. So rule: Convert active voice sentence with subject, transitive verb, object into passive voice, using appropriate form of \"to be\" (was/were) matching number of original object, and past participle same as verb (same as given). Add \"by\" + original subject.\n\nThus concise instruction: \"Rewrite the sentence in passive voice, moving the object to the subject position, using the appropriate form of 'to be' (was/were) followed by the verb’s past participle, and add 'by' before the original subject.\"\n\nReturn in <ans> tags.\n\nassistantfinal<ans>Rewrite each active‑voice sentence as a passive‑voice sentence: place the original object first, use “was” if the object is singular or “were” if plural, follow it with the verb’s past participle, and add “by” plus the original subject.</ans>",
+                        "Prediction": "Rewrite each active‑voice sentence as a passive‑voice sentence: place the original object first, use “was” if the object is singular or “were” if plural, follow it with the verb’s past participle, and add “by” plus the original subject.",
+                        "Reasoning": null,
+                        "Error": null
+                    }
+                ],
+                "OracleResponse": "analysisWe need to determine if the proposed instruction implements same mapping as reference examples. The reference examples: each active sentence \"X verb Y\" becomes passive \"Y was/were verb-ed by X\". The instruction says: rewrite each active‑voice sentence as passive‑voice: place original object first, use “was” if object singular or “were” if plural, follow with verb's past participle, add “by” plus original subject. That matches the transformation. Need to check any nuance: The instruction says use \"was\" if object singular or \"were\" if plural. In examples, objects are plural? Many objects are plural (tourists, authors, bankers). They used \"were\". Singular objects: \"the author\" -> \"the author was recognized\". So matches.\n\nPotential differences: The instruction says \"use 'was' if the object is singular or 'were' if plural\". In English, some nouns may be collective singular but treated as plural; but examples are straightforward. Also instruction says \"follow it with the verb’s past participle\". In examples, they used \"supported\", \"contacted\", \"believed\", etc. That's correct. Also \"add 'by' plus the original subject\". That's correct.\n\nPotential edge case: The instruction does not mention handling of verb forms that require \"been\" or \"being\" for perfect tenses, but examples are simple past. So fine.\n\nThus likely equivalent.\n\nWe need to try to find a distinct input where instruction would give different output than reference mapping. Since reference mapping is exactly the passive transformation described, it's unlikely to differ. However, maybe the instruction says \"use 'was' if the object is singular or 'were' if plural\". In reference examples, they used \"were\" for plural objects, correct. For singular objects, they used \"was\". So matches.\n\nPotential nuance: The instruction says \"place the original object first\". In reference examples, they also placed object first. Good.\n\nThus I think equivalent.\n\nReturn JSON with equivalent true, empty counterexamples.\n\nassistantfinal{\n  \"equivalent\": true,\n  \"counterexamples\": [],\n  \"reason\": \"The proposed instruction precisely describes the transformation demonstrated in the reference examples: move the original object to the front, choose 'was' for singular objects and 'were' for plural objects, use the past participle of the verb, and add 'by' followed by the original subject. This matches all given mappings, and no distinct input can be found that would produce a different output under the instruction.\"\n}",
+                "Reasoning": null,
+                "scoreTrainSet": null,
+                "CandidateValid": true,
+                "RepairExamples": null,
+                "OracleStatus": "accepted",
+                "CurrentGuess": "Rewrite each active‑voice sentence as a passive‑voice sentence: place the original object first, use “was” if the object is singular or “were” if plural, follow it with the verb’s past participle, and add “by” plus the original subject.",
+                "CurrentGuessReasoning": null,
+                "Accuracy": 1,
+                "Logs": [
+                    {
+                        "Prompt": "REGULARIZATION\nPrefer a concise rule or program that explains all examples. Avoid unnecessary special cases.\n\nInfer the natural-language instruction that maps each input to its output. Return one concise instruction in <ans> tags.\n\nExamples (JSON input => JSON output):\n\"The tourist supported the authors.\" => \"The authors were supported by the tourist.\"\n\"The athlete contacted the tourists.\" => \"The tourists were contacted by the athlete.\"\n\"The judges believed the bankers.\" => \"The bankers were believed by the judges.\"\n\"The president encouraged the actor.\" => \"The actor was encouraged by the president.\"\n\"The lawyers believed the authors.\" => \"The authors were believed by the lawyers.\"\n\"The senator advised the doctors.\" => \"The doctors were advised by the senator.\"\n\"The authors advised the student.\" => \"The student was advised by the authors.\"\n\"The secretaries believed the tourists.\" => \"The tourists were believed by the secretaries.\"\n",
+                        "Response": "analysisWe need to infer the transformation rule: It takes an active voice sentence \"Subject verb Object.\" and converts to passive voice: \"Object was/were verb-ed by Subject.\" Need to handle plural vs singular? In examples, subjects and objects are plural nouns (tourist, authors, etc). The verb forms: \"supported\", \"contacted\", \"believed\", \"encouraged\", \"advised\". In passive they become \"were supported\", \"were contacted\", etc. So rule: Convert active voice sentence with subject, transitive verb, object into passive voice, using appropriate form of \"to be\" (was/were) matching number of original object, and past participle same as verb (same as given). Add \"by\" + original subject.\n\nThus concise instruction: \"Rewrite the sentence in passive voice, moving the object to the subject position, using the appropriate form of 'to be' (was/were) followed by the verb’s past participle, and add 'by' before the original subject.\"\n\nReturn in <ans> tags.\n\nassistantfinal<ans>Rewrite each active‑voice sentence as a passive‑voice sentence: place the original object first, use “was” if the object is singular or “were” if plural, follow it with the verb’s past participle, and add “by” plus the original subject.</ans>",
+                        "Prediction": "Rewrite each active‑voice sentence as a passive‑voice sentence: place the original object first, use “was” if the object is singular or “were” if plural, follow it with the verb’s past participle, and add “by” plus the original subject.",
+                        "Reasoning": null,
+                        "Equivalent": true,
+                        "scoreTrainSet": null,
+                        "scoreEvalSet": null,
+                        "CandidateValid": true,
+                        "RepairExamples": null,
+                        "OracleResponse": "analysisWe need to determine if the proposed instruction implements same mapping as reference examples. The reference examples: each active sentence \"X verb Y\" becomes passive \"Y was/were verb-ed by X\". The instruction says: rewrite each active‑voice sentence as passive‑voice: place original object first, use “was” if object singular or “were” if plural, follow with verb's past participle, add “by” plus original subject. That matches the transformation. Need to check any nuance: The instruction says use \"was\" if object singular or \"were\" if plural. In examples, objects are plural? Many objects are plural (tourists, authors, bankers). They used \"were\". Singular objects: \"the author\" -> \"the author was recognized\". So matches.\n\nPotential differences: The instruction says \"use 'was' if the object is singular or 'were' if plural\". In English, some nouns may be collective singular but treated as plural; but examples are straightforward. Also instruction says \"follow it with the verb’s past participle\". In examples, they used \"supported\", \"contacted\", \"believed\", etc. That's correct. Also \"add 'by' plus the original subject\". That's correct.\n\nPotential edge case: The instruction does not mention handling of verb forms that require \"been\" or \"being\" for perfect tenses, but examples are simple past. So fine.\n\nThus likely equivalent.\n\nWe need to try to find a distinct input where instruction would give different output than reference mapping. Since reference mapping is exactly the passive transformation described, it's unlikely to differ. However, maybe the instruction says \"use 'was' if the object is singular or 'were' if plural\". In reference examples, they used \"were\" for plural objects, correct. For singular objects, they used \"was\". So matches.\n\nPotential nuance: The instruction says \"place the original object first\". In reference examples, they also placed object first. Good.\n\nThus I think equivalent.\n\nReturn JSON with equivalent true, empty counterexamples.\n\nassistantfinal{\n  \"equivalent\": true,\n  \"counterexamples\": [],\n  \"reason\": \"The proposed instruction precisely describes the transformation demonstrated in the reference examples: move the original object to the front, choose 'was' for singular objects and 'were' for plural objects, use the past participle of the verb, and add 'by' followed by the original subject. This matches all given mappings, and no distinct input can be found that would produce a different output under the instruction.\"\n}",
+                        "OracleStatus": "accepted"
+                    }
+                ],
+                "TrainingExampleSource": "initial",
+                "StopReason": "oracle_accepted",
+                "HistoricalReconstruction": {
+                    "selected_attempt_index": 0,
+                    "missing_fields": [
+                        "Logs[0].Reasoning"
+                    ],
+                    "training_feedback_available": false,
+                    "selection": "historically_logged_candidate_not_reselected"
+                }
+            }
+        ]
+    ],
+    "pipeline": "regex_run_episode",
+    "LogMigration": {
+        "version": 1,
+        "timestamp_utc": "20261113T034403302012Z",
+        "source_pipeline": "legacy_benchmark",
+        "target_schema": "regex_run_episode",
+        "historical_execution": true,
+        "model_or_oracle_rerun": false,
+        "early_stop_policy": "first_existing_equivalent_true",
+        "null_verdicts_preserved": true,
+        "runs": [
+            {
+                "run": 0,
+                "original_epoch_records": 1,
+                "migrated_epoch_records": 1,
+                "removed_after_acceptance": [],
+                "terminal_oracle_events": []
+            }
+        ]
+    }
+}

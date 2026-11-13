@@ -62,7 +62,7 @@ def balanced_settings(selected, list_per_tier, crypto_per_family, sample_seed):
     return [pair for pair in available if pair in chosen]
 
 
-def settings(suite="all", selected=None, *, list_per_tier=8, crypto_per_family=4, sample_seed=43):
+def settings(suite="all", selected=None, *, list_per_tier=3, crypto_per_family=2, sample_seed=43):
     """Discover IDs from the data, checking paired train/test files exist."""
     selected = selected or TASKS
     if suite == "balanced":
@@ -114,8 +114,8 @@ def main(argv=None):
                         help="Experiment type (default: icl)")
     parser.add_argument("--suite", choices=("smoke", "all", "balanced"), default="smoke",
                         help="smoke: four defaults; all: every setting; balanced: stratified smaller suite")
-    parser.add_argument("--list-per-tier", type=int, default=8, help="Balanced suite: list functions per complexity tier")
-    parser.add_argument("--crypto-per-family", type=int, default=4, help="Balanced suite: instances per cipher family")
+    parser.add_argument("--list-per-tier", type=int, default=3, help="Balanced suite: list functions per complexity tier")
+    parser.add_argument("--crypto-per-family", type=int, default=2, help="Balanced suite: instances per cipher family")
     parser.add_argument("--sample-seed", type=int, default=43, help="Balanced selection seed; independent of model/run seed")
     parser.add_argument("--task", action="append", choices=TASKS, help="Restrict to a task; repeatable")
     parser.add_argument("--mode", choices=("std", "ce", "both"), default="both")
