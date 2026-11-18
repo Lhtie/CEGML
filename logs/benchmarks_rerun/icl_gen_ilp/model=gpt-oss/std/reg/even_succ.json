@@ -1,0 +1,217 @@
+{
+    "task_type": "ilp",
+    "benchmark_id": "even_succ",
+    "pipeline": "regex_run_episode",
+    "runs": [
+        [
+            {
+                "Prompt": "REGULARIZATION\nPrefer a concise rule or program that explains all examples. Avoid unnecessary special cases.\n\nInduce a positive function-free Horn program defining the unary predicate target/1 from background knowledge and labeled ground atoms. The target's intended meaning is hidden; infer it from the examples.\nTraining constants: 0..10. Background facts: {\"zero\": [[0]], \"succ\": [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10]]}.\nFor each input's num_constants=N, constants are 0..N-1; zero holds only at 0, succ(i,j) holds exactly when j=i+1 and both are in the domain. The same background declaration extends to N=15 during evaluation or CE feedback. Only background facts, never target labels, are supplied by this declaration.\nReturn clauses using lowercase predicate names and uppercase variables, e.g. head(X,Y) :- body1(X,Z), body2(Z,Y).\nEach clause has one head and one or two body atoms, at most three distinct variables, and ends with a period. target is unary; invented predicates may be unary or binary. Recursive and mutually recursive definitions are allowed. Background predicates are immutable. true and false are nullary Boolean atoms. The only given relational predicates are zero/1 and succ/2. Do not use Python, arithmetic, numeric constants in rules, function terms, negation, disjunction inside clauses, cuts or external calls. Multiple clauses express alternative derivations. Practical parser budgets are 32 clauses and 12 invented predicates; these are our resource limits, not the HRI hierarchy constraint.\nInference is synchronous Boolean forward chaining from empty invented/target relations, with six rounds for N=11 and eight rounds for N=15. Each IO input specifies N and a ground target atom. Output only the Horn program inside the requested ans block, with a concise reasoning summary.\n\nLabeled ground atoms (JSON input => Boolean target truth):\n{\"num_constants\": 11, \"atom\": \"target(0)\"} => true\n{\"num_constants\": 11, \"atom\": \"target(1)\"} => false\n{\"num_constants\": 11, \"atom\": \"target(2)\"} => true\n{\"num_constants\": 11, \"atom\": \"target(3)\"} => false\n{\"num_constants\": 11, \"atom\": \"target(4)\"} => true\n{\"num_constants\": 11, \"atom\": \"target(5)\"} => false\n{\"num_constants\": 11, \"atom\": \"target(6)\"} => true\n{\"num_constants\": 11, \"atom\": \"target(7)\"} => false\n{\"num_constants\": 11, \"atom\": \"target(8)\"} => true\n{\"num_constants\": 11, \"atom\": \"target(9)\"} => false\n{\"num_constants\": 11, \"atom\": \"target(10)\"} => true\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                "Response": "analysisWe need to infer target predicate from examples: true for even numbers (0,2,4,6,8,10) false for odd numbers. So target(x) iff even. Need Horn program using zero/1 and succ/2 only, no arithmetic. Need to define even numbers via recursion: even(0) true, even(succ(X)) true if odd(X). So we need invented predicates maybe even/1 and odd/1. Use Horn clauses:\n\ntarget(X) :- zero(X).   // 0 is even\ntarget(X) :- succ(Y,X), odd(Y). // if predecessor is odd\n\nodd(X) :- succ(Y,X), target(Y). // odd if predecessor is even\n\nBut need to ensure termination. Also need base for odd? Not needed because odd defined via target. However need to avoid circular without base: target depends on odd, odd depends on target, but base target zero gives start. This works.\n\nWe must respect each clause has at most two body atoms, at most three distinct variables. Our clauses:\n\ntarget(X) :- zero(X).\ntarget(X) :- succ(Y,X), odd(Y).\nodd(X) :- succ(Y,X), target(Y).\n\nThat's three clauses, two invented predicates: odd/1 (maybe also even but target is even). That's within limits.\n\nCheck forward chaining: start with zero(0). In round 1, target(0) derived. Then odd(1) via succ(0,1) and target(0). Then target(2) via succ(1,2) and odd(1). Then odd(3) via succ(2,3) and target(2). etc. Works.\n\nNeed to ensure that succ facts are given for all numbers up to N-1. Yes.\n\nThus answer.\n\nProvide reasoning block and ans block with program.\n\nassistantfinal<reasoning>\nThe examples show that\u202ftarget\u202fholds exactly for the even numbers 0,2,4,\u2026,10.  \nUsing only the background predicates\u202fzero/1\u202f(and\u202fsucc/2) we can define evenness recursively:\n\n* Base case:\u202f0\u202fis even \u2192\u202ftarget(0)\u202fvia\u202fzero/1.\n* Inductive step: a number\u202fX\u202fis even if its predecessor\u202fY\u202fis odd.\n* Odd numbers are defined as the successors of even numbers.\n\nThus we introduce an auxiliary unary predicate\u202fodd/1\u202fand write three Horn clauses that respect the syntactic limits (one head, \u22642 body atoms, \u22643 variables). The recursion is anchored by the base fact\u202fzero(0), so forward chaining derives exactly the even numbers.\n</reasoning>\n\n<ans>\ntarget(X) :- zero(X).\ntarget(X) :- succ(Y,X), odd(Y).\n\nodd(X) :- succ(Y,X), target(Y).\n</ans>",
+                "Prediction": "target(X) :- zero(X).\ntarget(X) :- succ(Y,X), odd(Y).\n\nodd(X) :- succ(Y,X), target(Y).",
+                "Reasoning": "The examples show that\u202ftarget\u202fholds exactly for the even numbers 0,2,4,\u2026,10.  \nUsing only the background predicates\u202fzero/1\u202f(and\u202fsucc/2) we can define evenness recursively:\n\n* Base case:\u202f0\u202fis even \u2192\u202ftarget(0)\u202fvia\u202fzero/1.\n* Inductive step: a number\u202fX\u202fis even if its predecessor\u202fY\u202fis odd.\n* Odd numbers are defined as the successors of even numbers.\n\nThus we introduce an auxiliary unary predicate\u202fodd/1\u202fand write three Horn clauses that respect the syntactic limits (one head, \u22642 body atoms, \u22643 variables). The recursion is anchored by the base fact\u202fzero(0), so forward chaining derives exactly the even numbers.",
+                "Equivalent": false,
+                "scoreTrainSet": 0.7272727272727273,
+                "scoreEvalSet": 0.7333333333333333,
+                "CandidateValid": true,
+                "OracleStatus": "rejected",
+                "OracleCounterexamples": [
+                    [
+                        {
+                            "num_constants": 15,
+                            "atom": "target(8)"
+                        },
+                        true
+                    ],
+                    [
+                        {
+                            "num_constants": 15,
+                            "atom": "target(10)"
+                        },
+                        true
+                    ],
+                    [
+                        {
+                            "num_constants": 15,
+                            "atom": "target(12)"
+                        },
+                        true
+                    ],
+                    [
+                        {
+                            "num_constants": 15,
+                            "atom": "target(14)"
+                        },
+                        true
+                    ]
+                ],
+                "OracleDetails": {
+                    "backend": "finite_Horn_forward_chaining",
+                    "policy": "hri_even_succ_v1",
+                    "guarantee": "finite_domain_bounded_inference_equivalence",
+                    "num_constants": 15,
+                    "inference_steps": 8,
+                    "examples_checked": 15,
+                    "disagreements": 4,
+                    "domain": "all_target_ground_atoms_on_author_evaluation_context",
+                    "unbounded_rule_equivalence_proved": false
+                },
+                "RepairExamples": [
+                    [
+                        {
+                            "num_constants": 11,
+                            "atom": "target(6)"
+                        },
+                        true
+                    ],
+                    [
+                        {
+                            "num_constants": 11,
+                            "atom": "target(8)"
+                        },
+                        true
+                    ],
+                    [
+                        {
+                            "num_constants": 11,
+                            "atom": "target(10)"
+                        },
+                        true
+                    ]
+                ],
+                "EvaluationDetails": {
+                    "test_examples": 15,
+                    "correct": 11,
+                    "sample_accuracy": 0.7333333333333333,
+                    "all_test_correct": false,
+                    "mse": 0.26666666666666666,
+                    "paper_success_threshold": 0.0001,
+                    "paper_symbolic_success": false
+                },
+                "epoch": 0,
+                "NumTrainingSamples": 11,
+                "CurrentGuess": "target(X) :- zero(X).\ntarget(X) :- succ(Y,X), odd(Y).\n\nodd(X) :- succ(Y,X), target(Y).",
+                "CurrentGuessReasoning": "The examples show that\u202ftarget\u202fholds exactly for the even numbers 0,2,4,\u2026,10.  \nUsing only the background predicates\u202fzero/1\u202f(and\u202fsucc/2) we can define evenness recursively:\n\n* Base case:\u202f0\u202fis even \u2192\u202ftarget(0)\u202fvia\u202fzero/1.\n* Inductive step: a number\u202fX\u202fis even if its predecessor\u202fY\u202fis odd.\n* Odd numbers are defined as the successors of even numbers.\n\nThus we introduce an auxiliary unary predicate\u202fodd/1\u202fand write three Horn clauses that respect the syntactic limits (one head, \u22642 body atoms, \u22643 variables). The recursion is anchored by the base fact\u202fzero(0), so forward chaining derives exactly the even numbers.",
+                "Accuracy": 0,
+                "Logs": [
+                    {
+                        "Prompt": "REGULARIZATION\nPrefer a concise rule or program that explains all examples. Avoid unnecessary special cases.\n\nInduce a positive function-free Horn program defining the unary predicate target/1 from background knowledge and labeled ground atoms. The target's intended meaning is hidden; infer it from the examples.\nTraining constants: 0..10. Background facts: {\"zero\": [[0]], \"succ\": [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10]]}.\nFor each input's num_constants=N, constants are 0..N-1; zero holds only at 0, succ(i,j) holds exactly when j=i+1 and both are in the domain. The same background declaration extends to N=15 during evaluation or CE feedback. Only background facts, never target labels, are supplied by this declaration.\nReturn clauses using lowercase predicate names and uppercase variables, e.g. head(X,Y) :- body1(X,Z), body2(Z,Y).\nEach clause has one head and one or two body atoms, at most three distinct variables, and ends with a period. target is unary; invented predicates may be unary or binary. Recursive and mutually recursive definitions are allowed. Background predicates are immutable. true and false are nullary Boolean atoms. The only given relational predicates are zero/1 and succ/2. Do not use Python, arithmetic, numeric constants in rules, function terms, negation, disjunction inside clauses, cuts or external calls. Multiple clauses express alternative derivations. Practical parser budgets are 32 clauses and 12 invented predicates; these are our resource limits, not the HRI hierarchy constraint.\nInference is synchronous Boolean forward chaining from empty invented/target relations, with six rounds for N=11 and eight rounds for N=15. Each IO input specifies N and a ground target atom. Output only the Horn program inside the requested ans block, with a concise reasoning summary.\n\nLabeled ground atoms (JSON input => Boolean target truth):\n{\"num_constants\": 11, \"atom\": \"target(0)\"} => true\n{\"num_constants\": 11, \"atom\": \"target(1)\"} => false\n{\"num_constants\": 11, \"atom\": \"target(2)\"} => true\n{\"num_constants\": 11, \"atom\": \"target(3)\"} => false\n{\"num_constants\": 11, \"atom\": \"target(4)\"} => true\n{\"num_constants\": 11, \"atom\": \"target(5)\"} => false\n{\"num_constants\": 11, \"atom\": \"target(6)\"} => true\n{\"num_constants\": 11, \"atom\": \"target(7)\"} => false\n{\"num_constants\": 11, \"atom\": \"target(8)\"} => true\n{\"num_constants\": 11, \"atom\": \"target(9)\"} => false\n{\"num_constants\": 11, \"atom\": \"target(10)\"} => true\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                        "Response": "analysisWe need to infer target predicate from examples: true for even numbers (0,2,4,6,8,10) false for odd numbers. So target(x) iff even. Need Horn program using zero/1 and succ/2 only, no arithmetic. Need to define even numbers via recursion: even(0) true, even(succ(X)) true if odd(X). So we need invented predicates maybe even/1 and odd/1. Use Horn clauses:\n\ntarget(X) :- zero(X).   // 0 is even\ntarget(X) :- succ(Y,X), odd(Y). // if predecessor is odd\n\nodd(X) :- succ(Y,X), target(Y). // odd if predecessor is even\n\nBut need to ensure termination. Also need base for odd? Not needed because odd defined via target. However need to avoid circular without base: target depends on odd, odd depends on target, but base target zero gives start. This works.\n\nWe must respect each clause has at most two body atoms, at most three distinct variables. Our clauses:\n\ntarget(X) :- zero(X).\ntarget(X) :- succ(Y,X), odd(Y).\nodd(X) :- succ(Y,X), target(Y).\n\nThat's three clauses, two invented predicates: odd/1 (maybe also even but target is even). That's within limits.\n\nCheck forward chaining: start with zero(0). In round 1, target(0) derived. Then odd(1) via succ(0,1) and target(0). Then target(2) via succ(1,2) and odd(1). Then odd(3) via succ(2,3) and target(2). etc. Works.\n\nNeed to ensure that succ facts are given for all numbers up to N-1. Yes.\n\nThus answer.\n\nProvide reasoning block and ans block with program.\n\nassistantfinal<reasoning>\nThe examples show that\u202ftarget\u202fholds exactly for the even numbers 0,2,4,\u2026,10.  \nUsing only the background predicates\u202fzero/1\u202f(and\u202fsucc/2) we can define evenness recursively:\n\n* Base case:\u202f0\u202fis even \u2192\u202ftarget(0)\u202fvia\u202fzero/1.\n* Inductive step: a number\u202fX\u202fis even if its predecessor\u202fY\u202fis odd.\n* Odd numbers are defined as the successors of even numbers.\n\nThus we introduce an auxiliary unary predicate\u202fodd/1\u202fand write three Horn clauses that respect the syntactic limits (one head, \u22642 body atoms, \u22643 variables). The recursion is anchored by the base fact\u202fzero(0), so forward chaining derives exactly the even numbers.\n</reasoning>\n\n<ans>\ntarget(X) :- zero(X).\ntarget(X) :- succ(Y,X), odd(Y).\n\nodd(X) :- succ(Y,X), target(Y).\n</ans>",
+                        "Prediction": "target(X) :- zero(X).\ntarget(X) :- succ(Y,X), odd(Y).\n\nodd(X) :- succ(Y,X), target(Y).",
+                        "Reasoning": "The examples show that\u202ftarget\u202fholds exactly for the even numbers 0,2,4,\u2026,10.  \nUsing only the background predicates\u202fzero/1\u202f(and\u202fsucc/2) we can define evenness recursively:\n\n* Base case:\u202f0\u202fis even \u2192\u202ftarget(0)\u202fvia\u202fzero/1.\n* Inductive step: a number\u202fX\u202fis even if its predecessor\u202fY\u202fis odd.\n* Odd numbers are defined as the successors of even numbers.\n\nThus we introduce an auxiliary unary predicate\u202fodd/1\u202fand write three Horn clauses that respect the syntactic limits (one head, \u22642 body atoms, \u22643 variables). The recursion is anchored by the base fact\u202fzero(0), so forward chaining derives exactly the even numbers.",
+                        "Equivalent": false,
+                        "scoreTrainSet": 0.7272727272727273,
+                        "scoreEvalSet": 0.7333333333333333,
+                        "CandidateValid": true,
+                        "OracleStatus": "rejected",
+                        "OracleCounterexamples": [
+                            [
+                                {
+                                    "num_constants": 15,
+                                    "atom": "target(8)"
+                                },
+                                true
+                            ],
+                            [
+                                {
+                                    "num_constants": 15,
+                                    "atom": "target(10)"
+                                },
+                                true
+                            ],
+                            [
+                                {
+                                    "num_constants": 15,
+                                    "atom": "target(12)"
+                                },
+                                true
+                            ],
+                            [
+                                {
+                                    "num_constants": 15,
+                                    "atom": "target(14)"
+                                },
+                                true
+                            ]
+                        ],
+                        "OracleDetails": {
+                            "backend": "finite_Horn_forward_chaining",
+                            "policy": "hri_even_succ_v1",
+                            "guarantee": "finite_domain_bounded_inference_equivalence",
+                            "num_constants": 15,
+                            "inference_steps": 8,
+                            "examples_checked": 15,
+                            "disagreements": 4,
+                            "domain": "all_target_ground_atoms_on_author_evaluation_context",
+                            "unbounded_rule_equivalence_proved": false
+                        },
+                        "RepairExamples": [
+                            [
+                                {
+                                    "num_constants": 11,
+                                    "atom": "target(6)"
+                                },
+                                true
+                            ],
+                            [
+                                {
+                                    "num_constants": 11,
+                                    "atom": "target(8)"
+                                },
+                                true
+                            ],
+                            [
+                                {
+                                    "num_constants": 11,
+                                    "atom": "target(10)"
+                                },
+                                true
+                            ]
+                        ],
+                        "EvaluationDetails": {
+                            "test_examples": 15,
+                            "correct": 11,
+                            "sample_accuracy": 0.7333333333333333,
+                            "all_test_correct": false,
+                            "mse": 0.26666666666666666,
+                            "paper_success_threshold": 0.0001,
+                            "paper_symbolic_success": false
+                        }
+                    }
+                ],
+                "Counterexamples": [],
+                "TrainingExampleSource": "scheduled",
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to infer target predicate from examples: true for even numbers (0,2,4,6,8,10) false for odd numbers. So target(x) iff even. Need Horn program using zero/1 and succ/2 only, no arithmetic. Need to define even numbers via recursion: even(0) true, even(succ(X)) true if odd(X). So we need invented predicates maybe even/1 and odd/1. Use Horn clauses:\n\ntarget(X) :- zero(X).   // 0 is even\ntarget(X) :- succ(Y,X), odd(Y). // if predecessor is odd\n\nodd(X) :- succ(Y,X), target(Y). // odd if predecessor is even\n\nBut need to ensure termination. Also need base for odd? Not needed because odd defined via target. However need to avoid circular without base: target depends on odd, odd depends on target, but base target zero gives start. This works.\n\nWe must respect each clause has at most two body atoms, at most three distinct variables. Our clauses:\n\ntarget(X) :- zero(X).\ntarget(X) :- succ(Y,X), odd(Y).\nodd(X) :- succ(Y,X), target(Y).\n\nThat's three clauses, two invented predicates: odd/1 (maybe also even but target is even). That's within limits.\n\nCheck forward chaining: start with zero(0). In round 1, target(0) derived. Then odd(1) via succ(0,1) and target(0). Then target(2) via succ(1,2) and odd(1). Then odd(3) via succ(2,3) and target(2). etc. Works.\n\nNeed to ensure that succ facts are given for all numbers up to N-1. Yes.\n\nThus answer.\n\nProvide reasoning block and ans block with program.\n\nassistantfinal<reasoning>\nThe examples show that\u202ftarget\u202fholds exactly for the even numbers 0,2,4,\u2026,10.  \nUsing only the background predicates\u202fzero/1\u202f(and\u202fsucc/2) we can define evenness recursively:\n\n* Base case:\u202f0\u202fis even \u2192\u202ftarget(0)\u202fvia\u202fzero/1.\n* Inductive step: a number\u202fX\u202fis even if its predecessor\u202fY\u202fis odd.\n* Odd numbers are defined as the successors of even numbers.\n\nThus we introduce an auxiliary unary predicate\u202fodd/1\u202fand write three Horn clauses that respect the syntactic limits (one head, \u22642 body atoms, \u22643 variables). The recursion is anchored by the base fact\u202fzero(0), so forward chaining derives exactly the even numbers.\n</reasoning>\n\n<ans>\ntarget(X) :- zero(X).\ntarget(X) :- succ(Y,X), odd(Y).\n\nodd(X) :- succ(Y,X), target(Y).\n</ans>",
+                        "Prediction": "target(X) :- zero(X).\ntarget(X) :- succ(Y,X), odd(Y).\n\nodd(X) :- succ(Y,X), target(Y).",
+                        "Reasoning": "The examples show that\u202ftarget\u202fholds exactly for the even numbers 0,2,4,\u2026,10.  \nUsing only the background predicates\u202fzero/1\u202f(and\u202fsucc/2) we can define evenness recursively:\n\n* Base case:\u202f0\u202fis even \u2192\u202ftarget(0)\u202fvia\u202fzero/1.\n* Inductive step: a number\u202fX\u202fis even if its predecessor\u202fY\u202fis odd.\n* Odd numbers are defined as the successors of even numbers.\n\nThus we introduce an auxiliary unary predicate\u202fodd/1\u202fand write three Horn clauses that respect the syntactic limits (one head, \u22642 body atoms, \u22643 variables). The recursion is anchored by the base fact\u202fzero(0), so forward chaining derives exactly the even numbers.",
+                        "Error": null
+                    }
+                ]
+            }
+        ]
+    ],
+    "oracle": "finite_Horn_forward_chaining",
+    "TaskSettings": {
+        "paper_url": "https://proceedings.mlr.press/v162/glanois22a.html",
+        "author_repository": "https://github.com/claireaoi/hierarchical-rule-induction",
+        "author_revision": "1a3a0465a5a5305ad8fec958901710dc6ead76e4",
+        "author_task": "EvenSucc",
+        "method": "LLM_CE_adaptation_not_HRI_optimizer",
+        "paper_max_depth": 4,
+        "paper_num_runs": 10,
+        "train_num_constants": 11,
+        "eval_num_constants": 15,
+        "train_inference_steps": 6,
+        "eval_inference_steps": 8,
+        "clean_labels": true,
+        "hypothesis": "positive_function_free_unary_binary_Horn",
+        "hierarchy_bias": "HRI_R_star_layer_parameterization_not_enforced",
+        "paper_optimizer_reproduced": false,
+        "inference": "synchronous_boolean_forward_chaining",
+        "parser_resource_limits": {
+            "max_clauses": 32,
+            "max_invented_predicates": 12
+        }
+    }
+}

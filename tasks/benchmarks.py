@@ -315,7 +315,7 @@ class BenchmarkTask:
             self.train, self.eval = self.ilp.train, self.ilp.eval
             self.prompt_template = self.ilp.prompt
             self.icl_instruction = self.ilp.icl_instruction
-            self.episode_defaults = {"start_size": 11, "tot_train_size": 11, "ce_start_size": 11}
+            self.episode_defaults = {"ce_start_size": 3}
             self.shuffle_training = False
             self.task_settings = self.ilp.settings
         elif kind == "instruction_induction":

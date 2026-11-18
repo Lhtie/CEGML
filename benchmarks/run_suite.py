@@ -58,7 +58,14 @@ def balanced_settings(selected, list_per_tier, crypto_per_family, sample_seed):
                 raise ValueError("Requested more list samples than available in a tier")
             picked = random.Random(f"{sample_seed}:list:{i}").sample(tier, list_per_tier)
             chosen.update(("list_functions", ident) for _, ident in picked)
-    chosen.update(pair for pair in available if pair[0] in ("instruction_induction", "scan", "ilp"))
+    chosen.update(pair for pair in available if pair[0] in ("instruction_induction", "scan"))
+    if any(task == "ilp" for task, _ in available):
+        from benchmarks.ilp_settings import BALANCED_IDS
+        wanted = {("ilp", ident) for ident in BALANCED_IDS}
+        missing = wanted - set(available)
+        if missing:
+            raise ValueError(f"Missing balanced ILP data; run datasets/ilp/prepare.py: {sorted(missing)}")
+        chosen.update(wanted)
     return [pair for pair in available if pair in chosen]
 
 
@@ -150,7 +157,7 @@ def main(argv=None):
     print(f"Suite={args.suite}; settings={len(instances)} {counts}; jobs={total}", flush=True)
     if args.suite == "balanced":
         print(f"Selection seed={args.sample_seed}; list tiers={args.list_per_tier} each; "
-              f"cipher families={args.crypto_per_family} each; all instruction tasks, SCAN splits and registered ILP settings retained. "
+              f"cipher families={args.crypto_per_family} each; all instruction tasks and SCAN splits retained; six ILP tasks (two per structural difficulty tier). "
               "Tiers reflect reference syntax complexity, not measured model difficulty.", flush=True)
     failed = []
     done = 0

@@ -37,7 +37,7 @@ Replace `cryptography --benchmark_id caesar:0` with `list_functions --benchmark_
 
 ## Full dataset suites
 
-The full suite currently contains 583 settings: 300 cryptography instances (100 each of Caesar, Atbash, and keyboard), 250 list functions, 24 instruction-induction tasks, 8 SCAN splits, and one ILP setting. Every setting runs both standard and CE by default: 1,166 jobs per runner, or 2,332 with `both`. IDs are discovered from local data files rather than inferred from a numeric difficulty order.
+The full suite currently contains 594 settings: 300 cryptography instances (100 each of Caesar, Atbash, and keyboard), 250 list functions, 24 instruction-induction tasks, 8 SCAN splits, and twelve ILP settings. Every setting runs both standard and CE by default: 1,188 jobs per runner, or 2,376 with `both`. IDs are discovered from local data files rather than inferred from a numeric difficulty order.
 
 ```bash
 # Preview the complete rule-generation run without calling any model.
@@ -73,10 +73,10 @@ Use `--suite balanced` to reduce the number of settings while retaining broader 
 - SCAN: keep all 8 splits.
 - ILP: keep the registered EvenSucc setting.
 
-This gives 48 settings / 96 std-and-CE jobs per runner, down from 1,166 jobs. Both methods receive exactly the same selected IDs. The structural score is AST node count + 8 per for/while + 4 per if/conditional expression + 3 per call + 2 per subscript + 5 per comprehension clause. It ignores comments/docstring text length; equal scores are ordered by ID. The three bands approximate reference-program complexity, **not measured model difficulty**; sampling is uniform within each band, not uniform across observed accuracy. All instruction task types and SCAN splits are retained rather than assigned unvalidated difficulty labels. This is a stratified diagnostic subset, not an unbiased estimate of the full dataset average.
+This gives 53 settings / 106 std-and-CE jobs per runner, down from 1,188 jobs. Both methods receive exactly the same selected IDs. The structural score is AST node count + 8 per for/while + 4 per if/conditional expression + 3 per call + 2 per subscript + 5 per comprehension clause. It ignores comments/docstring text length; equal scores are ordered by ID. The three bands approximate reference-program complexity, **not measured model difficulty**; sampling is uniform within each band, not uniform across observed accuracy. All instruction task types and SCAN splits are retained rather than assigned unvalidated difficulty labels. This is a stratified diagnostic subset, not an unbiased estimate of the full dataset average.
 
 ```bash
-# Preview the default 96-job subset.
+# Preview the default 106-job subset.
 python -m benchmarks.run_suite --runner icl_gen --suite balanced --dry-run
 
 # Run it in a separate output directory.
@@ -87,7 +87,7 @@ python -m benchmarks.run_suite --runner icl_gen --suite balanced --outdir logs/b
 python -m benchmarks.run_suite --runner icl_gen --suite balanced --list-per-tier 4 --crypto-per-family 2
 ```
 
-`--sample-seed` defaults to 43 and controls selection only; it is distinct from the runner's `--seed` passed after `--`. Selection for a task stays the same when using `--task` filters. Dry-run prints the exact selected IDs and commands for recording the experiment. Using the observed 6.5 hours for the former 68-setting balanced suite, proportional scaling gives approximately 4.5 hours for the former 47-setting suite (std and CE combined, one runner); adding ILP makes the current suite 48 settings / 96 jobs. This is an estimate: per-task cost, oracle changes and early stopping affect runtime. Restore the former sample size with `--list-per-tier 8 --crypto-per-family 4`.
+`--sample-seed` defaults to 43 and controls selection only; it is distinct from the runner's `--seed` passed after `--`. Selection for a task stays the same when using `--task` filters. Dry-run prints the exact selected IDs and commands for recording the experiment. Using the observed 6.5 hours for the former 68-setting balanced suite, proportional scaling gives approximately 4.5 hours for the former 47-setting suite (std and CE combined, one runner); selecting the six balanced ILP tasks makes the current suite 53 settings / 106 jobs. This is an estimate: per-task cost, oracle changes and early stopping affect runtime. Restore the former sample size with `--list-per-tier 8 --crypto-per-family 4`.
 
 ## Equivalence logging for rule generation
 
@@ -193,11 +193,11 @@ Prompt construction and CE validation live in `benchmarks/instruction_oracle.py`
 
 Future logs include policy, actual oracle prompt, raw verdict, rejection reasons and GT source under `OracleDetails`. No execution/test examples are used to build or validate teacher context. The shared regex episode controller is unchanged. Historical audit, reviewed cases, prompt snapshots and gpt-oss-api replays are in `analysis/instruction_oracle_review/`; original benchmark logs are preserved. The replay results are selected diagnostic cases, not an unbiased estimate of oracle accuracy or updated experiment success rates.
 
-## ILP: HRI EvenSucc
+## ILP: HRI-inspired scaleup tasks
 
 `ilp/even_succ` adds positive Horn rule induction from [Glanois et al. (ICML 2022)](https://proceedings.mlr.press/v162/glanois22a.html). It is registered beside List Functions rather than flattened into a Python list classifier. The vendored author generator/configuration is pinned and licensed under `datasets/ilp/source`; regenerate the deterministic data with `python datasets/ilp/prepare.py`.
 
-The learner receives zero/succ background knowledge and Boolean target atoms. It returns recursive, function-free unary/binary Horn clauses inside ans tags, with the shared concise reasoning summary. Training uses all 11 target atoms at N=11 with six synchronous inference rounds; full evaluation uses 15 target atoms at N=15 with eight rounds. Auxiliary predicate invention is supported; Python/modulo shortcuts and numeric constants in rules are excluded. The oracle checks all 15 evaluation atoms, returns real ground-atom CE and preserves the shared std/CE stopping contract. Accuracy and hard-label MSE/1e-4 success are logged.
+The learner receives task-specific relational background knowledge and Boolean target atoms. It returns recursive, function-free unary/binary Horn clauses inside ans tags, with the shared concise reasoning summary. Every runtime scaleup task has 384 training atoms, with finite least-fixed-point inference. Unary targets use N=384/512 for training/evaluation; binary targets use N=20/24 with all 576 evaluation atoms. The original author 11/15 contexts and six/eight-round budgets remain in the dataset as provenance, not runtime semantics. Standard generation follows the unchanged regex geometric schedule: 3, 6, 12, 24, 48, 96, 192, 384 accumulated examples by default. CE starts with the same first three examples, adds up to eight oracle counterexamples per round and allows eight epochs by default. Both methods stop early on equivalence; eight epochs are a budget, not a guaranteed number of generations. `--start_size`, `--tot_train_size`, `--scale_factor` and `--ce_epochs` remain configurable through the shared runner. Auxiliary predicate invention is supported; Python/modulo shortcuts and numeric constants in rules are excluded. The oracle checks every evaluation atom in the declared context, returns real ground-atom CE and preserves the shared std/CE stopping contract. Accuracy and hard-label MSE/1e-4 success are logged.
 
 This is an LLM+CE task adaptation, not reproduction of HRI's fuzzy optimizer, proto-rule hierarchy, Gumbel training noise or ten-run experiment. Runtime syntax/resource limits and finite inference semantics are explicit in TaskSettings. Finite acceptance does not prove rule equivalence over arbitrary domains. See [dataset provenance](../datasets/ilp/README.md), [Chinese setting/usage report](../analysis/ilp_integration/setting_and_usage_zh.md) and [undecidable SMT task design notes](../analysis/ilp_integration/undecidable_smt_task_notes_zh.md).
 
@@ -212,3 +212,5 @@ python -m benchmarks.run_suite --runner icl_gen --suite balanced --task ilp --mk
 `--runner icl` is also supported as the existing direct-IO baseline, using Boolean predictions rather than generated rules; its mistake-driven CE is distinct from the generation oracle. Direct ICL now honors task-declared sample/shuffle defaults, including the previously declared Crypto/List Functions paper defaults.
 
 `--task` accepts multiple names together (and remains repeatable), e.g. `--task ilp instruction_induction`.
+
+Balanced selects six ILP tasks from an explicit three-tier inventory of all 19 author synthetic configurations (two per tier): easy `predecessor`, `undirected_edge`; medium `grandparent`, `graph_coloring`; hard `fizz`, `length`. Tiers use reference-rule structure (direct rules, nonrecursive composition, recursion/auxiliary construction), not measured LLM difficulty or a uniform sample of task identities. Selection is fixed and independent of model results and `--sample-seed`. All twelve locally implemented ILP targets remain available under `--suite all`; the other seven author configurations are not implemented. Every task has 384 training atoms; unary tasks evaluate 512 atoms, binary tasks evaluate all 24×24=576 atoms. Graph/family tasks use seeded sparse backgrounds rather than the author's sampler. Historical logs remain unchanged. See [selection rationale](../analysis/ilp_integration/balanced_six_selection_zh.md).
