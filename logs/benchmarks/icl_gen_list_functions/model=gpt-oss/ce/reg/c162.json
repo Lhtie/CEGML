@@ -1,0 +1,297 @@
+{
+    "task_type": "list_functions",
+    "benchmark_id": "c162",
+    "pipeline": "regex_run_episode",
+    "runs": [
+        [
+            {
+                "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a list of integers. The output is also a list of integers.\n\nInput: [13, 13, 19, 26, 10, 17, 29]\nOutput: [46, 46, 64, 85, 37, 58, 94]\nInput: [1, 26, 24, 19, 6, 8, 24]\nOutput: [10, 85, 79, 64, 25, 31, 79]\nInput: [18, 0, 6, 28, 8, 28, 22]\nOutput: [61, 7, 25, 91, 31, 91, 73]\nInput: [10, 11, 7, 28, 12, 28, 8]\nOutput: [37, 40, 28, 91, 43, 91, 31]\nInput: [23, 18, 2, 21, 29, 21]\nOutput: [76, 61, 13, 70, 94, 70]\nInput: [2, 22, 7, 3, 12, 0]\nOutput: [13, 73, 28, 16, 43, 7]\nInput: [16, 5, 26, 14, 19, 16, 15, 5]\nOutput: [55, 22, 85, 49, 64, 55, 52, 22]\nInput: [2, 22, 12, 18, 4, 0]\nOutput: [13, 73, 43, 61, 19, 7]\nInput: [9, 6, 15, 17, 17, 23, 22]\nOutput: [34, 25, 52, 58, 58, 76, 73]\nInput: [7, 18, 22, 21, 15]\nOutput: [28, 61, 73, 70, 52]\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                "Response": "analysisWe need to infer mapping rule from inputs to outputs. Each input list of integers maps to output list same length. Likely each element transformed individually via some function f(n). Let's see mapping pairs.\n\nCollect pairs:\n\nFrom first example:\n13 -> 46\n13 -> 46\n19 -> 64\n26 -> 85\n10 -> 37\n17 -> 58\n29 -> 94\n\nSecond:\n1 ->10\n26 ->85 (consistent)\n24 ->79\n19 ->64 (consistent)\n6 ->25\n8 ->31\n24 ->79 (consistent)\n\nThird:\n18 ->61\n0 ->7\n6 ->25 (consistent)\n28 ->91\n8 ->31 (consistent)\n28 ->91\n22 ->73\n\nFourth:\n10 ->37 (consistent)\n11 ->40\n7 ->28\n28 ->91 (consistent)\n12 ->43\n28 ->91\n8 ->31 (consistent)\n\nFifth:\n23 ->76\n18 ->61 (consistent)\n2 ->13\n21 ->70\n29 ->94 (consistent)\n21 ->70\n\nSixth:\n2 ->13 (consistent)\n22 ->73 (consistent)\n7 ->28 (consistent)\n3 ->16\n12 ->43 (consistent)\n0 ->7 (consistent)\n\nSeventh:\n16 ->55\n5 ->22\n26 ->85 (consistent)\n14 ->49\n19 ->64 (consistent)\n16 ->55 (consistent)\n15 ->52\n5 ->22 (consistent)\n\nEighth:\n2 ->13 (consistent)\n22 ->73 (consistent)\n12 ->43 (consistent)\n18 ->61 (consistent)\n4 ->19\n0 ->7 (consistent)\n\nNinth:\n9 ->34\n6 ->25 (consistent)\n15 ->52 (consistent)\n17 ->58 (consistent)\n17 ->58\n23 ->76 (consistent)\n22 ->73 (consistent)\n\nTenth:\n7 ->28 (consistent)\n18 ->61 (consistent)\n22 ->73 (consistent)\n21 ->70 (consistent)\n15 ->52 (consistent)\n\nThus mapping is deterministic per integer. So we need to find formula f(n) that matches these pairs.\n\nLet's list all observed pairs:\n\n0 ->7\n1 ->10\n2 ->13\n3 ->16\n4 ->19\n5 ->22\n6 ->25\n7 ->28\n8 ->31\n9 ->34\n10->37\n11->40\n12->43\n13->46\n14->49\n15->52\n16->55\n17->58\n18->61\n19->64\n20? not seen\n21->70\n22->73\n23->76\n24->79\n25? not seen\n26->85\n27? not seen\n28->91\n29->94\n30? not seen\n\nObserving pattern: seems linear: f(n) = 3n + 7? Let's test: n=0 =>7 correct. n=1 =>10 correct. n=2 =>13 correct. n=3 =>16 correct. So far matches 3n+7. Check n=4 =>19 correct. n=5 =>22 correct. n=6 =>25 correct. n=7 =>28 correct. n=8 =>31 correct. n=9 =>34 correct. n=10 =>37 correct. n=11 =>40 correct. n=12 =>43 correct. n=13 =>46 correct. n=14 =>49 correct. n=15 =>52 correct. n=16 =>55 correct. n=17 =>58 correct. n=18 =>61 correct. n=19 =>64 correct. n=21 =>70? 3*21+7=63+7=70 correct. n=22 =>73 correct. n=23 =>76 correct. n=24 =>79 correct. n=26 =>85? 3*26+7=78+7=85 correct. n=28 =>91? 3*28+7=84+7=91 correct. n=29 =>94? 3*29+7=87+7=94 correct.\n\nThus rule: f(x) = 3*x + 7.\n\nSo function fn(x) should take list of ints and return list of 3*x+7.\n\nImplement.\n\nEdge: ensure works for any ints.\n\nProvide explanation.\n\nNow produce answer.assistantfinal<reasoning>\nAll given input\u2011output pairs follow the same arithmetic transformation.  \nFor each element\u202fn in the input list the corresponding output is  \n\n\\[\nf(n) = 3n + 7\n\\]\n\nChecking a few examples:  \n\n*\u202f0 \u2192 3\u00b70+7 = 7  \n*\u202f13 \u2192 3\u00b713+7 = 46  \n*\u202f26 \u2192 3\u00b726+7 = 85  \n\nThe rule holds for every pair in the data, so the required function simply maps each integer in the list through this linear formula.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    \"\"\"\n    Transform a list of integers by applying f(n) = 3*n + 7 to each element.\n    \"\"\"\n    return [3 * n + 7 for n in x]\n```\n</ans>",
+                "Prediction": "def fn(x):\n    \"\"\"\n    Transform a list of integers by applying f(n) = 3*n + 7 to each element.\n    \"\"\"\n    return [3 * n + 7 for n in x]",
+                "Reasoning": "All given input\u2011output pairs follow the same arithmetic transformation.  \nFor each element\u202fn in the input list the corresponding output is  \n\n\\[\nf(n) = 3n + 7\n\\]\n\nChecking a few examples:  \n\n*\u202f0 \u2192 3\u00b70+7 = 7  \n*\u202f13 \u2192 3\u00b713+7 = 46  \n*\u202f26 \u2192 3\u00b726+7 = 85  \n\nThe rule holds for every pair in the data, so the required function simply maps each integer in the list through this linear formula.",
+                "Equivalent": true,
+                "scoreTrainSet": 1.0,
+                "scoreEvalSet": 1.0,
+                "CandidateValid": true,
+                "OracleStatus": "accepted",
+                "OracleCounterexamples": [],
+                "OracleDetails": {
+                    "policy": "bounded_search_no_counterexample_v1",
+                    "guarantee": "heuristic_not_global_proof",
+                    "symbolic_status": "unsupported",
+                    "symbolic_domain": {
+                        "length_min": 3,
+                        "length_max": 8,
+                        "element_min": 0,
+                        "element_max": 100
+                    },
+                    "concrete_examples_checked": 532,
+                    "concrete_disagreements": 0,
+                    "symbolic_error": null
+                },
+                "RepairExamples": [],
+                "EvaluationDetails": {
+                    "test_examples": 10,
+                    "correct": 10,
+                    "sample_accuracy": 1.0,
+                    "all_test_correct": true
+                },
+                "epoch": 0,
+                "NumTrainingSamples": 10,
+                "CurrentGuess": "def fn(x):\n    \"\"\"\n    Transform a list of integers by applying f(n) = 3*n + 7 to each element.\n    \"\"\"\n    return [3 * n + 7 for n in x]",
+                "CurrentGuessReasoning": "All given input\u2011output pairs follow the same arithmetic transformation.  \nFor each element\u202fn in the input list the corresponding output is  \n\n\\[\nf(n) = 3n + 7\n\\]\n\nChecking a few examples:  \n\n*\u202f0 \u2192 3\u00b70+7 = 7  \n*\u202f13 \u2192 3\u00b713+7 = 46  \n*\u202f26 \u2192 3\u00b726+7 = 85  \n\nThe rule holds for every pair in the data, so the required function simply maps each integer in the list through this linear formula.",
+                "Accuracy": 1,
+                "Logs": [
+                    {
+                        "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a list of integers. The output is also a list of integers.\n\nInput: [13, 13, 19, 26, 10, 17, 29]\nOutput: [46, 46, 64, 85, 37, 58, 94]\nInput: [1, 26, 24, 19, 6, 8, 24]\nOutput: [10, 85, 79, 64, 25, 31, 79]\nInput: [18, 0, 6, 28, 8, 28, 22]\nOutput: [61, 7, 25, 91, 31, 91, 73]\nInput: [10, 11, 7, 28, 12, 28, 8]\nOutput: [37, 40, 28, 91, 43, 91, 31]\nInput: [23, 18, 2, 21, 29, 21]\nOutput: [76, 61, 13, 70, 94, 70]\nInput: [2, 22, 7, 3, 12, 0]\nOutput: [13, 73, 28, 16, 43, 7]\nInput: [16, 5, 26, 14, 19, 16, 15, 5]\nOutput: [55, 22, 85, 49, 64, 55, 52, 22]\nInput: [2, 22, 12, 18, 4, 0]\nOutput: [13, 73, 43, 61, 19, 7]\nInput: [9, 6, 15, 17, 17, 23, 22]\nOutput: [34, 25, 52, 58, 58, 76, 73]\nInput: [7, 18, 22, 21, 15]\nOutput: [28, 61, 73, 70, 52]\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                        "Response": "analysisWe need to infer mapping rule from inputs to outputs. Each input list of integers maps to output list same length. Likely each element transformed individually via some function f(n). Let's see mapping pairs.\n\nCollect pairs:\n\nFrom first example:\n13 -> 46\n13 -> 46\n19 -> 64\n26 -> 85\n10 -> 37\n17 -> 58\n29 -> 94\n\nSecond:\n1 ->10\n26 ->85 (consistent)\n24 ->79\n19 ->64 (consistent)\n6 ->25\n8 ->31\n24 ->79 (consistent)\n\nThird:\n18 ->61\n0 ->7\n6 ->25 (consistent)\n28 ->91\n8 ->31 (consistent)\n28 ->91\n22 ->73\n\nFourth:\n10 ->37 (consistent)\n11 ->40\n7 ->28\n28 ->91 (consistent)\n12 ->43\n28 ->91\n8 ->31 (consistent)\n\nFifth:\n23 ->76\n18 ->61 (consistent)\n2 ->13\n21 ->70\n29 ->94 (consistent)\n21 ->70\n\nSixth:\n2 ->13 (consistent)\n22 ->73 (consistent)\n7 ->28 (consistent)\n3 ->16\n12 ->43 (consistent)\n0 ->7 (consistent)\n\nSeventh:\n16 ->55\n5 ->22\n26 ->85 (consistent)\n14 ->49\n19 ->64 (consistent)\n16 ->55 (consistent)\n15 ->52\n5 ->22 (consistent)\n\nEighth:\n2 ->13 (consistent)\n22 ->73 (consistent)\n12 ->43 (consistent)\n18 ->61 (consistent)\n4 ->19\n0 ->7 (consistent)\n\nNinth:\n9 ->34\n6 ->25 (consistent)\n15 ->52 (consistent)\n17 ->58 (consistent)\n17 ->58\n23 ->76 (consistent)\n22 ->73 (consistent)\n\nTenth:\n7 ->28 (consistent)\n18 ->61 (consistent)\n22 ->73 (consistent)\n21 ->70 (consistent)\n15 ->52 (consistent)\n\nThus mapping is deterministic per integer. So we need to find formula f(n) that matches these pairs.\n\nLet's list all observed pairs:\n\n0 ->7\n1 ->10\n2 ->13\n3 ->16\n4 ->19\n5 ->22\n6 ->25\n7 ->28\n8 ->31\n9 ->34\n10->37\n11->40\n12->43\n13->46\n14->49\n15->52\n16->55\n17->58\n18->61\n19->64\n20? not seen\n21->70\n22->73\n23->76\n24->79\n25? not seen\n26->85\n27? not seen\n28->91\n29->94\n30? not seen\n\nObserving pattern: seems linear: f(n) = 3n + 7? Let's test: n=0 =>7 correct. n=1 =>10 correct. n=2 =>13 correct. n=3 =>16 correct. So far matches 3n+7. Check n=4 =>19 correct. n=5 =>22 correct. n=6 =>25 correct. n=7 =>28 correct. n=8 =>31 correct. n=9 =>34 correct. n=10 =>37 correct. n=11 =>40 correct. n=12 =>43 correct. n=13 =>46 correct. n=14 =>49 correct. n=15 =>52 correct. n=16 =>55 correct. n=17 =>58 correct. n=18 =>61 correct. n=19 =>64 correct. n=21 =>70? 3*21+7=63+7=70 correct. n=22 =>73 correct. n=23 =>76 correct. n=24 =>79 correct. n=26 =>85? 3*26+7=78+7=85 correct. n=28 =>91? 3*28+7=84+7=91 correct. n=29 =>94? 3*29+7=87+7=94 correct.\n\nThus rule: f(x) = 3*x + 7.\n\nSo function fn(x) should take list of ints and return list of 3*x+7.\n\nImplement.\n\nEdge: ensure works for any ints.\n\nProvide explanation.\n\nNow produce answer.assistantfinal<reasoning>\nAll given input\u2011output pairs follow the same arithmetic transformation.  \nFor each element\u202fn in the input list the corresponding output is  \n\n\\[\nf(n) = 3n + 7\n\\]\n\nChecking a few examples:  \n\n*\u202f0 \u2192 3\u00b70+7 = 7  \n*\u202f13 \u2192 3\u00b713+7 = 46  \n*\u202f26 \u2192 3\u00b726+7 = 85  \n\nThe rule holds for every pair in the data, so the required function simply maps each integer in the list through this linear formula.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    \"\"\"\n    Transform a list of integers by applying f(n) = 3*n + 7 to each element.\n    \"\"\"\n    return [3 * n + 7 for n in x]\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    \"\"\"\n    Transform a list of integers by applying f(n) = 3*n + 7 to each element.\n    \"\"\"\n    return [3 * n + 7 for n in x]",
+                        "Reasoning": "All given input\u2011output pairs follow the same arithmetic transformation.  \nFor each element\u202fn in the input list the corresponding output is  \n\n\\[\nf(n) = 3n + 7\n\\]\n\nChecking a few examples:  \n\n*\u202f0 \u2192 3\u00b70+7 = 7  \n*\u202f13 \u2192 3\u00b713+7 = 46  \n*\u202f26 \u2192 3\u00b726+7 = 85  \n\nThe rule holds for every pair in the data, so the required function simply maps each integer in the list through this linear formula.",
+                        "Equivalent": true,
+                        "scoreTrainSet": 1.0,
+                        "scoreEvalSet": 1.0,
+                        "CandidateValid": true,
+                        "OracleStatus": "accepted",
+                        "OracleCounterexamples": [],
+                        "OracleDetails": {
+                            "policy": "bounded_search_no_counterexample_v1",
+                            "guarantee": "heuristic_not_global_proof",
+                            "symbolic_status": "unsupported",
+                            "symbolic_domain": {
+                                "length_min": 3,
+                                "length_max": 8,
+                                "element_min": 0,
+                                "element_max": 100
+                            },
+                            "concrete_examples_checked": 532,
+                            "concrete_disagreements": 0,
+                            "symbolic_error": null
+                        },
+                        "RepairExamples": [],
+                        "EvaluationDetails": {
+                            "test_examples": 10,
+                            "correct": 10,
+                            "sample_accuracy": 1.0,
+                            "all_test_correct": true
+                        }
+                    }
+                ],
+                "Counterexamples": [
+                    [
+                        [
+                            13,
+                            13,
+                            19,
+                            26,
+                            10,
+                            17,
+                            29
+                        ],
+                        [
+                            46,
+                            46,
+                            64,
+                            85,
+                            37,
+                            58,
+                            94
+                        ]
+                    ],
+                    [
+                        [
+                            1,
+                            26,
+                            24,
+                            19,
+                            6,
+                            8,
+                            24
+                        ],
+                        [
+                            10,
+                            85,
+                            79,
+                            64,
+                            25,
+                            31,
+                            79
+                        ]
+                    ],
+                    [
+                        [
+                            18,
+                            0,
+                            6,
+                            28,
+                            8,
+                            28,
+                            22
+                        ],
+                        [
+                            61,
+                            7,
+                            25,
+                            91,
+                            31,
+                            91,
+                            73
+                        ]
+                    ],
+                    [
+                        [
+                            10,
+                            11,
+                            7,
+                            28,
+                            12,
+                            28,
+                            8
+                        ],
+                        [
+                            37,
+                            40,
+                            28,
+                            91,
+                            43,
+                            91,
+                            31
+                        ]
+                    ],
+                    [
+                        [
+                            23,
+                            18,
+                            2,
+                            21,
+                            29,
+                            21
+                        ],
+                        [
+                            76,
+                            61,
+                            13,
+                            70,
+                            94,
+                            70
+                        ]
+                    ],
+                    [
+                        [
+                            2,
+                            22,
+                            7,
+                            3,
+                            12,
+                            0
+                        ],
+                        [
+                            13,
+                            73,
+                            28,
+                            16,
+                            43,
+                            7
+                        ]
+                    ],
+                    [
+                        [
+                            16,
+                            5,
+                            26,
+                            14,
+                            19,
+                            16,
+                            15,
+                            5
+                        ],
+                        [
+                            55,
+                            22,
+                            85,
+                            49,
+                            64,
+                            55,
+                            52,
+                            22
+                        ]
+                    ],
+                    [
+                        [
+                            2,
+                            22,
+                            12,
+                            18,
+                            4,
+                            0
+                        ],
+                        [
+                            13,
+                            73,
+                            43,
+                            61,
+                            19,
+                            7
+                        ]
+                    ],
+                    [
+                        [
+                            9,
+                            6,
+                            15,
+                            17,
+                            17,
+                            23,
+                            22
+                        ],
+                        [
+                            34,
+                            25,
+                            52,
+                            58,
+                            58,
+                            76,
+                            73
+                        ]
+                    ],
+                    [
+                        [
+                            7,
+                            18,
+                            22,
+                            21,
+                            15
+                        ],
+                        [
+                            28,
+                            61,
+                            73,
+                            70,
+                            52
+                        ]
+                    ]
+                ],
+                "TrainingExampleSource": "initial",
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to infer mapping rule from inputs to outputs. Each input list of integers maps to output list same length. Likely each element transformed individually via some function f(n). Let's see mapping pairs.\n\nCollect pairs:\n\nFrom first example:\n13 -> 46\n13 -> 46\n19 -> 64\n26 -> 85\n10 -> 37\n17 -> 58\n29 -> 94\n\nSecond:\n1 ->10\n26 ->85 (consistent)\n24 ->79\n19 ->64 (consistent)\n6 ->25\n8 ->31\n24 ->79 (consistent)\n\nThird:\n18 ->61\n0 ->7\n6 ->25 (consistent)\n28 ->91\n8 ->31 (consistent)\n28 ->91\n22 ->73\n\nFourth:\n10 ->37 (consistent)\n11 ->40\n7 ->28\n28 ->91 (consistent)\n12 ->43\n28 ->91\n8 ->31 (consistent)\n\nFifth:\n23 ->76\n18 ->61 (consistent)\n2 ->13\n21 ->70\n29 ->94 (consistent)\n21 ->70\n\nSixth:\n2 ->13 (consistent)\n22 ->73 (consistent)\n7 ->28 (consistent)\n3 ->16\n12 ->43 (consistent)\n0 ->7 (consistent)\n\nSeventh:\n16 ->55\n5 ->22\n26 ->85 (consistent)\n14 ->49\n19 ->64 (consistent)\n16 ->55 (consistent)\n15 ->52\n5 ->22 (consistent)\n\nEighth:\n2 ->13 (consistent)\n22 ->73 (consistent)\n12 ->43 (consistent)\n18 ->61 (consistent)\n4 ->19\n0 ->7 (consistent)\n\nNinth:\n9 ->34\n6 ->25 (consistent)\n15 ->52 (consistent)\n17 ->58 (consistent)\n17 ->58\n23 ->76 (consistent)\n22 ->73 (consistent)\n\nTenth:\n7 ->28 (consistent)\n18 ->61 (consistent)\n22 ->73 (consistent)\n21 ->70 (consistent)\n15 ->52 (consistent)\n\nThus mapping is deterministic per integer. So we need to find formula f(n) that matches these pairs.\n\nLet's list all observed pairs:\n\n0 ->7\n1 ->10\n2 ->13\n3 ->16\n4 ->19\n5 ->22\n6 ->25\n7 ->28\n8 ->31\n9 ->34\n10->37\n11->40\n12->43\n13->46\n14->49\n15->52\n16->55\n17->58\n18->61\n19->64\n20? not seen\n21->70\n22->73\n23->76\n24->79\n25? not seen\n26->85\n27? not seen\n28->91\n29->94\n30? not seen\n\nObserving pattern: seems linear: f(n) = 3n + 7? Let's test: n=0 =>7 correct. n=1 =>10 correct. n=2 =>13 correct. n=3 =>16 correct. So far matches 3n+7. Check n=4 =>19 correct. n=5 =>22 correct. n=6 =>25 correct. n=7 =>28 correct. n=8 =>31 correct. n=9 =>34 correct. n=10 =>37 correct. n=11 =>40 correct. n=12 =>43 correct. n=13 =>46 correct. n=14 =>49 correct. n=15 =>52 correct. n=16 =>55 correct. n=17 =>58 correct. n=18 =>61 correct. n=19 =>64 correct. n=21 =>70? 3*21+7=63+7=70 correct. n=22 =>73 correct. n=23 =>76 correct. n=24 =>79 correct. n=26 =>85? 3*26+7=78+7=85 correct. n=28 =>91? 3*28+7=84+7=91 correct. n=29 =>94? 3*29+7=87+7=94 correct.\n\nThus rule: f(x) = 3*x + 7.\n\nSo function fn(x) should take list of ints and return list of 3*x+7.\n\nImplement.\n\nEdge: ensure works for any ints.\n\nProvide explanation.\n\nNow produce answer.assistantfinal<reasoning>\nAll given input\u2011output pairs follow the same arithmetic transformation.  \nFor each element\u202fn in the input list the corresponding output is  \n\n\\[\nf(n) = 3n + 7\n\\]\n\nChecking a few examples:  \n\n*\u202f0 \u2192 3\u00b70+7 = 7  \n*\u202f13 \u2192 3\u00b713+7 = 46  \n*\u202f26 \u2192 3\u00b726+7 = 85  \n\nThe rule holds for every pair in the data, so the required function simply maps each integer in the list through this linear formula.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    \"\"\"\n    Transform a list of integers by applying f(n) = 3*n + 7 to each element.\n    \"\"\"\n    return [3 * n + 7 for n in x]\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    \"\"\"\n    Transform a list of integers by applying f(n) = 3*n + 7 to each element.\n    \"\"\"\n    return [3 * n + 7 for n in x]",
+                        "Reasoning": "All given input\u2011output pairs follow the same arithmetic transformation.  \nFor each element\u202fn in the input list the corresponding output is  \n\n\\[\nf(n) = 3n + 7\n\\]\n\nChecking a few examples:  \n\n*\u202f0 \u2192 3\u00b70+7 = 7  \n*\u202f13 \u2192 3\u00b713+7 = 46  \n*\u202f26 \u2192 3\u00b726+7 = 85  \n\nThe rule holds for every pair in the data, so the required function simply maps each integer in the list through this linear formula.",
+                        "Error": null
+                    }
+                ],
+                "StopReason": "oracle_accepted"
+            }
+        ]
+    ],
+    "oracle": "cvc5_sequence_or_bounded_Python",
+    "TaskSettings": {
+        "list_setting": "paper_clean",
+        "n_train": 10,
+        "n_test": 10,
+        "noise_ratio": 0.0,
+        "hypothesis": "Python_fn_x",
+        "python_syntax": "standard_Python",
+        "prompt_variant": "base_with_reasoning_and_ans",
+        "method": "shared_CE_pipeline_not_paper_SRR"
+    }
+}

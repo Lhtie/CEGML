@@ -71,6 +71,8 @@ class BenchmarkEpisodeAdapter:
         result.update(Equivalent=None, scoreTrainSet=None, scoreEvalSet=None,
                       CandidateValid=False, OracleStatus="not_checked")
         candidate = result.get('Prediction')
+        if self.task.kind == 'scan':
+            print('[SCAN] validating candidate on initial example', flush=True)
         try:
             example = train_ex[0] if train_ex else self.task.train[0][0]
             self.task.validate_candidate(candidate, example)
@@ -83,6 +85,8 @@ class BenchmarkEpisodeAdapter:
         self.verdicts[candidate] = verdict
         result.update(verdict.log_fields())
         errors = self.task.training_errors(candidate, self.seen)
+        if getattr(self.task, 'last_training_details', None) is not None:
+            result['TrainingDetails'] = self.task.last_training_details
         result['RepairExamples'] = (errors or [])[:16]
         if errors is not None and self.seen:
             result['scoreTrainSet'] = 1.0 - len(errors) / len(self.seen)

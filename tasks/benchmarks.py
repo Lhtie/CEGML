@@ -5,12 +5,12 @@ import json
 import random
 import re
 import signal
+import time
 from copy import deepcopy
 from dataclasses import dataclass
 from contextlib import contextmanager
 from pathlib import Path
 
-from prompting.benchmarks import INSTRUCTION_ORACLE
 
 ROOT = Path(__file__).resolve().parents[1] / "datasets"
 
@@ -45,11 +45,8 @@ def _pairs(items):
 
 
 def _instruction_pairs(items, name):
-    if name == "cause_and_effect":
-        return [(item["cause"], item["effect"]) for item in items]
-    if name == "common_concept":
-        return [(item["items"], item["concept"]) for item in items]
-    return _pairs(items)
+    from benchmarks.instruction_oracle import instruction_pairs
+    return instruction_pairs(items, name)
 
 
 def _read_jsonl(path):
@@ -257,7 +254,7 @@ class BenchmarkTask:
         self.kind, self.benchmark_id = kind, benchmark_id
         self.rng = random.Random(seed)
         self.oracle_name = {"cryptography": "cvc5_QF_LIA", "list_functions": "cvc5_sequence_or_bounded_Python",
-                            "instruction_induction": "LLM", "scan": "exhaustive_enumeration"}[kind]
+                            "instruction_induction": "LLM", "scan": "exhaustive_enumeration", "ilp": "finite_Horn_forward_chaining"}[kind]
         if kind == "cryptography":
             family, row = benchmark_id.split(":") if ":" in benchmark_id else (benchmark_id, "0")
             if family not in {"caesar", "atbash", "keyboard"}:
@@ -312,12 +309,26 @@ class BenchmarkTask:
                                   "hypothesis": "Python_fn_x", "python_syntax": "standard_Python",
                                   "prompt_variant": "base_with_reasoning_and_ans",
                                   "method": "shared_CE_pipeline_not_paper_SRR"}
+        elif kind == "ilp":
+            from benchmarks.ilp import ILPProblem
+            self.ilp = ILPProblem(benchmark_id)
+            self.train, self.eval = self.ilp.train, self.ilp.eval
+            self.prompt_template = self.ilp.prompt
+            self.icl_instruction = self.ilp.icl_instruction
+            self.episode_defaults = {"start_size": 11, "tot_train_size": 11, "ce_start_size": 11}
+            self.shuffle_training = False
+            self.task_settings = self.ilp.settings
         elif kind == "instruction_induction":
             base = ROOT / "instruction_induction/raw"
             induce = json.loads((base / "induce" / f"{benchmark_id}.json").read_text())
             execute = json.loads((base / "execute" / f"{benchmark_id}.json").read_text())
             self.train = _instruction_pairs(induce["examples"].values(), benchmark_id)
             self.eval = _instruction_pairs(execute["examples"].values(), benchmark_id)[:eval_size]
+            self.task_settings = {"oracle_policy": "grounded_instruction_oracle_v3",
+                                  "oracle_groundtruth": "official_human_annotations",
+                                  "oracle_reference_split": "induce_only",
+                                  "oracle_verdict_semantics": "task_specification_not_execution_accuracy",
+                                  "input_adapter": "official_cause_selection_v2" if benchmark_id == "cause_and_effect" else "raw_original"}
         elif kind == "scan":
             splits = {"simple", "length", "addprim_jump", "addprim_turn_left",
                       "template_around_right", "template_jump_around_right",
@@ -341,6 +352,9 @@ class BenchmarkTask:
             raise ValueError(f"Unknown benchmark: {kind}")
 
     def extract_candidate(self, response, default_extractor, multiple=False):
+        if self.kind == "ilp":
+            from benchmarks.ilp import extract_candidate
+            return extract_candidate(response, default_extractor, multiple)
         if self.kind in {"list_functions", "scan"}:
             from benchmarks.list_functions import extract_program
         elif self.kind == "cryptography" and self.crypto_setting == "paper":
@@ -360,6 +374,8 @@ class BenchmarkTask:
         return f"{json.dumps(x, ensure_ascii=False)} => {json.dumps(y, ensure_ascii=False)}"
 
     def predict(self, candidate, x):
+        if self.kind == "ilp":
+            return self.ilp.predict(candidate, x)
         if self.kind == "cryptography":
             if self.crypto_setting == "legacy":
                 spec = json.loads(candidate)
@@ -376,10 +392,20 @@ class BenchmarkTask:
                 return execute(candidate, deepcopy(x))
         if self.kind == "scan":
             from benchmarks.list_functions import execute_program
-            with _time_limit(10):
-                output = execute_program(candidate, x)
-            if not isinstance(output, str):
-                raise ValueError("transform(x) must return an action sequence string")
+            if getattr(self, "_scan_candidate", None) != candidate:
+                self._scan_candidate, self._scan_cache = candidate, {}
+            if x not in self._scan_cache:
+                try:
+                    with _time_limit(10):
+                        output = execute_program(candidate, x)
+                    if not isinstance(output, str):
+                        raise ValueError("transform(x) must return an action sequence string")
+                    self._scan_cache[x] = (True, output)
+                except Exception as exc:
+                    self._scan_cache[x] = (False, str(exc))
+            valid, output = self._scan_cache[x]
+            if not valid:
+                raise RuntimeError(output)
             return output
         raise ValueError("Instruction predictions are judged by the LLM oracle")
 
@@ -401,6 +427,8 @@ class BenchmarkTask:
         return out.upper() if ch.isupper() else out
 
     def reference_output(self, x):
+        if self.kind == "ilp":
+            return self.ilp.reference_output(x)
         if self.kind == "cryptography":
             spec = {"cipher": self.family}
             if self.shift is not None:
@@ -429,7 +457,13 @@ class BenchmarkTask:
         if self.kind == "instruction_induction":
             return None
         errors = []
-        for x, expected in pairs:
+        started = time.monotonic()
+        self.last_training_details = None
+        for index, (x, expected) in enumerate(pairs):
+            if self.kind == "scan" and time.monotonic() - started >= 30:
+                self.last_training_details = {"examples_checked": index, "training_complete": False,
+                                              "stop_reason": "time_budget", "time_budget_seconds": 30}
+                return None
             try:
                 correct = self.predict(candidate, x) == expected
             except Exception:
@@ -484,35 +518,22 @@ class BenchmarkTask:
             return [], None
         if candidate is None:
             return self.train[:limit], None
+        if self.kind == "ilp":
+            pairs, equivalent, details = self.ilp.counterexamples(candidate, limit)
+            self.last_oracle_details = details
+            return pairs, equivalent
         if self.kind == "instruction_induction":
             if llm_call is None:
                 raise ValueError("LLM oracle requires llm_call")
-            examples = "\n".join(self.format_pair(x, y) for x, y in self.train[:20])
-            response = llm_call(INSTRUCTION_ORACLE.replace("{examples}", examples).replace("{candidate}", candidate).replace("{count}", str(limit)))
+            from benchmarks.instruction_oracle import build_prompt, adjudicate
+            prompt = build_prompt(self.benchmark_id, candidate, limit)
+            response = llm_call(prompt)
             self.last_oracle_response = response
-            try:
-                verdict = json.loads(re.search(r"\{.*\}", response, re.S).group())
-            except (ValueError, AttributeError, TypeError):
-                return [], None
-            proposals = verdict.get("counterexamples")
-            if proposals is None and verdict.get("input") is not None:
-                proposals = [verdict]
-            pairs = []
-            known = {json.dumps(x, sort_keys=True): y for x, y in self.train + self.eval}
-            for proposal in proposals or []:
-                if not isinstance(proposal, dict) or proposal.get("input") is None or proposal.get("expected_output") is None:
-                    continue
-                pair = (proposal["input"], proposal["expected_output"])
-                key = json.dumps(pair[0], sort_keys=True)
-                if key in known and known[key] != pair[1]:
-                    continue
-                if pair not in pairs:
-                    pairs.append(pair)
-                if len(pairs) >= limit:
-                    break
-            if pairs:
-                return pairs, False
-            return [], True if verdict.get("equivalent") is True else None
+            pairs, equivalent, details = adjudicate(self.benchmark_id, response, limit)
+            details["prompt_version"] = 3
+            details["oracle_prompt"] = prompt
+            self.last_oracle_details = details
+            return pairs, equivalent
         if self.kind == "cryptography" and self.crypto_setting == "paper":
             from benchmarks.crypto_smt import search
             reference = {"cipher": self.family, "shift": self.shift}
@@ -556,7 +577,7 @@ class BenchmarkTask:
                 except Exception:
                     continue
         else:
-            pool = self.all_examples
+            return self._scan_counterexamples(candidate, limit)
         disagreements = []
         for i, (x, y) in enumerate(pool):
             try:
@@ -564,33 +585,21 @@ class BenchmarkTask:
                     disagreements.append(i)
             except Exception:
                 disagreements.append(i)
-        if self.kind == "scan":
-            indices = disagreements[:limit]
-            equivalent = not disagreements
-            self.last_oracle_details = {
-                "backend": "exhaustive_enumeration",
-                "policy": "scan_all_public_commands_v1",
-                "guarantee": "finite_domain_equivalence",
-                "examples_checked": len(pool), "disagreements": len(disagreements),
-                "domain": "all_public_commands_including_test",
-                "domain_size": len(self.all_examples),
-            }
-        else:
-            indices = _smt_choice(disagreements, limit)
-            # Operational, noisy equivalence: accept after a completed search
-            # finds no witness, not a proof about arbitrary Python inputs.
-            equivalent = (True if pool and not disagreements and symbolic_error is None
-                          else None)
-            self.last_oracle_details = {
-                "policy": "bounded_search_no_counterexample_v1",
-                "guarantee": "heuristic_not_global_proof",
-                "symbolic_status": symbolic_status,
-                "symbolic_domain": {"length_min": 3, "length_max": 8,
-                                    "element_min": 0, "element_max": 100},
-                "concrete_examples_checked": len(pool),
-                "concrete_disagreements": len(disagreements),
-                "symbolic_error": symbolic_error,
-            }
+        indices = _smt_choice(disagreements, limit)
+        # Operational, noisy equivalence: accept after a completed search
+        # finds no witness, not a proof about arbitrary Python inputs.
+        equivalent = (True if pool and not disagreements and symbolic_error is None
+                      else None)
+        self.last_oracle_details = {
+            "policy": "bounded_search_no_counterexample_v1",
+            "guarantee": "heuristic_not_global_proof",
+            "symbolic_status": symbolic_status,
+            "symbolic_domain": {"length_min": 3, "length_max": 8,
+                                "element_min": 0, "element_max": 100},
+            "concrete_examples_checked": len(pool),
+            "concrete_disagreements": len(disagreements),
+            "symbolic_error": symbolic_error,
+        }
         pairs = symbolic_pairs if self.kind == "list_functions" else []
         for index in indices:
             if pool[index] not in pairs:
@@ -600,20 +609,61 @@ class BenchmarkTask:
         pairs = pairs[:limit]
         return pairs, False if pairs else equivalent
 
+    def _scan_counterexamples(self, candidate, limit):
+        started = time.monotonic()
+        pairs, checked = [], 0
+        print(f"[SCAN oracle] checking {len(self.all_examples)} commands", flush=True)
+        for x, expected in self.all_examples:
+            if time.monotonic() - started >= 30:
+                break
+            try:
+                wrong = self.predict(candidate, x) != expected
+            except Exception:
+                wrong = True
+            checked += 1
+            if wrong and (x, expected) not in pairs:
+                pairs.append((x, expected))
+            if len(pairs) >= limit:
+                break
+        complete = checked == len(self.all_examples)
+        verdict = False if pairs else True if complete else None
+        self.last_oracle_details = {
+            "backend": "exhaustive_enumeration", "policy": "scan_all_public_commands_v2",
+            "guarantee": "finite_domain_equivalence", "domain": "all_public_commands_including_test",
+            "domain_size": len(self.all_examples), "examples_checked": checked,
+            "counterexamples_found": len(pairs), "search_complete": complete,
+            "stop_reason": "counterexample_limit" if len(pairs) >= limit else "complete" if complete else "time_budget",
+            "time_budget_seconds": 30, "elapsed_seconds": time.monotonic() - started,
+        }
+        print(f"[SCAN oracle] checked={checked}, CE={len(pairs)}, equivalent={verdict}", flush=True)
+        return pairs, verdict
+
     def score(self, candidate, limit=32):
         self.last_evaluation_details = None
         if self.kind == "instruction_induction":
             return None
-        examples = self.eval if self.kind == "scan" else self.eval[:limit]
+        examples = self.eval if self.kind in {"scan", "ilp"} else self.eval[:limit]
         if not examples:
             return None
-        correct = 0
+        correct, checked = 0, 0
+        started = time.monotonic()
         for x, y in examples:
+            if self.kind == "scan" and time.monotonic() - started >= 30:
+                self.last_evaluation_details = {"test_examples": len(examples), "examples_checked": checked,
+                                                "correct": correct, "evaluation_complete": False,
+                                                "stop_reason": "time_budget", "time_budget_seconds": 30}
+                print(f"[SCAN score] incomplete: {checked}/{len(examples)}; score=null", flush=True)
+                return None
             try:
                 correct += self.predict(candidate, x) == y
             except Exception:
                 pass
+            checked += 1
         self.last_evaluation_details = {"test_examples": len(examples), "correct": correct,
                                         "sample_accuracy": correct / len(examples),
                                         "all_test_correct": correct == len(examples)}
+        if self.kind == "ilp":
+            mse = (len(examples)-correct) / len(examples)
+            self.last_evaluation_details.update(mse=mse, paper_success_threshold=1e-4,
+                                                paper_symbolic_success=mse < 1e-4)
         return correct / len(examples)

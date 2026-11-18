@@ -471,7 +471,7 @@ def run_episode(
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--task_type", type=str, default="extrx", choices=["simplyrx", "extrx", "cryptography", "list_functions", "instruction_induction", "scan"])
+    parser.add_argument("--task_type", type=str, default="extrx", choices=["simplyrx", "extrx", "cryptography", "list_functions", "instruction_induction", "scan", "ilp"])
     parser.add_argument("--benchmark_id", type=str, default=None, help="Cipher family:row, list function ID, instruction task name, or SCAN split")
     parser.add_argument("--crypto-ood-ratio", type=float, default=0.0)
     parser.add_argument("--regex", type=str, default="[A-Za-z0-9#]*z[A-Za-z]*[A-Za-z0-9#]*")
@@ -644,18 +644,32 @@ def main(argv=None):
 def run_benchmark(args, model=None, tokenizer=None, response_fn=None):
     """Adapt benchmarks to the original regex run_episode controller."""
     from benchmarks.episode import BenchmarkEpisodeAdapter
+    import time
 
+    print(f"[benchmark] starting {args.task_type}/{args.benchmark_id or '(default)'}", flush=True)
     defaults = {"cryptography": "caesar:0", "list_functions": "c102",
-                "instruction_induction": "antonyms", "scan": "simple"}
+                "instruction_induction": "antonyms", "scan": "simple", "ilp": "even_succ"}
     benchmark_id = args.benchmark_id or defaults[args.task_type]
     task_options = dict(crypto_setting=getattr(args, "crypto_setting", "paper"),
                         crypto_ood_ratio=getattr(args, "crypto_ood_ratio", 0.0))
     first_task = BenchmarkTask(args.task_type, benchmark_id, seed=args.seed,
                                eval_size=args.eval_size, **task_options)
+    print(f"[benchmark] data ready: train={len(first_task.train)}, test={len(first_task.eval)}", flush=True)
     if response_fn is None:
         if model is None:
+            print(f"[benchmark] loading model {args.mkey}", flush=True)
+            started = time.monotonic()
             model, tokenizer = load_model_and_tokenizer(args.mkey, api_key)
+            print(f"[benchmark] model ready ({time.monotonic()-started:.1f}s)", flush=True)
         response_fn = lambda prompt: run_model(args.mkey, model, tokenizer, prompt, temp=args.temp)
+
+    def logged_response(prompt):
+        stage = 'oracle LLM' if prompt.startswith(('You are checking', 'You are the teacher oracle')) else 'candidate generation'
+        print(f"[benchmark] {stage} started; prompt_chars={len(prompt)}", flush=True)
+        started = time.monotonic()
+        response = response_fn(prompt)
+        print(f"[benchmark] {stage} finished ({time.monotonic()-started:.1f}s)", flush=True)
+        return response
     outdir = os.path.join(args.outdir, f"icl_gen_{args.task_type}", f"model={args.mkey}",
                           "ce" if args.use_ce else "std", "reg" if args.use_reg else "noreg")
     os.makedirs(outdir, exist_ok=True)
@@ -685,7 +699,7 @@ def run_benchmark(args, model=None, tokenizer=None, response_fn=None):
         config = SimpleNamespace(**config_values)
         data = {"train_ex": [x for x, _ in train], "train_labels": [y for _, y in train],
                 "eval_ex": [x for x, _ in task.eval], "eval_labels": [y for _, y in task.eval]}
-        adapter = BenchmarkEpisodeAdapter(task, config, data, response_fn)
+        adapter = BenchmarkEpisodeAdapter(task, config, data, logged_response)
         logs = []
 
         def generate_fn(prompt_template, train_prompt, prompt_format_kwargs,
@@ -699,7 +713,7 @@ def run_benchmark(args, model=None, tokenizer=None, response_fn=None):
             prompt += getattr(task, "output_instruction", default_output_instruction)
             if args.use_reg and getattr(task, "allow_regularization", True):
                 prompt = BENCHMARK_REGULARIZATION + prompt
-            response = response_fn(prompt)
+            response = logged_response(prompt)
             return {"Prompt": prompt, "Response": response,
                     "Prediction": task.extract_candidate(response, answer_extractor,
                                                          multiple=answer_extractor is extract_all_ans),

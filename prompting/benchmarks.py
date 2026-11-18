@@ -1,7 +1,9 @@
 """Prompts for the four input/output program induction benchmarks."""
 from benchmarks.list_functions import PROMPT as LIST_FUNCTIONS_PROMPT
+from benchmarks.ilp import PROMPT as ILP_PROMPT
 
 PROMPTS = {
+    "ilp": ILP_PROMPT,
     "cryptography": """Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.
 {feedback}
 {examples}
@@ -17,9 +19,13 @@ Prefer a concise rule or program that explains all examples. Avoid unnecessary s
 
 """
 
-INSTRUCTION_ORACLE = """You are checking whether a proposed task instruction implements the same mapping as the reference examples. Judge semantic equivalence and actively seek up to {count} distinct inputs where it gives a different output. Reply with one JSON object: {"equivalent": true or false, "counterexamples": [{"input": JSON value, "expected_output": JSON value, "candidate_output": JSON value}], "reason": string}. Return an empty counterexamples array if none can be found. Use equivalent=true only if confident. Reference examples:\n{examples}\nProposed instruction:\n{candidate}\n"""
+# The grounded teacher prompt is built with official annotations and induction-only
+# reference coverage. Keep the public constant as the shared policy text.
+from benchmarks.instruction_oracle import BASE as INSTRUCTION_ORACLE
+
 
 ICL_TASKS = {
+    "ilp": "Infer the Boolean truth of target ground atoms given relational background knowledge.",
     "cryptography": "Infer the same character substitution used in the examples. Preserve letter case.",
     "list_functions": "Infer the same transformation of integer lists used in the examples.",
     "instruction_induction": "Infer the same instruction or mapping used in the examples.",

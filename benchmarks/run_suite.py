@@ -13,9 +13,9 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-TASKS = ("cryptography", "list_functions", "instruction_induction", "scan")
+TASKS = ("cryptography", "list_functions", "instruction_induction", "scan", "ilp")
 SMOKE = {"cryptography": ["caesar:0"], "list_functions": ["c102"],
-         "instruction_induction": ["antonyms"], "scan": ["simple"]}
+         "instruction_induction": ["antonyms"], "scan": ["simple"], "ilp": ["even_succ"]}
 
 
 def list_complexity_tiers():
@@ -58,7 +58,7 @@ def balanced_settings(selected, list_per_tier, crypto_per_family, sample_seed):
                 raise ValueError("Requested more list samples than available in a tier")
             picked = random.Random(f"{sample_seed}:list:{i}").sample(tier, list_per_tier)
             chosen.update(("list_functions", ident) for _, ident in picked)
-    chosen.update(pair for pair in available if pair[0] in ("instruction_induction", "scan"))
+    chosen.update(pair for pair in available if pair[0] in ("instruction_induction", "scan", "ilp"))
     return [pair for pair in available if pair in chosen]
 
 
@@ -83,6 +83,12 @@ def settings(suite="all", selected=None, *, list_per_tier=3, crypto_per_family=2
             path = data / "list_functions/raw/list_functions.jsonl"
             ids = sorted({json.loads(line)["id"] for line in path.read_text().splitlines() if line.strip()})
             found.extend((task, ident) for ident in ids)
+        elif task == "ilp":
+            folder = data / "ilp"
+            for path in sorted(folder.glob("*.json")):
+                row = json.loads(path.read_text())
+                if "id" in row and "train" in row and "eval" in row:
+                    found.append((task, row["id"]))
         elif task == "instruction_induction":
             folder = data / "instruction_induction/raw"
             for path in sorted((folder / "induce").glob("*.json")):
@@ -113,11 +119,12 @@ def main(argv=None):
     parser.add_argument("--runner", choices=("icl", "icl_gen", "both"),
                         help="Experiment type (default: icl)")
     parser.add_argument("--suite", choices=("smoke", "all", "balanced"), default="smoke",
-                        help="smoke: four defaults; all: every setting; balanced: stratified smaller suite")
+                        help="smoke: one default per task; all: every setting; balanced: stratified smaller suite")
     parser.add_argument("--list-per-tier", type=int, default=3, help="Balanced suite: list functions per complexity tier")
     parser.add_argument("--crypto-per-family", type=int, default=2, help="Balanced suite: instances per cipher family")
     parser.add_argument("--sample-seed", type=int, default=43, help="Balanced selection seed; independent of model/run seed")
-    parser.add_argument("--task", action="append", choices=TASKS, help="Restrict to a task; repeatable")
+    parser.add_argument("--task", action="extend", nargs="+", choices=TASKS,
+                        help="Restrict to one or more tasks; also repeatable")
     parser.add_argument("--mode", choices=("std", "ce", "both"), default="both")
     parser.add_argument("--mkey", default="gpt-oss")
     parser.add_argument("--outdir", default=os.environ.get("OUTDIR", "logs/benchmarks"))
@@ -143,7 +150,7 @@ def main(argv=None):
     print(f"Suite={args.suite}; settings={len(instances)} {counts}; jobs={total}", flush=True)
     if args.suite == "balanced":
         print(f"Selection seed={args.sample_seed}; list tiers={args.list_per_tier} each; "
-              f"cipher families={args.crypto_per_family} each; all instruction tasks and SCAN splits retained. "
+              f"cipher families={args.crypto_per_family} each; all instruction tasks, SCAN splits and registered ILP settings retained. "
               "Tiers reflect reference syntax complexity, not measured model difficulty.", flush=True)
     failed = []
     done = 0

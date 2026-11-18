@@ -1,4 +1,4 @@
-"""Entry point for the four added program-induction benchmarks."""
+"""Entry point for the registered program-induction benchmarks."""
 
 from .registry import (BENCHMARKS, BenchmarkHandle, BenchmarkSpec,
                        CounterexampleBatch, create_task, get_benchmark,

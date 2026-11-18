@@ -1,6 +1,6 @@
 # Program-induction benchmarks
 
-`python -m benchmarks <name> [options]` runs one of the four added datasets through `train_icl_gen.py`.
+`python -m benchmarks <name> [options]` runs one of the registered datasets through `train_icl_gen.py`.
 
 | Name | Oracle |
 |---|---|
@@ -8,6 +8,7 @@
 | `list_functions` | cvc5 sequence query and bounded search |
 | `instruction_induction` | LLM judge |
 | `scan` | Exhaustive enumeration |
+| `ilp` | Finite Horn forward chaining (HRI EvenSucc) |
 
 ```bash
 python -m benchmarks --list
@@ -19,7 +20,7 @@ python -m benchmarks scan --benchmark_id simple --mkey gpt5 --use_ce
 
 The existing regex task continues to use `train_icl_gen.py` directly. Dataset sources, IDs, and oracle limits are documented in [`datasets/BENCHMARKS.md`](../datasets/BENCHMARKS.md).
 
-To run all four default benchmark IDs with `gpt-oss-120b`, regularization, and both standard and CE settings, use [`datasets/benchmarks/run_gpt_oss_120b.sh`](../datasets/benchmarks/run_gpt_oss_120b.sh). It runs direct ICL by default; pass `--runner icl_gen` to use rule generation, or `--runner both` for both runners. The default smoke suite executes eight jobs per runner. Add `--suite all` to discover and run every locally available task ID and SCAN split. Logs go under `logs/benchmarks/`.
+To run all registered default benchmark IDs with `gpt-oss-120b`, regularization, and both standard and CE settings, use [`datasets/benchmarks/run_gpt_oss_120b.sh`](../datasets/benchmarks/run_gpt_oss_120b.sh). It runs direct ICL by default; pass `--runner icl_gen` to use rule generation, or `--runner both` for both runners. The default smoke suite executes ten jobs per runner. Add `--suite all` to discover and run every locally available task ID and SCAN split. Logs go under `logs/benchmarks/`.
 
 ## Direct ICL prediction
 
@@ -36,7 +37,7 @@ Replace `cryptography --benchmark_id caesar:0` with `list_functions --benchmark_
 
 ## Full dataset suites
 
-The full suite currently contains 582 settings: 300 cryptography instances (100 each of Caesar, Atbash, and keyboard), 250 list functions, 24 instruction-induction tasks, and 8 SCAN splits. Every setting runs both standard and CE by default: 1,164 jobs per runner, or 2,328 with `both`. IDs are discovered from local data files rather than inferred from a numeric difficulty order.
+The full suite currently contains 583 settings: 300 cryptography instances (100 each of Caesar, Atbash, and keyboard), 250 list functions, 24 instruction-induction tasks, 8 SCAN splits, and one ILP setting. Every setting runs both standard and CE by default: 1,166 jobs per runner, or 2,332 with `both`. IDs are discovered from local data files rather than inferred from a numeric difficulty order.
 
 ```bash
 # Preview the complete rule-generation run without calling any model.
@@ -58,7 +59,7 @@ python -m benchmarks.run_suite --runner icl_gen --suite all --task list_function
 python -m benchmarks.run_suite --runner icl_gen --suite all --mode ce --keep-going -- --retries 3 --eval_size 64
 ```
 
-The existing invocation without `--suite all` still runs the four-instance smoke suite. `--mode std|ce|both` controls methods; `--mkey` controls the model. `PYTHON_BIN` and `OUTDIR` remain supported (also available as `--python` and `--outdir`). Use `--outdir logs/benchmarks_full` to keep a full experiment separate from existing smoke logs: the underlying runners overwrite the same task's output path when rerun. Generation defaults to one run per job, as before; override with `-- --rerun 3` for `icl_gen` only. Options after `--` apply to every selected runner and must be supported by each of them.
+The existing invocation without `--suite all` still runs the five-instance smoke suite. `--mode std|ce|both` controls methods; `--mkey` controls the model. `PYTHON_BIN` and `OUTDIR` remain supported (also available as `--python` and `--outdir`). Use `--outdir logs/benchmarks_full` to keep a full experiment separate from existing smoke logs: the underlying runners overwrite the same task's output path when rerun. Generation defaults to one run per job, as before; override with `-- --rerun 3` for `icl_gen` only. Options after `--` apply to every selected runner and must be supported by each of them.
 
 “All” means all task IDs/splits, not an automatic expansion of model, regularization, seed, training-size or evaluation-size settings. The existing runner defaults still apply, including the evaluation cap. Jobs run sequentially; a failed job stops the suite unless `--keep-going` is supplied, and any failed job yields a nonzero final exit status. Dry-run only discovers data and prints commands; it does not create result logs or call models. The launcher can also be used directly with `python -m benchmarks.run_suite`.
 
@@ -70,22 +71,23 @@ Use `--suite balanced` to reduce the number of settings while retaining broader 
 - List Functions: sort the 250 reference programs by a structural score, divide into three equal-size rank bands, and sample 3 from each (9 total).
 - Instruction Induction: keep all 24 distinct task types.
 - SCAN: keep all 8 splits.
+- ILP: keep the registered EvenSucc setting.
 
-This gives 47 settings / 94 std-and-CE jobs per runner, down from 1,164 jobs. Both methods receive exactly the same selected IDs. The structural score is AST node count + 8 per for/while + 4 per if/conditional expression + 3 per call + 2 per subscript + 5 per comprehension clause. It ignores comments/docstring text length; equal scores are ordered by ID. The three bands approximate reference-program complexity, **not measured model difficulty**; sampling is uniform within each band, not uniform across observed accuracy. All instruction task types and SCAN splits are retained rather than assigned unvalidated difficulty labels. This is a stratified diagnostic subset, not an unbiased estimate of the full dataset average.
+This gives 48 settings / 96 std-and-CE jobs per runner, down from 1,166 jobs. Both methods receive exactly the same selected IDs. The structural score is AST node count + 8 per for/while + 4 per if/conditional expression + 3 per call + 2 per subscript + 5 per comprehension clause. It ignores comments/docstring text length; equal scores are ordered by ID. The three bands approximate reference-program complexity, **not measured model difficulty**; sampling is uniform within each band, not uniform across observed accuracy. All instruction task types and SCAN splits are retained rather than assigned unvalidated difficulty labels. This is a stratified diagnostic subset, not an unbiased estimate of the full dataset average.
 
 ```bash
-# Preview the default 94-job subset.
+# Preview the default 96-job subset.
 python -m benchmarks.run_suite --runner icl_gen --suite balanced --dry-run
 
 # Run it in a separate output directory.
 python -m benchmarks.run_suite --runner icl_gen --suite balanced --outdir logs/benchmarks_balanced
 
 # Slightly larger variant: 4 list tasks per band and 2 instances per cipher family.
-# 50 settings / 100 std-and-CE jobs; all instruction tasks and SCAN splits remain.
+# 51 settings / 102 std-and-CE jobs; all instruction tasks and SCAN splits remain.
 python -m benchmarks.run_suite --runner icl_gen --suite balanced --list-per-tier 4 --crypto-per-family 2
 ```
 
-`--sample-seed` defaults to 43 and controls selection only; it is distinct from the runner's `--seed` passed after `--`. Selection for a task stays the same when using `--task` filters. Dry-run prints the exact selected IDs and commands for recording the experiment. Using the observed 6.5 hours for the former 68-setting balanced suite, proportional scaling gives approximately 4.5 hours for the new 47-setting suite (std and CE combined, one runner). This is an estimate: per-task cost, oracle changes and early stopping affect runtime. Restore the former sample size with `--list-per-tier 8 --crypto-per-family 4`.
+`--sample-seed` defaults to 43 and controls selection only; it is distinct from the runner's `--seed` passed after `--`. Selection for a task stays the same when using `--task` filters. Dry-run prints the exact selected IDs and commands for recording the experiment. Using the observed 6.5 hours for the former 68-setting balanced suite, proportional scaling gives approximately 4.5 hours for the former 47-setting suite (std and CE combined, one runner); adding ILP makes the current suite 48 settings / 96 jobs. This is an estimate: per-task cost, oracle changes and early stopping affect runtime. Restore the former sample size with `--list-per-tier 8 --crypto-per-family 4`.
 
 ## Equivalence logging for rule generation
 
@@ -107,7 +109,7 @@ Each invocation backs up all matching std/reg files under the log directory's an
 
 ## Shared regex episode pipeline
 
-All four benchmarks now call the **same `train_icl_gen.py::run_episode` used by the existing regex experiments**. There is no separate benchmark epoch/retry/selection loop. `run_benchmark` only loads data, constructs the domain adapter, calls `run_episode`, and converts checkpoint callbacks to the existing benchmark log format.
+All registered benchmarks call the **same `train_icl_gen.py::run_episode` used by the existing regex experiments**. There is no separate benchmark epoch/retry/selection loop. `run_benchmark` only loads data, constructs the domain adapter, calls `run_episode`, and converts checkpoint callbacks to the existing benchmark log format.
 
 The regex entry point still calls `run_episode` without an adapter. Its data scheduling, initial CE failure fallback, reflection modes, training-fit repair loop, candidate-batch mode, best-retry selection, callback order, and acceptance-based stopping behavior are retained.
 
@@ -181,4 +183,32 @@ SCAN retains the official command/action pairs and eight locally available split
 
 Our prompt requests `transform(x)`, returning a space-separated action string, with concise reasoning/ans tags. The executor now accepts standard Python, including helper functions, loops and imports, with a fresh namespace and a 10-second per-input timeout. It is not a security sandbox. Official train data remain available in full; the configured example budget and epoch schedule determine which training examples reach the LLM. Full selected-split test accuracy is exact sequence matching, regardless of the generic evaluation sample limit.
 
-The oracle is brute-force enumeration over all 20,910 entries of `tasks.txt`, comparing candidate outputs against published outputs. Exceptions/timeouts count as failures. It returns at most the requested number of counterexamples; `Equivalent: true` requires no failures on the entire finite command set. This does not cover arbitrary strings outside SCAN. `OracleDetails` records coverage and disagreement count. Because the domain includes the held-out split, CE can reveal test commands/labels; this is the intended oracle-assisted method extension and is not the original train-only generalization evaluation. Historical logs are unchanged.
+The oracle is brute-force enumeration over all 20,910 entries of `tasks.txt`, comparing candidate outputs against published outputs. Exceptions/timeouts count as failures. It stops once the requested number of counterexamples is found; `Equivalent: true` requires no failures on the entire finite command set. SCAN reuses candidate/input execution results across oracle, training and evaluation. Each of these stages checks a 30-second elapsed-time budget between inputs (a current input may add up to its 10-second timeout). Incomplete oracle search without a witness returns null; incomplete training fit or evaluation returns null rather than presenting a partial score as full accuracy. Coverage, stop reason and progress are recorded/printed. This does not cover arbitrary strings outside SCAN. `OracleDetails` records coverage and disagreement count. Because the domain includes the held-out split, CE can reveal test commands/labels; this is the intended oracle-assisted method extension and is not the original train-only generalization evaluation. Historical logs are unchanged.
+
+## Instruction Induction: grounded semantic teacher (v3)
+
+The teacher now uses the official human annotations under `datasets/instruction_induction/annotations`, induction-only reference examples spread across the whole induction pool, and task-specific acceptance rules. The learner still sees IO examples only. `cause_and_effect` is corrected to selecting the cause from two sentences in alternating order, matching the official prepared induction prompts; historical cause-to-effect logs describe a different task and are not rewritten.
+
+Prompt construction and CE validation live in `benchmarks/instruction_oracle.py`. Calibration examples address arithmetic shortcuts, one-word animal shortcuts, legal answer alternatives, set ordering, and task domains. `Equivalent` remains a noisy semantic task-alignment verdict, not execution accuracy or a formal proof. Actual output execution scores for Instruction Induction remain unavailable. CE schema, known answer aliases, deterministic labels for supported tasks and simple-past passive domain are checked before feedback. Invalid witnesses cannot cause rejection, and an unsubstantiated `false` or contradictory JSON yields `null`, not automatic acceptance. Novel open-language CE semantics still depend on the same LLM; there is no independent executor certifying its proposed candidate output.
+
+Future logs include policy, actual oracle prompt, raw verdict, rejection reasons and GT source under `OracleDetails`. No execution/test examples are used to build or validate teacher context. The shared regex episode controller is unchanged. Historical audit, reviewed cases, prompt snapshots and gpt-oss-api replays are in `analysis/instruction_oracle_review/`; original benchmark logs are preserved. The replay results are selected diagnostic cases, not an unbiased estimate of oracle accuracy or updated experiment success rates.
+
+## ILP: HRI EvenSucc
+
+`ilp/even_succ` adds positive Horn rule induction from [Glanois et al. (ICML 2022)](https://proceedings.mlr.press/v162/glanois22a.html). It is registered beside List Functions rather than flattened into a Python list classifier. The vendored author generator/configuration is pinned and licensed under `datasets/ilp/source`; regenerate the deterministic data with `python datasets/ilp/prepare.py`.
+
+The learner receives zero/succ background knowledge and Boolean target atoms. It returns recursive, function-free unary/binary Horn clauses inside ans tags, with the shared concise reasoning summary. Training uses all 11 target atoms at N=11 with six synchronous inference rounds; full evaluation uses 15 target atoms at N=15 with eight rounds. Auxiliary predicate invention is supported; Python/modulo shortcuts and numeric constants in rules are excluded. The oracle checks all 15 evaluation atoms, returns real ground-atom CE and preserves the shared std/CE stopping contract. Accuracy and hard-label MSE/1e-4 success are logged.
+
+This is an LLM+CE task adaptation, not reproduction of HRI's fuzzy optimizer, proto-rule hierarchy, Gumbel training noise or ten-run experiment. Runtime syntax/resource limits and finite inference semantics are explicit in TaskSettings. Finite acceptance does not prove rule equivalence over arbitrary domains. See [dataset provenance](../datasets/ilp/README.md), [Chinese setting/usage report](../analysis/ilp_integration/setting_and_usage_zh.md) and [undecidable SMT task design notes](../analysis/ilp_integration/undecidable_smt_task_notes_zh.md).
+
+```bash
+# Preview both methods without a model call.
+python -m benchmarks.run_suite --runner icl_gen --suite balanced --task ilp --dry-run
+
+# Run std and CE with the same shared generation controller.
+python -m benchmarks.run_suite --runner icl_gen --suite balanced --task ilp --mkey gpt-oss --outdir logs/benchmarks
+```
+
+`--runner icl` is also supported as the existing direct-IO baseline, using Boolean predictions rather than generated rules; its mistake-driven CE is distinct from the generation oracle. Direct ICL now honors task-declared sample/shuffle defaults, including the previously declared Crypto/List Functions paper defaults.
+
+`--task` accepts multiple names together (and remains repeatable), e.g. `--task ilp instruction_induction`.

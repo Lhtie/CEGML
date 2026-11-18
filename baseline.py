@@ -16,7 +16,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if __name__ == "__main__":
     # The program-induction benchmarks use the LLM path in train_icl_gen.
     # Its default is the no-counterexample baseline.
-    benchmark_kinds = {"cryptography", "list_functions", "instruction_induction", "scan"}
+    benchmark_kinds = {"cryptography", "list_functions", "instruction_induction", "scan", "ilp"}
     if "--task_type" in sys.argv:
         task_index = sys.argv.index("--task_type")
         if task_index + 1 < len(sys.argv) and sys.argv[task_index + 1] in benchmark_kinds:

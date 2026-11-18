@@ -82,7 +82,7 @@ def summarize_label_counts(labels):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--task_type", type=str, default="simplyrx", choices=["simplyrx", "extrx", "cryptography", "list_functions", "instruction_induction", "scan"])
+    parser.add_argument("--task_type", type=str, default="simplyrx", choices=["simplyrx", "extrx", "cryptography", "list_functions", "instruction_induction", "scan", "ilp"])
     parser.add_argument("--benchmark_id", type=str, default=None, help="Cipher family:row, list function ID, instruction task name, or SCAN split")
     parser.add_argument("--regex", type=str, default="(a(b+c)(a+b)c(a+c)b(a+b+c)(a+b+c))*")
     parser.add_argument("--max_length", type=int, default=32)
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     parser.add_argument("--indir", type=str, default="datasets/")
     parser.add_argument("--outdir", type=str, default="logs/")
     args = parser.parse_args()
-    if args.task_type in {"cryptography", "list_functions", "instruction_induction", "scan"}:
+    if args.task_type in {"cryptography", "list_functions", "instruction_induction", "scan", "ilp"}:
         from benchmarks.icl import run_icl
         run_icl(args)
         raise SystemExit(0)

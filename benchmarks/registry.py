@@ -1,4 +1,4 @@
-"""Registry for the four data-backed program-induction benchmarks."""
+"""Registry for the registered data-backed program-induction benchmarks."""
 
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ class CounterexampleBatch:
 
 
 BENCHMARKS = {
+    "ilp": BenchmarkSpec("ilp", "finite Horn forward chaining"),
     "cryptography": BenchmarkSpec("cryptography", "cvc5 bounded symbolic Python"),
     "list_functions": BenchmarkSpec("list_functions", "cvc5 sequence and bounded search"),
     "instruction_induction": BenchmarkSpec("instruction_induction", "LLM judge"),
@@ -45,7 +46,7 @@ def get_benchmark(name: str) -> BenchmarkSpec:
 
 
 def create_task(name: str, benchmark_id: str, **kwargs: Any):
-    """Construct one of the four data-backed benchmark tasks."""
+    """Construct one of the registered data-backed benchmark tasks."""
     spec = get_benchmark(name)
     return spec.load_task_class()(spec.name, benchmark_id, **kwargs)
 
@@ -73,7 +74,7 @@ def open_benchmark(name: str, benchmark_id: str, **kwargs: Any) -> BenchmarkHand
 
 
 def run(name: str, argv: list[str] | None = None):
-    """Forward options to the four-task branch of train_icl_gen.main."""
+    """Forward options to the benchmark branch of train_icl_gen.main."""
     spec = get_benchmark(name)
     arguments = list(argv or [])
     if "--task_type" in arguments or any(arg.startswith("--task_type=") for arg in arguments):

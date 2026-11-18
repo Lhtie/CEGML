@@ -1,4 +1,4 @@
-"""Direct input/output ICL runner for the four added benchmarks."""
+"""Direct input/output ICL runner for the registered benchmarks."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ DEFAULT_IDS = {
     "list_functions": "c102",
     "instruction_induction": "antonyms",
     "scan": "simple",
+    "ilp": "even_succ",
 }
 
 
@@ -46,6 +47,8 @@ def _parse_answers(response: str | None, count: int):
 
 
 def _equal(kind: str, predicted, expected) -> bool:
+    if kind == "ilp":
+        return type(predicted) is bool and predicted == expected
     if kind == "list_functions":
         return isinstance(predicted, list) and predicted == expected
     if not isinstance(predicted, str):
@@ -58,7 +61,7 @@ def _equal(kind: str, predicted, expected) -> bool:
 def _prompt(task: BenchmarkTask, seen, inputs, regularize=False):
     examples = "\n".join(task.format_pair(x, y) for x, y in seen) or "(none)"
     queries = "\n".join(json.dumps(x, ensure_ascii=False) for x in inputs)
-    return (ICL_PROMPT.replace("{task}", ICL_TASKS[task.kind])
+    return (ICL_PROMPT.replace("{task}", getattr(task, "icl_instruction", ICL_TASKS[task.kind]))
             .replace("{regularization}", "Prefer the simplest rule consistent with the examples." if regularize else "")
             .replace("{examples}", examples)
             .replace("{count}", str(len(inputs)))
@@ -90,9 +93,11 @@ def run_icl(args, response_fn=None):
 
     rng = random.Random(args.seed)
     pool = list(task.train)
-    rng.shuffle(pool)
-    total = min(args.tot_train_size, len(pool))
-    sizes = _schedule(total, args.start_size, args.scale_factor)
+    if getattr(task, "shuffle_training", True):
+        rng.shuffle(pool)
+    defaults = getattr(task, "episode_defaults", {})
+    total = min(defaults.get("tot_train_size", args.tot_train_size), len(pool))
+    sizes = _schedule(total, defaults.get("start_size", args.start_size), args.scale_factor)
     ce_limit = getattr(args, "ce_batch_size", 8)
     if ce_limit < 1:
         raise ValueError("ce_batch_size must be positive")
@@ -102,6 +107,8 @@ def run_icl(args, response_fn=None):
     outpath = Path(args.outdir) / f"icl_{kind}" / f"model={args.mkey}" / mode / reg / f"benchmark={safe_id}.json"
     outpath.parent.mkdir(parents=True, exist_ok=True)
     result = {"task_type": kind, "benchmark_id": benchmark_id, "mode": mode, "epochs": []}
+    if getattr(task, "task_settings", None):
+        result["TaskSettings"] = task.task_settings
     seen = []
     cursor = 0
     for epoch, target_size in enumerate(sizes):

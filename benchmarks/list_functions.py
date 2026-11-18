@@ -40,8 +40,8 @@ def program_function(source):
     if name not in functions:
         raise ValueError('Expected Python function fn(x)')
     function = functions[name]
-    if len(function.args.args) != 1 or function.args.args[0].arg != 'x':
-        raise ValueError('Expected fn(x)')
+    if len(function.args.posonlyargs) + len(function.args.args) != 1:
+        raise ValueError('Expected a function taking one positional input')
     if function.decorator_list or function.args.defaults or function.args.kw_defaults:
         raise ValueError('Expected an undecorated function without default arguments')
     return tree, name
