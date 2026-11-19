@@ -7,6 +7,13 @@ from itertools import product
 import random
 
 SPECS = {
+    'adj_to_red': ('AdjToRed',1,'The node has a red neighbor.'),
+    'two_children': ('TwoChildren',1,'The node has at least two distinct outgoing neighbors.'),
+    'relatedness': ('Relatedness',2,'The people are connected by an undirected parent path.'),
+    'member': ('Member',2,'The first value occurs in the list starting at the second node.'),
+    'son': ('Son',2,'The first person is a son of the second, under the author generator.'),
+    'even_odd': ('EvenOdd',1,'The author EvenOdd configuration; shares parity target with EvenSucc.'),
+    'grandparent_nlm': ('Grandparent_NLM',2,'Grandparent with additional son/daughter backgrounds.'),
     'graph_coloring': ('GraphColoring', 1, 'The node has an outgoing neighbor with the same color.'),
     'length': ('Length', 2, 'The second constant is the length of the list starting at the first.'),
     'even_succ': ('EvenSucc', 1, 'Accept even-index constants.'),
@@ -24,13 +31,20 @@ SPECS = {
 # This is a reference-rule proxy, not measured LLM difficulty. Overlapping
 # author variants remain in the inventory, but are not selected twice.
 AUTHOR_DIFFICULTY_TIERS = {
-    'easy': ('HasFather', 'Predecessor', 'UndirectedEdge'),
-    'medium': ('AdjToRed', 'Grandparent', 'Grandparent_NLM', 'Son', 'TwoChildren', 'GraphColoring'),
-    'hard': ('LessThan', 'Connectedness', 'Member', 'EvenOdd', 'EvenSucc', 'Buzz', 'Cyclic', 'Relatedness', 'Fizz', 'Length'),
+    'easy': ('HasFather', 'Predecessor', 'UndirectedEdge', 'LessThan'),
+    'medium': ('AdjToRed', 'Grandparent', 'Grandparent_NLM', 'Son', 'TwoChildren', 'GraphColoring', 'Connectedness', 'Cyclic'),
+    'hard': ('Member', 'EvenOdd', 'EvenSucc', 'Buzz', 'Relatedness', 'Fizz', 'Length'),
 }
 BALANCED_IDS = ('predecessor', 'undirected_edge', 'grandparent', 'graph_coloring', 'fizz', 'length')
 
 REFERENCES = {
+    'adj_to_red': 'isred(X) :- color(X,Y), red(Y).\ntarget(X) :- edge(X,Y), isred(Y).',
+    'two_children': 'other(X,Y) :- edge(X,Z), neq(Z,Y).\ntarget(X) :- edge(X,Y), other(X,Y).',
+    'relatedness': 'link(X,Y) :- parent(X,Y).\nlink(X,Y) :- parent(Y,X).\ntarget(X,Y) :- link(X,Y).\ntarget(X,Y) :- link(X,Z), target(Z,Y).',
+    'member': 'target(X,Y) :- value(Y,X).\ntarget(X,Y) :- const(Y,Z), target(X,Z).',
+    'son': 'male(X) :- father(X,Y).\nmale(X) :- brother(X,Y).\ntarget(X,Y) :- father(Y,X), male(X).',
+    'even_odd': 'target(X) :- zero(X).\nodd(Y) :- target(X), succ(X,Y).\ntarget(Y) :- odd(X), succ(X,Y).',
+    'grandparent_nlm': 'parent(X,Y) :- father(X,Y).\nparent(X,Y) :- mother(X,Y).\ntarget(X,Y) :- parent(X,Z), parent(Z,Y).',
     'graph_coloring': 'same(X,Y) :- color(X,Z), color(Y,Z).\ntarget(X) :- edge(X,Y), same(X,Y).',
     'length': 'target(X,X) :- zero(X).\naux(X,Y) :- target(X,Z), succ(Z,Y).\ntarget(X,Y) :- const(X,Z), aux(Z,Y).',
     'predecessor': 'target(X,Y) :- succ(Y,X).',

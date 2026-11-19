@@ -8,6 +8,8 @@ import numpy as np
 from tqdm import tqdm
 
 from modeling.llm import is_vllm_model, load_model_and_tokenizer, run_model
+from modeling.usage import track_token_usage, response_usage
+from scheduling import round_schedule
 from tasks.rl import SimplyRegularLanguage, ExtRegularLanguage
 from curve import plot_loss_curve, plot_accuracy_curve
 from dataset import generate_dataset
@@ -60,7 +62,7 @@ def extract_ans(res):
             return None
     else:
         return None
-    
+
 def log_scaling(total, start, scale_factor):
     sizes = []
     current = start
@@ -88,10 +90,11 @@ if __name__ == "__main__":
     parser.add_argument("--max_length", type=int, default=32)
     parser.add_argument("--eval_max_length", type=int, default=32)
     parser.add_argument("--mkey", type=str, default="gpt5")
-    parser.add_argument("--tot_train_size", type=int, default=384)
+    parser.add_argument("--rounds",type=int,default=10,help="Round budget; 0 retains the natural sample schedule")
+    parser.add_argument("--tot_train_size",type=int,default=None,help="Benchmark default: full available training pool")
     parser.add_argument("--start_size", type=int, default=3)
     parser.add_argument("--scale_factor", type=float, default=2.0)
-    parser.add_argument("--eval_size", type=int, default=32)
+    parser.add_argument("--eval_size", type=int, default=None, help="Benchmark: full test set by default; regex: 32")
     parser.add_argument("--eval_batch_size", type=int, default=4)
     parser.add_argument("--ce_batch_size", type=int, default=8,
                         help="Maximum mistakes added per benchmark round (default 8)")
@@ -103,10 +106,14 @@ if __name__ == "__main__":
     parser.add_argument("--indir", type=str, default="datasets/")
     parser.add_argument("--outdir", type=str, default="logs/")
     args = parser.parse_args()
+    if args.rounds<0:parser.error("rounds must be non-negative")
     if args.task_type in {"cryptography", "list_functions", "instruction_induction", "scan", "ilp"}:
         from benchmarks.icl import run_icl
         run_icl(args)
         raise SystemExit(0)
+    if args.tot_train_size is None:args.tot_train_size=384
+    if args.eval_size is None:
+        args.eval_size = 32
     use_vllm = is_vllm_model(args.mkey)
 
     np.random.seed(args.seed)
@@ -132,7 +139,7 @@ if __name__ == "__main__":
     config_name += "ce/" if args.use_ce else "std/"
     config_name += "reg/" if args.use_reg else "noreg/"
     config_name += f"msgdict_regex={args.regex}_totTrain={args.tot_train_size}_startSize={args.start_size}_scaleFactor={args.scale_factor}_totEval={args.eval_size}_evalBatch={args.eval_batch_size}.json"
-    
+
     generate_dataset(args, task_type=args.task_type, outdir=args.indir)
     dataset = os.path.join(args.indir, f"regex={args.regex}_trainMaxLen={args.max_length}_evalMaxLen={args.eval_max_length}.json")
     with open(dataset, "r") as f:
@@ -141,105 +148,108 @@ if __name__ == "__main__":
     agg_losses, num_samples, accs = [], [], []
     agg_train_ex, agg_train_labels = [], []
     msgdict = {}
-    num_samples = log_scaling(args.tot_train_size, args.start_size, args.scale_factor)
+    num_samples = round_schedule(log_scaling(args.tot_train_size,args.start_size,args.scale_factor),args.rounds)
     train_samples = []
     print(f"Training sizes per epoch: {num_samples}")
     for epoch in tqdm(range(len(num_samples))):
-        l = len(agg_train_ex)
-        r = num_samples[epoch]
-        train_ex = data["train_ex"][l:r]
-        train_labels = data["train_labels"][l:r]
+        with track_token_usage() as epoch_usage:
+            l = len(agg_train_ex)
+            r = num_samples[epoch]
+            train_ex = data["train_ex"][l:r]
+            train_labels = data["train_labels"][l:r]
 
-        if args.use_ce:
-            train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)])
-            eval_p = "\n".join([eval_data_template.format(ex) for ex in train_ex])
-            prompt_prefix = ""
-            if args.use_reg:
-                prompt_prefix += regularization
-            if task_instr:
-                prompt_prefix = f"{task_instr}\n{prompt_prefix}".strip()
-            prompt = prompt_template.format(prompt_prefix, train_p, eval_p)
-            response = run_model(args.mkey, model, tokenizer, prompt, temp=args.temp)
-            pred = extract_ans(response)
-            ce_x, ce_y = [], []
-            if pred is not None and len(pred) == len(train_labels):
-                for string, p, l in zip(train_ex, pred, train_labels):
-                    if p != l:
-                        ce_x.append(string)
-                        ce_y.append(l)
-            
-            agg_train_ex += ce_x
-            agg_train_labels += ce_y
-            train_samples.append(len(agg_train_ex))
-        else:
-            agg_train_ex += train_ex
-            agg_train_labels += train_labels
-            train_samples.append(len(agg_train_ex))
-
-        eval_ex = data["eval_ex"]
-        eval_labels = data["eval_labels"]
-        train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)])
-
-        msgs = []
-        acc = 0
-        for i in tqdm(range(0, len(eval_ex), args.eval_batch_size)):
-            j = min(i+args.eval_batch_size, len(eval_ex))
-            eval_ex_batch = eval_ex[i:j]
-            eval_labels_batch = eval_labels[i:j]
-            eval_p = "\n".join([eval_data_template.format(ex) for ex in eval_ex_batch])
-
-            prompt_prefix = ""
-            if args.use_reg:
-                prompt_prefix += regularization
-            if task_instr:
-                prompt_prefix = f"{task_instr}\n{prompt_prefix}".strip()
-            prompt = prompt_template.format(prompt_prefix, train_p, eval_p)
-
-            acc_retried = []
-            for retry in range(args.retries):
+            if args.use_ce:
+                train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)])
+                eval_p = "\n".join([eval_data_template.format(ex) for ex in train_ex])
+                prompt_prefix = ""
+                if args.use_reg:
+                    prompt_prefix += regularization
+                if task_instr:
+                    prompt_prefix = f"{task_instr}\n{prompt_prefix}".strip()
+                prompt = prompt_template.format(prompt_prefix, train_p, eval_p)
                 response = run_model(args.mkey, model, tokenizer, prompt, temp=args.temp)
-
                 pred = extract_ans(response)
-                if pred is not None and len(pred) == len(eval_labels_batch):
-                    acc_single = sum([int(p == l) for p, l in zip(pred, eval_labels_batch)])
-                    acc_retried.append(acc_single)
-                else:
-                    acc_single = None
+                ce_x, ce_y = [], []
+                if pred is not None and len(pred) == len(train_labels):
+                    for string, p, l in zip(train_ex, pred, train_labels):
+                        if p != l:
+                            ce_x.append(string)
+                            ce_y.append(l)
 
-                msgs.append({
-                    "BatchIndices": (i, j),
-                    "Retry": retry,
-                    "Prompt": prompt,
-                    "Response": response,
-                    "Acc": acc_single,
-                    "Prediction": pred,
-                    "GroundTruth": eval_labels_batch
-                })
-                msgdict[epoch] = {
-                    "Logs": msgs
-                }
-                os.makedirs(os.path.dirname(config_name), exist_ok=True)
-                with open(config_name, "w") as f:
-                    json.dump(msgdict, f, indent=4)
-                
-            if len(acc_retried) > 0:
-                acc += np.mean(acc_retried)
+                agg_train_ex += ce_x
+                agg_train_labels += ce_y
+                train_samples.append(len(agg_train_ex))
+            else:
+                agg_train_ex += train_ex
+                agg_train_labels += train_labels
+                train_samples.append(len(agg_train_ex))
 
-        acc /= len(eval_ex)
-        accs.append(acc)
-        print(f"Accuracy at epoch {epoch}: {acc}, total training samples: {len(agg_train_ex)}")
-        
-        msgdict[epoch] = {
-            "Accuracy": acc,
-            "NumTrainingSamples": summarize_label_counts(agg_train_labels),
-            "Logs": msgs
-        }
-        os.makedirs(os.path.dirname(config_name), exist_ok=True)
-        with open(config_name, "w") as f:
-            json.dump(msgdict, f, indent=4)
+            eval_ex = data["eval_ex"]
+            eval_labels = data["eval_labels"]
+            train_p = "\n".join([train_data_template.format(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)])
+
+            msgs = []
+            acc = 0
+            for i in tqdm(range(0, len(eval_ex), args.eval_batch_size)):
+                j = min(i+args.eval_batch_size, len(eval_ex))
+                eval_ex_batch = eval_ex[i:j]
+                eval_labels_batch = eval_labels[i:j]
+                eval_p = "\n".join([eval_data_template.format(ex) for ex in eval_ex_batch])
+
+                prompt_prefix = ""
+                if args.use_reg:
+                    prompt_prefix += regularization
+                if task_instr:
+                    prompt_prefix = f"{task_instr}\n{prompt_prefix}".strip()
+                prompt = prompt_template.format(prompt_prefix, train_p, eval_p)
+
+                acc_retried = []
+                for retry in range(args.retries):
+                    response = run_model(args.mkey, model, tokenizer, prompt, temp=args.temp)
+
+                    pred = extract_ans(response)
+                    if pred is not None and len(pred) == len(eval_labels_batch):
+                        acc_single = sum([int(p == l) for p, l in zip(pred, eval_labels_batch)])
+                        acc_retried.append(acc_single)
+                    else:
+                        acc_single = None
+
+                    msgs.append({
+                        "BatchIndices": (i, j),
+                        "Retry": retry,
+                        "Prompt": prompt,
+                        "Response": response,
+                        "TokenUsage": response_usage(response),
+                        "Acc": acc_single,
+                        "Prediction": pred,
+                        "GroundTruth": eval_labels_batch
+                    })
+                    msgdict[epoch] = {
+                        "Logs": msgs
+                    }
+                    os.makedirs(os.path.dirname(config_name), exist_ok=True)
+                    with open(config_name, "w") as f:
+                        json.dump(msgdict, f, indent=4)
+
+                if len(acc_retried) > 0:
+                    acc += np.mean(acc_retried)
+
+            acc /= len(eval_ex)
+            accs.append(acc)
+            print(f"Accuracy at epoch {epoch}: {acc}, total training samples: {len(agg_train_ex)}")
+
+            msgdict[epoch] = {
+                "Accuracy": acc,
+                "NumTrainingSamples": summarize_label_counts(agg_train_labels),
+                **epoch_usage.log_fields(),
+                "Logs": msgs
+            }
+            os.makedirs(os.path.dirname(config_name), exist_ok=True)
+            with open(config_name, "w") as f:
+                json.dump(msgdict, f, indent=4)
 
     plot_accuracy_curve(
-        train_samples, accs, 
+        train_samples, accs,
         os.path.dirname(config_name).replace("logs", "accuracy_curves"),
         os.path.basename(config_name)
     )

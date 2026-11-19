@@ -7,6 +7,7 @@ from sklearn.utils.class_weight import compute_class_weight
 
 from curve import plot_loss_curve
 from modeling.llm import is_vllm_model, is_api_model, run_model
+from modeling.usage import response_usage
 
 class LearnerForRNN:
     def __init__(self, model, task):
@@ -228,6 +229,7 @@ class LearnerForICLGen:
         return {
             "Prompt": prompt,
             "Response": response,
+            "TokenUsage": response_usage(response),
             "Prediction": pred,
             "Reasoning": reasoning,
         }

@@ -84,6 +84,12 @@ class BenchmarkEpisodeAdapter:
         verdict = self.task.verify(candidate, self.config.ce_batch_size, llm_call=self.call_model)
         self.verdicts[candidate] = verdict
         result.update(verdict.log_fields())
+        if (self.task.kind == 'ilp' and verdict.equivalent is None
+                and (verdict.details or {}).get('status') == 'resource_limit'):
+            result['RepairExamples'] = []
+            result['TrainingDetails'] = {'training_complete':False,'stop_reason':'oracle_resource_limit'}
+            result['EvaluationDetails'] = {'evaluation_complete':False,'stop_reason':'oracle_resource_limit'}
+            return result
         errors = self.task.training_errors(candidate, self.seen)
         if getattr(self.task, 'last_training_details', None) is not None:
             result['TrainingDetails'] = self.task.last_training_details
@@ -125,10 +131,13 @@ class BenchmarkEpisodeAdapter:
                   'CurrentGuess': result['CurrentGuess'],
                   'CurrentGuessReasoning': result['CurrentGuessReasoning'],
                   'Accuracy': result['Accuracy'], 'Logs': logs,
+                  'InputTokens': result['InputTokens'], 'OutputTokens': result['OutputTokens'],
+                  'TokenUsage': result['TokenUsage'],
                   'Counterexamples': deepcopy(self.last_additions) if self.config.use_ce else [],
                   'TrainingExampleSource': self.example_source if self.config.use_ce else 'scheduled',
                   'Attempts': [{'Response': m.get('Response'), 'Prediction': m.get('Prediction'),
-                                'Reasoning': m.get('Reasoning'), 'Error': m.get('ValidationError')}
+                                'Reasoning': m.get('Reasoning'), 'TokenUsage': m.get('TokenUsage'),
+                                'Error': m.get('ValidationError')}
                                for m in logs if not m.get('IsCandidateRepair')]}
         if result['Accuracy'] == 1.0:
             record['StopReason'] = 'oracle_accepted'

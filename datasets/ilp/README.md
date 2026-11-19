@@ -39,3 +39,17 @@ The vendored Task.py registers 19 synthetic task configurations plus WN. Some co
 Graph/family tasks use reproducible seeded sparse background constructions, including positive and negative labels, rather than the author's random graph/family distribution. Background facts for training and evaluation contexts are visible to the learner, while target labels and reference programs are hidden. Relational examples are ordered to interleave positive and negative labels, making the initial three-example prefix informative. These are scaleup adaptations of the author task definitions, not reproduction of the paper's sample distribution or optimizer. The numeric generator preserves the author zero/successor and Buzz offset backgrounds. No extra EvenOdd duplicate is counted.
 
 Balanced selects predecessor/undirected_edge (easy), grandparent/graph_coloring (medium), fizz/length (hard). The structural inventory covers all 19 synthetic author configurations, but these tiers are not measured LLM difficulty. Full selection rationale: `analysis/ilp_integration/balanced_six_selection_zh.md`.
+
+
+## Current oracle: cvc5
+
+The runtime oracle is now `finite_Horn_ranked_smt_v1`: it encodes finite ground rule closure plus well-founded derivation ranks, and checks both the training label pool and all evaluation target atoms. Relevance grounding is still a bounded positive-support expansion; it is not free of finite relational work. SAT gives independently replayed CE, UNSAT proves equality on those declared contexts, and resource/solver unknown remains unknown. No solver executable is required. This change does not alter dataset labels or sampling. See `analysis/ilp_integration/smt_oracle_implementation_zh.md`.
+
+
+## Full author configuration coverage
+
+All 19 synthetic configurations from the pinned Task.py registry are now available. Newly added: AdjToRed, TwoChildren, Relatedness, Member, Son, EvenOdd and Grandparent_NLM. They execute selected trusted author generator classes using the vendored Graph.py/Family.py dependencies at the declared scaleup sizes. A uniform-index compatibility shim replaces NumPy's unsupported `choice([None,(man,woman),...])`; target computation remains the author class's implementation. Existing backgrounds and labels are retained; binary training pools are extended from 384 to all 400 atoms without changing the existing prefix. EvenOdd and Grandparent_NLM are overlapping native variants, not independent target concepts; WN is outside this synthetic suite.
+
+Graph.py carries an Apache-2.0 header; its license is preserved in source/LICENSE-APACHE-2.0. Other original source headers and the repository license remain in place. The prepare adapter avoids importing unrelated GQA/WN packages and generates data on CPU without a model/API call.
+
+All 19 use the shared cvc5 oracle. Nonrecursive rule grounding and execution now work backward from queried atoms to avoid materializing irrelevant dense neq/color auxiliary relations. Recursive rules retain bounded relevance closure and least-model rank constraints. Background neq facts are declared intensionally in prompts instead of printing their quadratic full list; the actual finite background remains unchanged.

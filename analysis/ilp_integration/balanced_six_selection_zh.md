@@ -28,3 +28,10 @@
 ```bash
 python -m benchmarks.run_suite --runner icl_gen --suite balanced --task ilp --mode both --mkey gpt-oss --outdir logs/benchmarks_ilp_balanced6
 ```
+
+
+## 全 benchmark 分档更新：benchmark_difficulty_v1
+
+为覆盖全部本地测试点，当前 ILP 十二个目标统一分成每档四个：L1 为 HasFather、Predecessor、UndirectedEdge、LessThan；L2 为 Grandparent、GraphColoring、Connectedness、Cyclic；L3 为 EvenSucc、Buzz、Fizz、Length。L1 允许已知有序链上的简单递归闭包，因此不能再简单解释为“完全不含递归”。原先上文的三档分组是较早的结构方案，当前日志以 TaskSettings.Difficulty 和 datasets/benchmarks/difficulty_catalog.json 为准。
+
+balanced 的六个 ILP ID 保持不变，各档仍选两个。全部 benchmark 当前 balanced 为 54 个 setting、108 个 std/CE job。全量清单见 analysis/benchmark_difficulty/setting_difficulty_catalog_zh.md。

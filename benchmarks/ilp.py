@@ -8,6 +8,7 @@ from itertools import product, count
 import json
 from pathlib import Path
 import re
+from benchmarks.ilp_limits import Budget
 
 DATA = Path(__file__).resolve().parents[1]/'datasets/ilp'
 PROMPT = '''Induce a positive function-free Horn program defining the target predicate from background knowledge and labeled ground atoms. The target's intended meaning is hidden; infer it from the examples.
@@ -85,7 +86,7 @@ def parse_program(source, schema=(), target_arity=1):
     return tuple(rules)
 
 
-def _join(bindings, atom, relations):
+def _join(bindings, atom, relations, budget=None):
     pred, variables = atom
     results = []
     # Index the relation on already bound arguments: a successor join should
@@ -94,13 +95,20 @@ def _join(bindings, atom, relations):
     indexes = {}
     for binding in bindings:
         positions = tuple(i for i, v in enumerate(variables) if v in binding)
+        if len(positions)==len(variables):
+            row=tuple(binding[v] for v in variables)
+            if budget is not None: budget.step()
+            if row in rows: results.append(dict(binding))
+            continue
         if positions not in indexes:
             index = {}
             for row in sorted(rows):
+                if budget is not None: budget.step()
                 index.setdefault(tuple(row[i] for i in positions), []).append(row)
             indexes[positions] = index
         key = tuple(binding[variables[i]] for i in positions)
         for row in indexes[positions].get(key, ()):
+            if budget is not None: budget.step()
             updated = dict(binding)
             for variable,value in zip(variables,row):
                 if variable in updated and updated[variable] != value:
@@ -108,30 +116,99 @@ def _join(bindings, atom, relations):
                 updated[variable] = value
             else:
                 results.append(updated)
+                if budget is not None and len(results)>budget.max_bindings:
+                    from benchmarks.ilp_limits import ResourceLimit
+                    raise ResourceLimit("ILP intermediate binding budget exhausted")
     return results
 
 
+def background_schema(background, declared=()):
+    # Schema must survive an empty relation. Known task predicates have fixed
+    # signatures; arbitrary callers can supply an explicit declaration.
+    known = {'zero':1,'succ':2,'pred1':2,'pred3':2,'edge':2,'color':2,
+             'father':2,'mother':2,'son':2,'daughter':2,'const':2,'red':1,'neq':2,'parent':2,'value':2,'brother':2,'sister':2}
+    known.update(dict(declared))
+    schema = []
+    for pred,rows in background:
+        arity = known.get(pred, len(rows[0]) if rows else None)
+        if arity is None:
+            raise ValueError(f'Empty background {pred} needs an explicit arity')
+        if any(len(row)!=arity for row in rows):
+            raise ValueError(f'Invalid background arity for {pred}')
+        schema.append((pred,arity))
+    return tuple(schema)
+
+
+def _acyclic_rules(rules,edb):
+    # Explicit dependency graph; no rule evaluation occurs here.
+    graph={p:set() for (p,_),_ in rules}
+    for (p,_),body in rules:graph[p].update(q for q,_ in body if q not in edb)
+    visiting=set();done=set()
+    def visit(p):
+        if p in visiting:return False
+        if p in done:return True
+        visiting.add(p)
+        if not all(visit(q) for q in graph.get(p,())):return False
+        visiting.remove(p);done.add(p);return True
+    return all(visit(p) for p in list(graph))
+
+
+def _infer_acyclic(rules,n,background,arity,budget):
+    # Independent backward interpreter for nonrecursive rules. In particular,
+    # existential neq joins need not materialize every auxiliary pair.
+    from functools import lru_cache
+    edb={p:set(rows) for p,rows in background};edb.update(true={()},false=set())
+    by_head={p:[] for (p,_),_ in rules}
+    for head,body in rules:by_head[head[0]].append((head,body))
+    @lru_cache(maxsize=100000)
+    def holds(pred,args):
+        budget.step()
+        if pred in edb:return args in edb[pred]
+        for (_,head),body in by_head.get(pred,()):
+            initial={}
+            for var,value in zip(head,args):
+                if var in initial and initial[var]!=value:break
+                initial[var]=value
+            else:
+                bindings=[initial]
+                for atom in body:
+                    if atom[0] in edb:bindings=_join(bindings,atom,edb,budget)
+                variables={v for _,av in body for v in av}
+                for binding in bindings:
+                    free=sorted(variables-binding.keys())
+                    for values in product(range(n),repeat=len(free)):
+                        budget.step();env={**binding,**dict(zip(free,values))}
+                        if all(holds(p,tuple(env[v] for v in av)) for p,av in body):return True
+        return False
+    return frozenset(args[0] if arity==1 else args for args in product(range(n),repeat=arity) if holds('target',args))
+
+
 @lru_cache(maxsize=128)
-def infer(source, num_constants, steps=None, background=None, target_arity=1):
+def infer(source, num_constants, steps=None, background=None, target_arity=1, schema=()):
     if not 1 <= num_constants <= 512 or (steps is not None and not 1 <= steps <= 1024):
         raise ValueError('Unsupported finite ILP domain/inference budget')
     if background is None:
         background = (('zero', ((0,),)), ('succ', tuple((i,i+1) for i in range(num_constants-1))))
-    schema = tuple((pred, len(rows[0])) for pred,rows in background)
+    schema = background_schema(background, schema)
+    budget = Budget()
     rules = parse_program(source, schema, target_arity)
+    if steps is None and _acyclic_rules(rules,{p for p,_ in background}|{'true','false'}):
+        return _infer_acyclic(rules,num_constants,background,target_arity,budget)
     domain = range(num_constants)
     relations = {pred:set(rows) for pred,rows in background}
     relations.update({'true':{()}, 'false':set()})
     for _ in (count() if steps is None else range(steps)):
+        budget.check()
         additions = {}
         for (pred,variables),body in rules:
             bindings = [{}]
             for atom in body:
-                bindings = _join(bindings, atom, relations)
+                bindings = _join(bindings, atom, relations, budget)
             head_rows = additions.setdefault(pred,set())
             for binding in bindings:
                 free = sorted(set(variables)-binding.keys())
                 for values in product(domain,repeat=len(free)):
+                    budget.step()
                     grounded = {**binding, **dict(zip(free,values))}
                     head_rows.add(tuple(grounded[v] for v in variables))
         changed = False
@@ -139,6 +216,7 @@ def infer(source, num_constants, steps=None, background=None, target_arity=1):
             previous = relations.setdefault(pred,set())
             if not rows <= previous:
                 previous.update(rows); changed = True
+        budget.facts(sum(map(len,relations.values())))
         if not changed:
             break
     return frozenset(row[0] if target_arity==1 else row for row in relations.get('target',set()))
@@ -161,19 +239,24 @@ class ILPProblem:
         self.eval = [(row['input'],row['output']) for row in runtime['eval']['examples']]
         self.labels = {json.dumps(x,sort_keys=True):y for x,y in self.train+self.eval}
         train_n, eval_n = (runtime[k]['num_constants'] for k in ('train','eval'))
-        if ident in {'even_succ','predecessor','less_than','fizz','buzz'}:
+        if ident in {'even_succ','even_odd','predecessor','less_than','fizz','buzz'}:
             background = ('For each input N, constants are 0..N-1. zero(0) holds; '
                           'succ(i,j) holds exactly when j=i+1 and both are in the domain.')
             if ident == 'buzz':
                 background += ' pred1(i,j) holds exactly when j=i+2; pred3(i,j) holds exactly when j=i+3, within the domain.'
         else:
             background = 'Closed-world background facts for each input num_constants value: '+json.dumps(
-                {n:ctx['background'] for n,ctx in self.contexts.items()},separators=(',',':'))
+                {n:{pred:rows for pred,rows in ctx['background'].items() if pred!='neq'} for n,ctx in self.contexts.items()},separators=(',',':'))
+            if ident=='two_children':
+                background += ' For each domain, neq(i,j) holds exactly when i and j are distinct constants.'
         background += f' Target arity: target/{self.arity}. Training N={train_n}; evaluation/CE N={eval_n}. Background facts supply no target labels.'
         self.prompt = PROMPT.replace('{background}',background)
         self.icl_instruction = 'Infer Boolean truth of target ground atoms from the labeled examples.\n'+background
         self.settings = {k:self.data[k] for k in ('paper_url','author_repository','author_revision','author_task','method','paper_max_depth','paper_num_runs')}
-        self.settings.update(setting=ident+'_scaleup',train_num_constants=train_n,eval_num_constants=eval_n,
+        self.settings.update(oracle_policy='finite_Horn_ranked_smt_v1', oracle_backend='cvc5_python_api',
+                             oracle_contexts=['train','eval'],oracle_semantics='finite_least_fixed_point',
+                             oracle_timeout_ms_per_check=10000,oracle_wall_seconds=30,
+                             setting=ident+'_scaleup',train_num_constants=train_n,eval_num_constants=eval_n,
                              train_examples=len(self.train),eval_examples=len(self.eval),target_arity=self.arity,
                              train_inference_steps=None,eval_inference_steps=None,
                              sample_schedule='shared_regex_geometric_scaling',default_start_size=3,default_ce_start_size=3,
@@ -204,11 +287,5 @@ class ILPProblem:
         return self.labels[json.dumps(x,sort_keys=True)]
 
     def counterexamples(self, source, limit):
-        pairs = [(x,y) for x,y in self.eval if self.predict(source,x) != y]
-        eval_n = self.eval[0][0]['num_constants']
-        details = {'backend':'finite_Horn_forward_chaining','policy':'ilp_scaleup_fixpoint_v2',
-                   'guarantee':'finite_domain_least_fixed_point_equivalence',
-                   'num_constants':eval_n,'inference_steps':None,'examples_checked':len(self.eval),
-                   'disagreements':len(pairs),'domain':'all_target_ground_atoms_on_scaleup_evaluation_context',
-                   'unbounded_rule_equivalence_proved':False}
-        return pairs[:limit],not pairs,details
+        from benchmarks.ilp_smt import search
+        return search(source, self, limit=limit)

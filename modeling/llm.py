@@ -6,6 +6,8 @@ os.environ.setdefault("USERNAME", os.environ["USER"])
 os.environ.setdefault("TORCHINDUCTOR_CACHE_DIR", os.path.abspath("./.torchinductor"))
 pathlib.Path(os.environ["TORCHINDUCTOR_CACHE_DIR"]).mkdir(parents=True, exist_ok=True)
 
+from modeling.usage import ModelResponse, token_usage, record_usage
+
 from time import sleep
 import torch
 import tiktoken
@@ -134,7 +136,9 @@ def _run_model(mkey, model, tokenizer, msg, temp, max_tokens=None):
             temperature=max(temp, 0.0),
         )
         outputs = model.generate([prompt], sampling_params)
-        return outputs[0].outputs[0].text
+        request = outputs[0]
+        completion = request.outputs[0]
+        return completion.text, token_usage(len(request.prompt_token_ids), len(completion.token_ids), source='vllm_token_ids')
 
     if is_api_model(mkey):
         inputs = msgdict
@@ -157,8 +161,13 @@ def _run_model(mkey, model, tokenizer, msg, temp, max_tokens=None):
         else:
             outputs = model(inputs, max_tokens=generation_limit, temperature=temp)
         res = outputs.choices[0].message.content
-        print(f"usage: {outputs.usage}")
-        return res
+        print(f"usage: {getattr(outputs, 'usage', None)}")
+        def field(obj, name):
+            return obj.get(name) if isinstance(obj, dict) else getattr(obj, name, None)
+        usage = getattr(outputs, 'usage', None)
+        details = field(usage, 'completion_tokens_details')
+        return res, token_usage(field(usage, 'prompt_tokens'), field(usage, 'completion_tokens'),
+                                reasoning_tokens=field(details, 'reasoning_tokens'), source='api_usage')
 
     outputs = model.generate(
         inputs,
@@ -168,11 +177,16 @@ def _run_model(mkey, model, tokenizer, msg, temp, max_tokens=None):
         eos_token_id=tokenizer.eos_token_id,
         temperature=temp,
     )
-    return tokenizer.decode(outputs[0][len(inputs[0]):], skip_special_tokens=True)
+    generated = outputs[0][len(inputs[0]):]
+    return tokenizer.decode(generated, skip_special_tokens=True), token_usage(
+        len(inputs[0]), len(generated), source='transformers_token_ids')
 
 def run_model(mkey, model, tokenizer, msg, temp=0.3, max_tokens=None):
     try:
-        return _run_model(mkey, model, tokenizer, msg, temp, max_tokens=max_tokens)
+        response, usage = _run_model(mkey, model, tokenizer, msg, temp, max_tokens=max_tokens)
+        record_usage(usage, Model=mkey)
+        return ModelResponse(response, usage) if response is not None else None
     except Exception as e:
+        record_usage(token_usage(), Model=mkey, Error=type(e).__name__)
         print(f"Error running model: {e}")
         return None

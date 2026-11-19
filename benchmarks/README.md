@@ -8,7 +8,7 @@
 | `list_functions` | cvc5 sequence query and bounded search |
 | `instruction_induction` | LLM judge |
 | `scan` | Exhaustive enumeration |
-| `ilp` | Finite Horn forward chaining (HRI EvenSucc) |
+| `ilp` | cvc5 finite Horn least-model encoding and replayed counterexamples |
 
 ```bash
 python -m benchmarks --list
@@ -37,7 +37,7 @@ Replace `cryptography --benchmark_id caesar:0` with `list_functions --benchmark_
 
 ## Full dataset suites
 
-The full suite currently contains 594 settings: 300 cryptography instances (100 each of Caesar, Atbash, and keyboard), 250 list functions, 24 instruction-induction tasks, 8 SCAN splits, and twelve ILP settings. Every setting runs both standard and CE by default: 1,188 jobs per runner, or 2,376 with `both`. IDs are discovered from local data files rather than inferred from a numeric difficulty order.
+The full suite currently contains 697 settings: 300 cryptography instances (100 each of Caesar, Atbash, and keyboard), 250 list functions, 24 instruction-induction tasks, 104 SCAN splits, and nineteen ILP configurations. Every setting runs both standard and CE by default: 1,394 jobs per runner, or 2,788 with `both`. IDs are discovered from local data files rather than inferred from a numeric difficulty order.
 
 ```bash
 # Preview the complete rule-generation run without calling any model.
@@ -65,29 +65,33 @@ The existing invocation without `--suite all` still runs the five-instance smoke
 
 ## Smaller suite with stratified coverage
 
-Use `--suite balanced` to reduce the number of settings while retaining broader complexity coverage than the smoke suite:
+All 697 locally runnable setting IDs now have versioned, task-specific difficulty annotations; the full pool is annotated within each task; native configurations are all retained, not just the smaller suite. The annotations are a priori proxies, not calibrated LLM difficulty. Training/test IO and oracle domains are unchanged.
 
-- Cryptography: 2 reproducibly sampled instances per cipher family (6 total). This balances families, not difficulty: instances from the same family need not differ substantially in difficulty.
-- List Functions: sort the 250 reference programs by a structural score, divide into three equal-size rank bands, and sample 3 from each (9 total).
-- Instruction Induction: keep all 24 distinct task types.
-- SCAN: keep all 8 splits.
-- ILP: keep the registered EvenSucc setting.
+| Task | Full-pool levels × IDs per level | Default balanced levels × IDs per level |
+|---|---|---|
+| Cryptography | 3 × 100 | 3 × 2 |
+| List Functions | 5 × 50 | 5 × 2 |
+| Instruction Induction | 3 × 8 | 3 × 8 |
+| SCAN | 4 × 26 | 4 × 2 |
+| ILP | 3 tiers: 4/8/7 | 3 × 2 |
 
-This gives 53 settings / 106 std-and-CE jobs per runner, down from 1,188 jobs. Both methods receive exactly the same selected IDs. The structural score is AST node count + 8 per for/while + 4 per if/conditional expression + 3 per call + 2 per subscript + 5 per comprehension clause. It ignores comments/docstring text length; equal scores are ordered by ID. The three bands approximate reference-program complexity, **not measured model difficulty**; sampling is uniform within each band, not uniform across observed accuracy. All instruction task types and SCAN splits are retained rather than assigned unvalidated difficulty labels. This is a stratified diagnostic subset, not an unbiased estimate of the full dataset average.
+Balanced has 54 settings / 108 std-and-CE jobs per runner; all retains 697 settings / 1,394 jobs. List Functions now uses five AST rank bands and `--list-per-tier` defaults to 2 (ten selected IDs). Crypto keeps `--crypto-per-family=2`, using cyclic quotas to balance both family and coverage-tier marginals. These are not equal counts in every family×tier cell. Instruction retains all 24 IDs; SCAN samples two of 26 IDs per tier; ILP retains the same six selected IDs. The all suite keeps every native configuration, including the naturally unequal ILP tier sizes.
+
+Crypto tiers measure training-letter coverage, List Functions uses reference AST complexity, Instruction Induction uses explicit manual task-contract strata, SCAN uses a heuristic generalization-protocol ordering, and ILP uses relational/recursive construction. Levels are not comparable across tasks. Rank-band ties and manual annotation limits are documented. See the [complete 697-ID inventory and rationale](../analysis/benchmark_difficulty/setting_difficulty_catalog_zh.md), [CSV](../analysis/benchmark_difficulty/all_setting_difficulty.csv), and [machine-readable catalog](../datasets/benchmarks/difficulty_catalog.json).
 
 ```bash
-# Preview the default 106-job subset.
+# Preview the default 108-job subset.
 python -m benchmarks.run_suite --runner icl_gen --suite balanced --dry-run
 
 # Run it in a separate output directory.
 python -m benchmarks.run_suite --runner icl_gen --suite balanced --outdir logs/benchmarks_balanced
 
 # Slightly larger variant: 4 list tasks per band and 2 instances per cipher family.
-# 51 settings / 102 std-and-CE jobs; all instruction tasks and SCAN splits remain.
+# 64 settings / 128 std-and-CE jobs; all instruction tasks remain and SCAN samples 8 of 104 splits.
 python -m benchmarks.run_suite --runner icl_gen --suite balanced --list-per-tier 4 --crypto-per-family 2
 ```
 
-`--sample-seed` defaults to 43 and controls selection only; it is distinct from the runner's `--seed` passed after `--`. Selection for a task stays the same when using `--task` filters. Dry-run prints the exact selected IDs and commands for recording the experiment. Using the observed 6.5 hours for the former 68-setting balanced suite, proportional scaling gives approximately 4.5 hours for the former 47-setting suite (std and CE combined, one runner); selecting the six balanced ILP tasks makes the current suite 53 settings / 106 jobs. This is an estimate: per-task cost, oracle changes and early stopping affect runtime. Restore the former sample size with `--list-per-tier 8 --crypto-per-family 4`.
+`--sample-seed` defaults to 43 and controls selection only; it is distinct from the runner's `--seed` passed after `--`. Selection for a task stays the same when using `--task` filters. Dry-run prints the exact selected IDs and commands for recording the experiment. The current selection changes the number of list-function bands and IDs, so older runtime estimates do not transfer directly; oracle cost and early stopping also affect runtime.
 
 ## Equivalence logging for rule generation
 
@@ -179,7 +183,7 @@ As requested for our experiments, the shared prompt still requests concise `<rea
 
 ## SCAN: official data and exhaustive oracle
 
-SCAN retains the official command/action pairs and eight locally available splits (`simple`, `length`, two `addprim` splits and four `template` splits), without reducing grammar or rewriting outputs. The source repository also provides other experimental splits not included in this local suite; these eight should not be described as every setting in the original paper. The original task predicts action sequences with a sequence model ([author repository](https://github.com/brendenlake/SCAN)); generating a Python interpreter and using CE is our method extension, not an original-paper prompt or training protocol.
+SCAN now retains all 104 paired train/test splits from the pinned official repository revision `c4b756cbc010d75c912f16c42c8f15dc6b7e6c8f`, including basic, size variations, additional jump examples, filler and few-shot replications. All original lines are preserved. These are native split conditions, not 104 independent language targets. `datasets/scan/source_manifest.json` records source paths, hashes and row counts; `python datasets/scan/prepare.py` restores the pinned files. Generating a Python interpreter and using CE remain our method adaptation, not the original sequence-learning protocol.
 
 Our prompt requests `transform(x)`, returning a space-separated action string, with concise reasoning/ans tags. The executor now accepts standard Python, including helper functions, loops and imports, with a fresh namespace and a 10-second per-input timeout. It is not a security sandbox. Official train data remain available in full; the configured example budget and epoch schedule determine which training examples reach the LLM. Full selected-split test accuracy is exact sequence matching, regardless of the generic evaluation sample limit.
 
@@ -197,7 +201,7 @@ Future logs include policy, actual oracle prompt, raw verdict, rejection reasons
 
 `ilp/even_succ` adds positive Horn rule induction from [Glanois et al. (ICML 2022)](https://proceedings.mlr.press/v162/glanois22a.html). It is registered beside List Functions rather than flattened into a Python list classifier. The vendored author generator/configuration is pinned and licensed under `datasets/ilp/source`; regenerate the deterministic data with `python datasets/ilp/prepare.py`.
 
-The learner receives task-specific relational background knowledge and Boolean target atoms. It returns recursive, function-free unary/binary Horn clauses inside ans tags, with the shared concise reasoning summary. Every runtime scaleup task has 384 training atoms, with finite least-fixed-point inference. Unary targets use N=384/512 for training/evaluation; binary targets use N=20/24 with all 576 evaluation atoms. The original author 11/15 contexts and six/eight-round budgets remain in the dataset as provenance, not runtime semantics. Standard generation follows the unchanged regex geometric schedule: 3, 6, 12, 24, 48, 96, 192, 384 accumulated examples by default. CE starts with the same first three examples, adds up to eight oracle counterexamples per round and allows eight epochs by default. Both methods stop early on equivalence; eight epochs are a budget, not a guaranteed number of generations. `--start_size`, `--tot_train_size`, `--scale_factor` and `--ce_epochs` remain configurable through the shared runner. Auxiliary predicate invention is supported; Python/modulo shortcuts and numeric constants in rules are excluded. The oracle checks every evaluation atom in the declared context, returns real ground-atom CE and preserves the shared std/CE stopping contract. Accuracy and hard-label MSE/1e-4 success are logged.
+The learner receives task-specific relational background knowledge and Boolean target atoms. It returns recursive, function-free unary/binary Horn clauses inside ans tags, with the shared concise reasoning summary. Runtime scaleup pools contain all 384 unary or 400 binary training atoms, with a default scheduling budget of 384, with finite least-fixed-point inference. Unary targets use N=384/512 for training/evaluation; binary targets use N=20/24 with all 400 training and 576 evaluation atoms. The original author 11/15 contexts and six/eight-round budgets remain in the dataset as provenance, not runtime semantics. Standard generation follows the unchanged regex geometric schedule: 3, 6, 12, 24, 48, 96, 192, 384 accumulated examples by default. CE starts with the same first three examples, adds up to eight oracle counterexamples per round and allows ten epochs by default. Both methods stop early on equivalence; ten epochs are a budget, not a guaranteed number of generations. `--start_size`, `--tot_train_size`, `--scale_factor` and `--ce_epochs` remain configurable through the shared runner. Auxiliary predicate invention is supported; Python/modulo shortcuts and numeric constants in rules are excluded. The oracle checks every evaluation atom in the declared context, returns real ground-atom CE and preserves the shared std/CE stopping contract. Accuracy and hard-label MSE/1e-4 success are logged.
 
 This is an LLM+CE task adaptation, not reproduction of HRI's fuzzy optimizer, proto-rule hierarchy, Gumbel training noise or ten-run experiment. Runtime syntax/resource limits and finite inference semantics are explicit in TaskSettings. Finite acceptance does not prove rule equivalence over arbitrary domains. See [dataset provenance](../datasets/ilp/README.md), [Chinese setting/usage report](../analysis/ilp_integration/setting_and_usage_zh.md) and [undecidable SMT task design notes](../analysis/ilp_integration/undecidable_smt_task_notes_zh.md).
 
@@ -213,4 +217,56 @@ python -m benchmarks.run_suite --runner icl_gen --suite balanced --task ilp --mk
 
 `--task` accepts multiple names together (and remains repeatable), e.g. `--task ilp instruction_induction`.
 
-Balanced selects six ILP tasks from an explicit three-tier inventory of all 19 author synthetic configurations (two per tier): easy `predecessor`, `undirected_edge`; medium `grandparent`, `graph_coloring`; hard `fizz`, `length`. Tiers use reference-rule structure (direct rules, nonrecursive composition, recursion/auxiliary construction), not measured LLM difficulty or a uniform sample of task identities. Selection is fixed and independent of model results and `--sample-seed`. All twelve locally implemented ILP targets remain available under `--suite all`; the other seven author configurations are not implemented. Every task has 384 training atoms; unary tasks evaluate 512 atoms, binary tasks evaluate all 24×24=576 atoms. Graph/family tasks use seeded sparse backgrounds rather than the author's sampler. Historical logs remain unchanged. See [selection rationale](../analysis/ilp_integration/balanced_six_selection_zh.md).
+Balanced selects six ILP tasks from an explicit three-tier inventory of all 19 author synthetic configurations (two per tier): easy `predecessor`, `undirected_edge`; medium `grandparent`, `graph_coloring`; hard `fizz`, `length`. Current catalog tiers use direct relations/ordered-chain closure, relational joins/general-graph paths, and recursive numerical/list construction; these are not measured LLM difficulty or a uniform sample of task identities. Selection is fixed and independent of model results and `--sample-seed`. All nineteen author synthetic configurations are now locally available under `--suite all`. EvenOdd/EvenSucc and Grandparent/Grandparent_NLM overlap in target semantics and are recorded as native configurations, not independent concepts. The seven newly added configurations use the pinned author generators; the prior backgrounds and labels are preserved, with binary training pools completed to all 400 atoms. Every task has 384 training atoms; unary tasks evaluate 512 atoms, binary tasks evaluate all 24×24=576 atoms. Graph/family tasks use seeded sparse backgrounds rather than the author's sampler. Historical logs remain unchanged. See [selection rationale](../analysis/ilp_integration/balanced_six_selection_zh.md).
+
+
+## Token accounting (regex and benchmarks)
+
+New round logs include `InputTokens` and `OutputTokens`. `TokenUsage` contains the same totals, `TotalTokens`, `ModelCalls`, `UsageComplete`, known partial totals, and a `Calls` array. Round totals include every LLM call within that round: candidate generation, retries/repairs, CE generation and LLM oracle verification where applicable. Judging multiple candidates from one response does not multiply its token count. Each generation attempt/query also retains its own `TokenUsage`.
+
+API calls use provider `prompt_tokens`/`completion_tokens`; output tokens therefore include reasoning tokens when the provider includes them. Provider-reported reasoning counts are preserved per call when available. vLLM uses actual prompt/completion token IDs; Transformers uses actual input/generated sequence lengths. Counts include model input formatting and generated special tokens, not just visible response text. No extra generation, tokenization pass or model call is made to collect usage.
+
+When exact usage is unavailable or a call fails without usage, the corresponding total is `null`, `UsageComplete` is false, and known partial totals remain available. Missing usage is never treated as zero. Round scopes are restored after early stopping or exceptions. Existing model callers continue receiving string-compatible responses. Historical logs are not backfilled.
+
+`NumTrainingSamples` already records accumulated training entries used by the round, including added CE, and is not a unique-example count or number of tokens. Generation logs and benchmark direct-IO logs store an integer; the original regex direct-IO runner retains its existing `{positive, negative, total}` schema. Validation queries, oracle inputs and repeated presentations across retries are not additional training entries.
+
+
+### ILP SMT oracle
+
+ILP now uses the cvc5 Python API (no `cvc5` executable). `finite_Horn_ranked_smt_v1` checks the full training label pool and every evaluation target atom. A resource-bounded relevance grounder builds ground rule supports; query-directed slicing then removes auxiliary atoms irrelevant to these targets. The grounder does positive support closure, so SMT does not eliminate finite grounding cost. The oracle does not compare Python prediction labels and merely wrap that verdict in SMT: candidate atoms are Boolean variables; Horn closure and well-founded integer derivation ranks encode their exact least-model truth. A mismatch query against the GT labels drives SAT counterexample extraction or UNSAT acceptance.
+
+SAT witnesses are replayed through the independent Horn executor and stored with their background `num_constants`. `true` requires UNSAT for the complete combined domain; `false` requires a replayed witness; SMT unknown, time/grounding limits or a failed replay do not turn into acceptance. `OracleDetails` records context sizes, support/encoded-atom counts, status, solver query count, elapsed time and proof scope. Defaults: 10 seconds per SMT query, 30 seconds for the whole search, 10 million grounding/join work items, 300,000 facts/supports and 200,000 intermediate bindings. Runtime scoring has its own bounds; an oracle resource-limit result skips repeated expensive scoring. Empty background relations retain their declared arity.
+
+This remains finite-context equivalence, not a proof over arbitrary graphs or arbitrary domain sizes. Training/graph samplers and GraphColoring's existing unary target are unchanged. Previously generated logs retain their original oracle policy. See [implementation and validation](../analysis/ilp_integration/smt_oracle_implementation_zh.md).
+
+
+## Full difficulty inventory and recorded selections
+
+`python -m benchmarks.difficulty` regenerates the catalog, including source SHA-256 checksums. The catalog covers every `--suite all` ID. New benchmark logs record `TaskSettings.Difficulty`; non-default Crypto legacy/OOD settings are flagged as outside the classification basis. Classification metadata is not inserted into learner prompts.
+
+Each normal suite run writes `suite_manifest_<suite>_<mode>_<plan-hash>.json` to its output directory. It records all selected IDs, difficulty metadata, model/mode/runner and extra arguments. Override the path with `--manifest PATH`; explicit manifests can also be exported with `--dry-run`. No model calls are made by catalog generation or dry runs. Historical logs remain unchanged.
+
+```bash
+python -m benchmarks.run_suite --runner icl_gen --suite all --dry-run --manifest analysis/benchmark_difficulty/all_settings.json
+python -m benchmarks.run_suite --runner icl_gen --suite balanced --dry-run --manifest analysis/benchmark_difficulty/balanced_settings.json
+```
+
+
+## Native dataset coverage
+
+Instruction Induction has 24 native task types, containing 67,662 induce IO and 2,156 execute IO in this checkout. Full execute IO is now loaded by default; a positive `--eval_size` explicitly limits supported tasks. Regex keeps its existing default of 32 evaluation examples. Direct-IO ICL evaluates all loaded IO; instruction generation still uses its semantic oracle, not a new hidden executor over the execute split.
+
+Every SCAN split loads its complete original train/test rows; all 104 native conditions are available in `all`. The oracle still checks the 20,910-command universe. ILP covers all 19 author synthetic configurations; new configurations are generated from pinned author code at our declared scaleup sizes, not copied from a nonexistent fixed ILP sample file. WN remains a separate unsupported knowledge-graph task.
+
+The per-run benchmark sample budget now defaults to the complete training pool; `-- --tot_train_size 0` explicitly selects this same default (fixed paper protocols retain their task-specific defaults). Equivalence early stopping remains active, and large training pools can exceed model context limits if reached. Logs distinguish `TrainingPoolSize`, `ScheduledTrainingBudget` and `EvaluationPoolSize`. This change does not concatenate every original IO into the first prompt.
+
+See [native coverage and per-task counts](../analysis/benchmark_difficulty/native_dataset_coverage_zh.md) and the updated [full difficulty inventory](../analysis/benchmark_difficulty/setting_difficulty_catalog_zh.md). Existing logs are unchanged.
+
+
+## Default budgets: full training pool, ten rounds
+
+Benchmarks default to the full available training IO pool (`--tot_train_size 0` has the same meaning). Std geometrically redistributes cumulative sample counts from start_size to that full budget over ten rounds, reaching the full pool in round ten unless equivalence stops earlier. Small pools may repeat sizes. This replaces truncation or padding of the previous doubling schedule. `--scale_factor` applies to the natural schedule restored by `--rounds 0`; a fixed positive round budget determines the effective geometric growth ratio.
+
+CE has ten rounds by default and adds oracle counterexamples as before; it does not forcibly consume the whole training pool. Explicit `--ce_epochs` overrides CE rounds. Explicit positive `--tot_train_size` sets a sample cap for tasks without fixed paper-protocol overrides. Equivalence early stopping remains active. Large full pools can exceed model context limits if reached; no silent truncation is added. New logs record TrainingPoolSize, ScheduledTrainingBudget, RoundBudget and StandardSampleSchedule.
+
+Original regex has no fixed finite native IO pool, so its omitted sample-budget default remains 384; its ten-round schedule also fits the chosen budget. Direct-IO benchmark runners use the same full-pool/ten-round defaults.

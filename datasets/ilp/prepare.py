@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT.parents[1]))
 from benchmarks.ilp_settings import SPECS, REFERENCES, make_split
+from benchmarks.ilp_author_data import CONFIGS as AUTHOR_CONFIGS, split as author_split
 REVISION = '1a3a0465a5a5305ad8fec958901710dc6ead76e4'
 REFERENCE_PROGRAM = '''target(X) :- zero(X).
 aux(X,Y) :- succ(X,Z), succ(Z,Y).
@@ -30,7 +31,7 @@ def main():
             'paper_max_depth': 4, 'paper_num_runs': 10,
             'method': 'LLM_CE_adaptation_not_HRI_optimizer',
             'source_files': {str(p.relative_to(ROOT/'source')): hashlib.sha256(p.read_bytes()).hexdigest()
-                             for p in sorted((ROOT/'source').rglob('*')) if p.is_file()}}
+                             for p in sorted((ROOT/'source').rglob('*')) if p.is_file() and '__pycache__' not in str(p)}}
     data['scaleup'] = {'train': split(384, None), 'eval': split(512, None),
                        'inference': 'finite_least_fixed_point',
                        'paper_setting': False}
@@ -40,17 +41,18 @@ def main():
             continue
         item = {k:v for k,v in data.items() if k not in {'train','eval','scaleup','id','reference_program','author_task'}}
         train_n, eval_n = (384,512) if arity==1 else (20,24)
+        generator = author_split if ident in AUTHOR_CONFIGS else make_split
         item.update(id=ident,author_task=author_task,target_meaning=meaning,
                     reference_program=REFERENCES[ident],
-                    data_sampling='seeded_sparse_scaleup_adaptation_not_author_random_sampler',
-                    scaleup={'train':make_split(ident,train_n,43,384),
-                             'eval':make_split(ident,eval_n,1043),
+                    data_sampling=('pinned_author_generator_seeded_scaleup' if ident in AUTHOR_CONFIGS else 'seeded_sparse_scaleup_adaptation_not_author_random_sampler'),
+                    scaleup={'train':generator(ident,train_n,43),
+                             'eval':generator(ident,eval_n,1043),
                              'inference':'finite_least_fixed_point','paper_setting':False})
         # Root markers retain compatibility with suite data discovery.
         item['train'] = item['scaleup']['train']
         item['eval'] = item['scaleup']['eval']
         (ROOT/f'{ident}.json').write_text(json.dumps(item,ensure_ascii=False,indent=2)+'\n')
-    print(f'Prepared {len(SPECS)} ILP scaleup tasks; balanced selects six; each has 384 training atoms.')
+    print(f'Prepared {len(SPECS)} ILP scaleup configurations; full training pools, balanced selects six.')
 
 
 if __name__ == '__main__': main()

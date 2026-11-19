@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import ast
+import hashlib
 import json
 import os
 import random
@@ -19,24 +19,11 @@ SMOKE = {"cryptography": ["caesar:0"], "list_functions": ["c102"],
 
 
 def list_complexity_tiers():
-    """Rank reference syntax complexity; tiers are proxies, not measured difficulty."""
-    path = ROOT / "datasets/list_functions/raw/list_functions.jsonl"
-    ranked = []
-    for line in path.read_text().splitlines():
-        if not line.strip():
-            continue
-        item = json.loads(line)
-        nodes = list(ast.walk(ast.parse(item["function"])))
-        score = len(nodes)
-        score += 8 * sum(isinstance(n, (ast.For, ast.While)) for n in nodes)
-        score += 4 * sum(isinstance(n, (ast.If, ast.IfExp)) for n in nodes)
-        score += 3 * sum(isinstance(n, ast.Call) for n in nodes)
-        score += 2 * sum(isinstance(n, ast.Subscript) for n in nodes)
-        score += 5 * sum(isinstance(n, ast.comprehension) for n in nodes)
-        ranked.append((score, item["id"]))
-    ranked.sort()
-    count = len(ranked)
-    return [ranked[i * count // 3:(i + 1) * count // 3] for i in range(3)]
+    """Five equal-size reference-AST rank bands, shared with the full catalog."""
+    from benchmarks.difficulty import catalog
+    entries=[e for e in catalog()['settings'] if e['task']=='list_functions']
+    return [sorted((e['features']['score'],e['id']) for e in entries if e['level']==level)
+            for level in range(1,6)]
 
 
 def balanced_settings(selected, list_per_tier, crypto_per_family, sample_seed):
@@ -45,20 +32,31 @@ def balanced_settings(selected, list_per_tier, crypto_per_family, sample_seed):
     available = settings("all", selected)
     chosen = set()
     # Independent random streams keep each task's selection stable under --task filters.
-    for family in ("caesar", "atbash", "keyboard"):
+    from benchmarks.difficulty import annotation
+    # A cyclic allocation balances both the three families and the three
+    # information-coverage tiers, even when per-family count is not /3.
+    for family_index,family in enumerate(("caesar", "atbash", "keyboard")):
         ids = [pair for pair in available if pair[0] == "cryptography"
                and pair[1].startswith(family + ":")]
-        if ids:
-            if crypto_per_family > len(ids):
-                raise ValueError(f"Requested more samples than available for {family}")
-            chosen.update(random.Random(f"{sample_seed}:crypto:{family}").sample(ids, crypto_per_family))
+        if not ids: continue
+        base,remainder=divmod(crypto_per_family,3)
+        for level in range(1,4):
+            pool=[pair for pair in ids if annotation(*pair)['level']==level]
+            count=base+int((level-1-family_index)%3<remainder)
+            if count>len(pool):
+                raise ValueError(f"Requested more samples than available for {family}/L{level}")
+            chosen.update(random.Random(f"{sample_seed}:crypto:{family}:L{level}").sample(pool,count))
     if any(task == "list_functions" for task, _ in available):
         for i, tier in enumerate(list_complexity_tiers()):
             if list_per_tier > len(tier):
                 raise ValueError("Requested more list samples than available in a tier")
             picked = random.Random(f"{sample_seed}:list:{i}").sample(tier, list_per_tier)
             chosen.update(("list_functions", ident) for _, ident in picked)
-    chosen.update(pair for pair in available if pair[0] in ("instruction_induction", "scan"))
+    chosen.update(pair for pair in available if pair[0] == "instruction_induction")
+    if any(task == "scan" for task,_ in available):
+        for level in range(1,5):
+            pool=[pair for pair in available if pair[0]=='scan' and annotation(*pair)['level']==level]
+            chosen.update(random.Random(f"{sample_seed}:scan:L{level}").sample(pool,2))
     if any(task == "ilp" for task, _ in available):
         from benchmarks.ilp_settings import BALANCED_IDS
         wanted = {("ilp", ident) for ident in BALANCED_IDS}
@@ -69,7 +67,7 @@ def balanced_settings(selected, list_per_tier, crypto_per_family, sample_seed):
     return [pair for pair in available if pair in chosen]
 
 
-def settings(suite="all", selected=None, *, list_per_tier=3, crypto_per_family=2, sample_seed=43):
+def settings(suite="all", selected=None, *, list_per_tier=2, crypto_per_family=2, sample_seed=43):
     """Discover IDs from the data, checking paired train/test files exist."""
     selected = selected or TASKS
     if suite == "balanced":
@@ -93,9 +91,10 @@ def settings(suite="all", selected=None, *, list_per_tier=3, crypto_per_family=2
         elif task == "ilp":
             folder = data / "ilp"
             for path in sorted(folder.glob("*.json")):
-                row = json.loads(path.read_text())
-                if "id" in row and "train" in row and "eval" in row:
-                    found.append((task, row["id"]))
+                from benchmarks.ilp_settings import SPECS
+                if path.stem not in SPECS:
+                    raise ValueError(f"Unregistered ILP dataset: {path.name}")
+                found.append((task,path.stem))
         elif task == "instruction_induction":
             folder = data / "instruction_induction/raw"
             for path in sorted((folder / "induce").glob("*.json")):
@@ -127,7 +126,7 @@ def main(argv=None):
                         help="Experiment type (default: icl)")
     parser.add_argument("--suite", choices=("smoke", "all", "balanced"), default="smoke",
                         help="smoke: one default per task; all: every setting; balanced: stratified smaller suite")
-    parser.add_argument("--list-per-tier", type=int, default=3, help="Balanced suite: list functions per complexity tier")
+    parser.add_argument("--list-per-tier", type=int, default=2, help="Balanced suite: list functions per each of five AST rank bands")
     parser.add_argument("--crypto-per-family", type=int, default=2, help="Balanced suite: instances per cipher family")
     parser.add_argument("--sample-seed", type=int, default=43, help="Balanced selection seed; independent of model/run seed")
     parser.add_argument("--task", action="extend", nargs="+", choices=TASKS,
@@ -136,6 +135,7 @@ def main(argv=None):
     parser.add_argument("--mkey", default="gpt-oss")
     parser.add_argument("--outdir", default=os.environ.get("OUTDIR", "logs/benchmarks"))
     parser.add_argument("--python", default=os.environ.get("PYTHON_BIN", sys.executable))
+    parser.add_argument("--manifest", help="Write selected setting IDs and difficulty metadata to this JSON path (also with --dry-run)")
     parser.add_argument("--dry-run", action="store_true", help="Print commands without running or writing logs")
     parser.add_argument("--keep-going", action="store_true", help="Continue after a failed job; exit nonzero if any failed")
     args = parser.parse_args(argv)
@@ -157,8 +157,22 @@ def main(argv=None):
     print(f"Suite={args.suite}; settings={len(instances)} {counts}; jobs={total}", flush=True)
     if args.suite == "balanced":
         print(f"Selection seed={args.sample_seed}; list tiers={args.list_per_tier} each; "
-              f"cipher families={args.crypto_per_family} each; all instruction tasks and SCAN splits retained; six ILP tasks (two per structural difficulty tier). "
-              "Tiers reflect reference syntax complexity, not measured model difficulty.", flush=True)
+              f"cipher families={args.crypto_per_family} each, balanced across three coverage tiers; "
+              "instruction=8/tier, SCAN=2/tier, ILP=2/tier. "
+              "All tiers are task-specific proxies, not measured model difficulty.", flush=True)
+    from benchmarks.difficulty import annotation, catalog, CATALOG
+    plan={"difficulty_catalog_version":catalog()['version'],
+          "difficulty_catalog_sha256":hashlib.sha256(CATALOG.read_bytes()).hexdigest(),"suite":args.suite,
+          "sample_seed":args.sample_seed,"runner":args.runner,"mode":args.mode,"mkey":args.mkey,
+          "list_per_tier":args.list_per_tier,"crypto_per_family":args.crypto_per_family,
+          "extra_args":extra,"jobs":total,
+          "settings":[{"task":task,"id":ident,"difficulty":annotation(task,ident)} for task,ident in instances]}
+    if args.manifest or not args.dry_run:
+        plan_hash=hashlib.sha256(json.dumps(plan,sort_keys=True).encode()).hexdigest()[:12]
+        manifest=Path(args.manifest) if args.manifest else Path(args.outdir)/f"suite_manifest_{args.suite}_{args.mode}_{plan_hash}.json"
+        manifest.parent.mkdir(parents=True,exist_ok=True)
+        manifest.write_text(json.dumps(plan,ensure_ascii=False,indent=2)+"\n")
+        print(f"Selection manifest: {manifest}",flush=True)
     failed = []
     done = 0
     for runner in runners:
@@ -173,7 +187,7 @@ def main(argv=None):
                     command += ["--use_ce", "--ce_batch_size", "8"]
                 command += extra
                 done += 1
-                print(f"[{done}/{total}] {runner} / {task} / {ident} / {mode}", flush=True)
+                print(f"[{done}/{total}] {runner} / {task} / {ident} / {mode} / {annotation(task,ident)['tier']}", flush=True)
                 print(shlex.join(command), flush=True)
                 if args.dry_run:
                     continue

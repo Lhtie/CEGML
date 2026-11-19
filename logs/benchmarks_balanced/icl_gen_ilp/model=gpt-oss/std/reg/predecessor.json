@@ -1,0 +1,124 @@
+{
+    "task_type": "ilp",
+    "benchmark_id": "predecessor",
+    "pipeline": "regex_run_episode",
+    "runs": [
+        [
+            {
+                "Prompt": "REGULARIZATION\nPrefer a concise rule or program that explains all examples. Avoid unnecessary special cases.\n\nInduce a positive function-free Horn program defining the target predicate from background knowledge and labeled ground atoms. The target's intended meaning is hidden; infer it from the examples.\nFor each input N, constants are 0..N-1. zero(0) holds; succ(i,j) holds exactly when j=i+1 and both are in the domain. Target arity: target/2. Training N=20; evaluation/CE N=24. Background facts supply no target labels.\nReturn clauses using lowercase predicate names and uppercase variables, e.g. head(X,Y) :- body1(X,Z), body2(Z,Y).\nEach clause has one head and one or two body atoms, at most three distinct variables, and ends with a period. The target arity is declared with the background below; invented predicates may be unary or binary. Recursive and mutually recursive definitions are allowed. Background predicates are immutable. true and false are nullary Boolean atoms. Use the given relational predicates declared in the background. Do not use Python, arithmetic, numeric constants in rules, function terms, negation, disjunction inside clauses, cuts or external calls. Multiple clauses express alternative derivations. Practical parser budgets are 32 clauses and 12 invented predicates; these are our resource limits, not the HRI hierarchy constraint.\nInference is synchronous Boolean forward chaining from empty invented/target relations until the finite least fixed point. There is no fixed six/eight-round cutoff in this scaleup setting. Each IO input specifies N and a ground target atom. Output only the Horn program inside the requested ans block, with a concise reasoning summary.\n\nLabeled ground atoms (JSON input => Boolean target truth):\n{\"num_constants\": 20, \"atom\": \"target(19,18)\"} => true\n{\"num_constants\": 20, \"atom\": \"target(13,5)\"} => false\n{\"num_constants\": 20, \"atom\": \"target(15,14)\"} => true\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                "Response": "analysisWe need to infer target predicate from examples given background: zero(0) and succ(i,j) for i+1=j. So essentially we have natural numbers 0..N-1 with successor relation.\n\nWe have three labeled examples: target(19,18) true, target(13,5) false, target(15,14) true.\n\nWe need to produce Horn program (positive, function-free) that defines target/2 consistent with these examples, using background predicates zero/1, succ/2, maybe invented predicates.\n\nGoal: find a rule that captures true cases: (19,18) and (15,14) are true; false case (13,5) false.\n\nObservations: Both true pairs have second argument = first -1 (i.e., succ(second, first) holds). Indeed succ(18,19) true, succ(14,15) true. For false pair (13,5): succ(5,13) false (since 5+1=6 not 13). So maybe target(X,Y) :- succ(Y,X). That would make target true exactly when Y is predecessor of X.\n\nCheck domain: succ defined only for consecutive numbers within 0..N-1. So target(0,?) would have no predecessor (since zero is 0). succ(Y,0) would require Y = -1 not in domain, so false.\n\nThus rule: target(X,Y) :- succ(Y,X). That's a single clause, uses only background.\n\nCheck examples: target(19,18) true (succ(18,19) true). target(15,14) true (succ(14,15) true). target(13,5) false (succ(5,13) false). Works.\n\nThus answer: just that clause.\n\nNeed to include target arity declaration? Not required but maybe include comment? The format: head(X,Y) :- body1(X,Z), body2(Z,Y). So we write: target(X,Y) :- succ(Y,X). End with period.\n\nProvide reasoning summary.\n\nThus final.assistantfinal<reasoning>\nThe background provides only the successor relation `succ(i,j)` meaning *j = i+1*.  \nBoth positive examples satisfy `succ(Y,X)`:  \n- `succ(18,19)` \u2192 true \u2192 `target(19,18)`  \n- `succ(14,15)` \u2192 true \u2192 `target(15,14)`  \n\nThe negative example does **not** satisfy `succ(Y,X)`: `succ(5,13)` is false.  \nHence the simplest Horn definition that separates the given cases is:\n\n\u2003`target(X,Y) :- succ(Y,X).`\n\nNo additional predicates or clauses are needed, and the rule respects all resource limits.\n</reasoning>\n\n<ans>\ntarget(X,Y) :- succ(Y,X).\n</ans>",
+                "Prediction": "target(X,Y) :- succ(Y,X).",
+                "Reasoning": "The background provides only the successor relation `succ(i,j)` meaning *j = i+1*.  \nBoth positive examples satisfy `succ(Y,X)`:  \n- `succ(18,19)` \u2192 true \u2192 `target(19,18)`  \n- `succ(14,15)` \u2192 true \u2192 `target(15,14)`  \n\nThe negative example does **not** satisfy `succ(Y,X)`: `succ(5,13)` is false.  \nHence the simplest Horn definition that separates the given cases is:\n\n\u2003`target(X,Y) :- succ(Y,X).`\n\nNo additional predicates or clauses are needed, and the rule respects all resource limits.",
+                "Equivalent": true,
+                "scoreTrainSet": 1.0,
+                "scoreEvalSet": 1.0,
+                "CandidateValid": true,
+                "OracleStatus": "accepted",
+                "OracleCounterexamples": [],
+                "OracleDetails": {
+                    "backend": "finite_Horn_forward_chaining",
+                    "policy": "ilp_scaleup_fixpoint_v2",
+                    "guarantee": "finite_domain_least_fixed_point_equivalence",
+                    "num_constants": 24,
+                    "inference_steps": null,
+                    "examples_checked": 576,
+                    "disagreements": 0,
+                    "domain": "all_target_ground_atoms_on_scaleup_evaluation_context",
+                    "unbounded_rule_equivalence_proved": false
+                },
+                "RepairExamples": [],
+                "EvaluationDetails": {
+                    "test_examples": 576,
+                    "correct": 576,
+                    "sample_accuracy": 1.0,
+                    "all_test_correct": true,
+                    "mse": 0.0,
+                    "paper_success_threshold": 0.0001,
+                    "paper_symbolic_success": true
+                },
+                "epoch": 0,
+                "NumTrainingSamples": 3,
+                "CurrentGuess": "target(X,Y) :- succ(Y,X).",
+                "CurrentGuessReasoning": "The background provides only the successor relation `succ(i,j)` meaning *j = i+1*.  \nBoth positive examples satisfy `succ(Y,X)`:  \n- `succ(18,19)` \u2192 true \u2192 `target(19,18)`  \n- `succ(14,15)` \u2192 true \u2192 `target(15,14)`  \n\nThe negative example does **not** satisfy `succ(Y,X)`: `succ(5,13)` is false.  \nHence the simplest Horn definition that separates the given cases is:\n\n\u2003`target(X,Y) :- succ(Y,X).`\n\nNo additional predicates or clauses are needed, and the rule respects all resource limits.",
+                "Accuracy": 1,
+                "Logs": [
+                    {
+                        "Prompt": "REGULARIZATION\nPrefer a concise rule or program that explains all examples. Avoid unnecessary special cases.\n\nInduce a positive function-free Horn program defining the target predicate from background knowledge and labeled ground atoms. The target's intended meaning is hidden; infer it from the examples.\nFor each input N, constants are 0..N-1. zero(0) holds; succ(i,j) holds exactly when j=i+1 and both are in the domain. Target arity: target/2. Training N=20; evaluation/CE N=24. Background facts supply no target labels.\nReturn clauses using lowercase predicate names and uppercase variables, e.g. head(X,Y) :- body1(X,Z), body2(Z,Y).\nEach clause has one head and one or two body atoms, at most three distinct variables, and ends with a period. The target arity is declared with the background below; invented predicates may be unary or binary. Recursive and mutually recursive definitions are allowed. Background predicates are immutable. true and false are nullary Boolean atoms. Use the given relational predicates declared in the background. Do not use Python, arithmetic, numeric constants in rules, function terms, negation, disjunction inside clauses, cuts or external calls. Multiple clauses express alternative derivations. Practical parser budgets are 32 clauses and 12 invented predicates; these are our resource limits, not the HRI hierarchy constraint.\nInference is synchronous Boolean forward chaining from empty invented/target relations until the finite least fixed point. There is no fixed six/eight-round cutoff in this scaleup setting. Each IO input specifies N and a ground target atom. Output only the Horn program inside the requested ans block, with a concise reasoning summary.\n\nLabeled ground atoms (JSON input => Boolean target truth):\n{\"num_constants\": 20, \"atom\": \"target(19,18)\"} => true\n{\"num_constants\": 20, \"atom\": \"target(13,5)\"} => false\n{\"num_constants\": 20, \"atom\": \"target(15,14)\"} => true\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                        "Response": "analysisWe need to infer target predicate from examples given background: zero(0) and succ(i,j) for i+1=j. So essentially we have natural numbers 0..N-1 with successor relation.\n\nWe have three labeled examples: target(19,18) true, target(13,5) false, target(15,14) true.\n\nWe need to produce Horn program (positive, function-free) that defines target/2 consistent with these examples, using background predicates zero/1, succ/2, maybe invented predicates.\n\nGoal: find a rule that captures true cases: (19,18) and (15,14) are true; false case (13,5) false.\n\nObservations: Both true pairs have second argument = first -1 (i.e., succ(second, first) holds). Indeed succ(18,19) true, succ(14,15) true. For false pair (13,5): succ(5,13) false (since 5+1=6 not 13). So maybe target(X,Y) :- succ(Y,X). That would make target true exactly when Y is predecessor of X.\n\nCheck domain: succ defined only for consecutive numbers within 0..N-1. So target(0,?) would have no predecessor (since zero is 0). succ(Y,0) would require Y = -1 not in domain, so false.\n\nThus rule: target(X,Y) :- succ(Y,X). That's a single clause, uses only background.\n\nCheck examples: target(19,18) true (succ(18,19) true). target(15,14) true (succ(14,15) true). target(13,5) false (succ(5,13) false). Works.\n\nThus answer: just that clause.\n\nNeed to include target arity declaration? Not required but maybe include comment? The format: head(X,Y) :- body1(X,Z), body2(Z,Y). So we write: target(X,Y) :- succ(Y,X). End with period.\n\nProvide reasoning summary.\n\nThus final.assistantfinal<reasoning>\nThe background provides only the successor relation `succ(i,j)` meaning *j = i+1*.  \nBoth positive examples satisfy `succ(Y,X)`:  \n- `succ(18,19)` \u2192 true \u2192 `target(19,18)`  \n- `succ(14,15)` \u2192 true \u2192 `target(15,14)`  \n\nThe negative example does **not** satisfy `succ(Y,X)`: `succ(5,13)` is false.  \nHence the simplest Horn definition that separates the given cases is:\n\n\u2003`target(X,Y) :- succ(Y,X).`\n\nNo additional predicates or clauses are needed, and the rule respects all resource limits.\n</reasoning>\n\n<ans>\ntarget(X,Y) :- succ(Y,X).\n</ans>",
+                        "Prediction": "target(X,Y) :- succ(Y,X).",
+                        "Reasoning": "The background provides only the successor relation `succ(i,j)` meaning *j = i+1*.  \nBoth positive examples satisfy `succ(Y,X)`:  \n- `succ(18,19)` \u2192 true \u2192 `target(19,18)`  \n- `succ(14,15)` \u2192 true \u2192 `target(15,14)`  \n\nThe negative example does **not** satisfy `succ(Y,X)`: `succ(5,13)` is false.  \nHence the simplest Horn definition that separates the given cases is:\n\n\u2003`target(X,Y) :- succ(Y,X).`\n\nNo additional predicates or clauses are needed, and the rule respects all resource limits.",
+                        "Equivalent": true,
+                        "scoreTrainSet": 1.0,
+                        "scoreEvalSet": 1.0,
+                        "CandidateValid": true,
+                        "OracleStatus": "accepted",
+                        "OracleCounterexamples": [],
+                        "OracleDetails": {
+                            "backend": "finite_Horn_forward_chaining",
+                            "policy": "ilp_scaleup_fixpoint_v2",
+                            "guarantee": "finite_domain_least_fixed_point_equivalence",
+                            "num_constants": 24,
+                            "inference_steps": null,
+                            "examples_checked": 576,
+                            "disagreements": 0,
+                            "domain": "all_target_ground_atoms_on_scaleup_evaluation_context",
+                            "unbounded_rule_equivalence_proved": false
+                        },
+                        "RepairExamples": [],
+                        "EvaluationDetails": {
+                            "test_examples": 576,
+                            "correct": 576,
+                            "sample_accuracy": 1.0,
+                            "all_test_correct": true,
+                            "mse": 0.0,
+                            "paper_success_threshold": 0.0001,
+                            "paper_symbolic_success": true
+                        }
+                    }
+                ],
+                "Counterexamples": [],
+                "TrainingExampleSource": "scheduled",
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to infer target predicate from examples given background: zero(0) and succ(i,j) for i+1=j. So essentially we have natural numbers 0..N-1 with successor relation.\n\nWe have three labeled examples: target(19,18) true, target(13,5) false, target(15,14) true.\n\nWe need to produce Horn program (positive, function-free) that defines target/2 consistent with these examples, using background predicates zero/1, succ/2, maybe invented predicates.\n\nGoal: find a rule that captures true cases: (19,18) and (15,14) are true; false case (13,5) false.\n\nObservations: Both true pairs have second argument = first -1 (i.e., succ(second, first) holds). Indeed succ(18,19) true, succ(14,15) true. For false pair (13,5): succ(5,13) false (since 5+1=6 not 13). So maybe target(X,Y) :- succ(Y,X). That would make target true exactly when Y is predecessor of X.\n\nCheck domain: succ defined only for consecutive numbers within 0..N-1. So target(0,?) would have no predecessor (since zero is 0). succ(Y,0) would require Y = -1 not in domain, so false.\n\nThus rule: target(X,Y) :- succ(Y,X). That's a single clause, uses only background.\n\nCheck examples: target(19,18) true (succ(18,19) true). target(15,14) true (succ(14,15) true). target(13,5) false (succ(5,13) false). Works.\n\nThus answer: just that clause.\n\nNeed to include target arity declaration? Not required but maybe include comment? The format: head(X,Y) :- body1(X,Z), body2(Z,Y). So we write: target(X,Y) :- succ(Y,X). End with period.\n\nProvide reasoning summary.\n\nThus final.assistantfinal<reasoning>\nThe background provides only the successor relation `succ(i,j)` meaning *j = i+1*.  \nBoth positive examples satisfy `succ(Y,X)`:  \n- `succ(18,19)` \u2192 true \u2192 `target(19,18)`  \n- `succ(14,15)` \u2192 true \u2192 `target(15,14)`  \n\nThe negative example does **not** satisfy `succ(Y,X)`: `succ(5,13)` is false.  \nHence the simplest Horn definition that separates the given cases is:\n\n\u2003`target(X,Y) :- succ(Y,X).`\n\nNo additional predicates or clauses are needed, and the rule respects all resource limits.\n</reasoning>\n\n<ans>\ntarget(X,Y) :- succ(Y,X).\n</ans>",
+                        "Prediction": "target(X,Y) :- succ(Y,X).",
+                        "Reasoning": "The background provides only the successor relation `succ(i,j)` meaning *j = i+1*.  \nBoth positive examples satisfy `succ(Y,X)`:  \n- `succ(18,19)` \u2192 true \u2192 `target(19,18)`  \n- `succ(14,15)` \u2192 true \u2192 `target(15,14)`  \n\nThe negative example does **not** satisfy `succ(Y,X)`: `succ(5,13)` is false.  \nHence the simplest Horn definition that separates the given cases is:\n\n\u2003`target(X,Y) :- succ(Y,X).`\n\nNo additional predicates or clauses are needed, and the rule respects all resource limits.",
+                        "Error": null
+                    }
+                ],
+                "StopReason": "oracle_accepted"
+            }
+        ]
+    ],
+    "oracle": "finite_Horn_forward_chaining",
+    "TaskSettings": {
+        "paper_url": "https://proceedings.mlr.press/v162/glanois22a.html",
+        "author_repository": "https://github.com/claireaoi/hierarchical-rule-induction",
+        "author_revision": "1a3a0465a5a5305ad8fec958901710dc6ead76e4",
+        "author_task": "Predecessor",
+        "method": "LLM_CE_adaptation_not_HRI_optimizer",
+        "paper_max_depth": 4,
+        "paper_num_runs": 10,
+        "setting": "predecessor_scaleup",
+        "train_num_constants": 20,
+        "eval_num_constants": 24,
+        "train_examples": 384,
+        "eval_examples": 576,
+        "target_arity": 2,
+        "train_inference_steps": null,
+        "eval_inference_steps": null,
+        "sample_schedule": "shared_regex_geometric_scaling",
+        "default_start_size": 3,
+        "default_ce_start_size": 3,
+        "clean_labels": true,
+        "hypothesis": "positive_function_free_unary_binary_Horn",
+        "data_sampling": "seeded_sparse_scaleup_adaptation_not_author_random_sampler",
+        "hierarchy_bias": "HRI_R_star_layer_parameterization_not_enforced",
+        "paper_optimizer_reproduced": false,
+        "inference": "synchronous_boolean_least_fixed_point",
+        "parser_resource_limits": {
+            "max_clauses": 32,
+            "max_invented_predicates": 12
+        }
+    }
+}

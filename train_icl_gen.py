@@ -8,6 +8,7 @@ import signal
 import numpy as np
 from tqdm import tqdm
 from types import SimpleNamespace
+from scheduling import round_schedule
 
 from modeling.llm import is_vllm_model, load_model_and_tokenizer
 from tasks.rl import SimplyRegularLanguage, ExtRegularLanguage
@@ -19,6 +20,7 @@ from tasks.utils import dfa_accepts_ex
 from tasks.benchmarks import BenchmarkTask
 from prompting.benchmarks import PROMPTS as BENCHMARK_PROMPTS, REGULARIZATION as BENCHMARK_REGULARIZATION
 from modeling.llm import run_model
+from modeling.usage import track_token_usage, response_usage, call_with_usage
 from prompting.rl import (
     AGENTIC_REFLECTION_INSTR,
     AGENTIC_REPAIR_INSTR,
@@ -283,182 +285,186 @@ def run_episode(
         candidate_builder = adapter.candidate_prompt
     accs = []
     agg_train_ex, agg_train_labels = [], []
-    num_samples = log_scaling(config.tot_train_size, config.start_size, config.scale_factor)
-    epochs = config.ce_epochs if config.use_ce else len(num_samples)
+    round_budget = getattr(config,"rounds",0)
+    num_samples = round_schedule(log_scaling(config.tot_train_size, config.start_size, config.scale_factor),round_budget)
+    ce_budget = getattr(config,"ce_epochs",None)
+    epochs = (ce_budget if ce_budget is not None else round_budget or 10) if config.use_ce else len(num_samples)
 
     current_guess = None
     current_guess_reasoning = None
     epoch_results = []
 
     for epoch in range(epochs):
-        reflection_prompt = ""
-        if config.use_ce:
-            try:
-                train_ex, train_labels = teacher.generate_counterexamples(
-                    bs=config.ce_batch_size,
-                    regex_gt=regex,
-                    regex_gen=current_guess,
-                    clustered=config.ce_clustered,
-                    generation_mode=config.ce_generation_mode,
-                )
-                if uses_reflection_prompt(config.reasoning_mode):
-                    reflection_prompt = reflection_builder(
-                        current_guess_reasoning,
-                        current_guess,
-                        train_ex,
-                        train_labels,
+        with track_token_usage() as epoch_usage:
+            reflection_prompt = ""
+            if config.use_ce:
+                try:
+                    train_ex, train_labels = teacher.generate_counterexamples(
+                        bs=config.ce_batch_size,
+                        regex_gt=regex,
+                        regex_gen=current_guess,
+                        clustered=config.ce_clustered,
+                        generation_mode=config.ce_generation_mode,
                     )
-            except Exception as e:
-                print(f"Cannot generate counterexamples at epoch {epoch}: {e}, use {config.ce_start_size} random examples instead.")
-                train_ex = data["train_ex"][epoch * config.ce_start_size:(epoch + 1) * config.ce_start_size]
-                train_labels = data["train_labels"][epoch * config.ce_start_size:(epoch + 1) * config.ce_start_size]
-                
-        else:
-            l, r = len(agg_train_ex), num_samples[epoch]
-            train_ex = data["train_ex"][l:r]
-            train_labels = data["train_labels"][l:r]
+                    if uses_reflection_prompt(config.reasoning_mode):
+                        reflection_prompt = reflection_builder(
+                            current_guess_reasoning,
+                            current_guess,
+                            train_ex,
+                            train_labels,
+                        )
+                except Exception as e:
+                    print(f"Cannot generate counterexamples at epoch {epoch}: {e}, use {config.ce_start_size} random examples instead.")
+                    train_ex = data["train_ex"][epoch * config.ce_start_size:(epoch + 1) * config.ce_start_size]
+                    train_labels = data["train_labels"][epoch * config.ce_start_size:(epoch + 1) * config.ce_start_size]
 
-        agg_train_ex += train_ex
-        agg_train_labels += train_labels
-        train_p = "\n".join(
-            [format_pair(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)]
-        )
+            else:
+                l, r = len(agg_train_ex), num_samples[epoch]
+                train_ex = data["train_ex"][l:r]
+                train_labels = data["train_labels"][l:r]
 
-        msgs, acc = [], 0
-        retry_prompt, retry_done_score = "", 0.0
-        best_retry_score = -1.0
-        best_retry_msg = None
-        msg = None
-        for retry_idx in range(config.retries):
-            iter_prompt_kwargs = dict(prompt_kwargs)
-            if uses_candidate_repair(config.reasoning_mode):
-                iter_prompt_kwargs["agentic_reflection_instr"] = (
-                    reflection_prompt
-                    + candidate_builder(
-                        candidate_count=config.candidate_repair_count,
-                    )
-                )
-            elif uses_reflection_prompt(config.reasoning_mode) or uses_repair_loop(config.reasoning_mode):
-                iter_prompt_kwargs["agentic_reflection_instr"] = (
-                    reflection_prompt + retry_prompt
-                )
-
-            msg = generate_fn(
-                prompt_template=prompt_template,
-                train_prompt=train_p,
-                prompt_format_kwargs=iter_prompt_kwargs,
-                answer_extractor=extract_all_ans if uses_candidate_repair(config.reasoning_mode) else extract_ans,
-                reasoning_extractor=extract_reasoning,
+            agg_train_ex += train_ex
+            agg_train_labels += train_labels
+            train_p = "\n".join(
+                [format_pair(ex, label) for ex, label in zip(agg_train_ex, agg_train_labels)]
             )
 
-            if uses_candidate_repair(config.reasoning_mode):
-                candidates = msg.get("Prediction") or []
-                msg["IsCandidateRepairBatch"] = True
-                msg["CandidateCount"] = len(candidates)
+            msgs, acc = [], 0
+            retry_prompt, retry_done_score = "", 0.0
+            best_retry_score = -1.0
+            best_retry_msg = None
+            msg = None
+            for retry_idx in range(config.retries):
+                iter_prompt_kwargs = dict(prompt_kwargs)
+                if uses_candidate_repair(config.reasoning_mode):
+                    iter_prompt_kwargs["agentic_reflection_instr"] = (
+                        reflection_prompt
+                        + candidate_builder(
+                            candidate_count=config.candidate_repair_count,
+                        )
+                    )
+                elif uses_reflection_prompt(config.reasoning_mode) or uses_repair_loop(config.reasoning_mode):
+                    iter_prompt_kwargs["agentic_reflection_instr"] = (
+                        reflection_prompt + retry_prompt
+                    )
+
+                msg = generate_fn(
+                    prompt_template=prompt_template,
+                    train_prompt=train_p,
+                    prompt_format_kwargs=iter_prompt_kwargs,
+                    answer_extractor=extract_all_ans if uses_candidate_repair(config.reasoning_mode) else extract_ans,
+                    reasoning_extractor=extract_reasoning,
+                )
+
+                if uses_candidate_repair(config.reasoning_mode):
+                    candidates = msg.get("Prediction") or []
+                    msg["IsCandidateRepairBatch"] = True
+                    msg["CandidateCount"] = len(candidates)
+                    msgs.append(msg)
+                    if on_retry is not None:
+                        on_retry(epoch, msgs)
+
+                    if len(candidates) == 0:
+                        msg["Error"] = "Not enough candidate regexes extracted from candidate repair response."
+                        break
+
+                    for candidate_idx, candidate_regex in enumerate(candidates[:min(len(candidates), config.candidate_repair_count)]):
+                        candidate_msg = {
+                            **msg,
+                            "Prediction": candidate_regex,
+                            "Reasoning": msg.get("Reasoning"),
+                            "CandidateIndex": candidate_idx,
+                            "IsCandidateRepair": True,
+                        }
+                        print(f"Epoch {epoch}, Candidate {candidate_idx}\nPrediction: {candidate_regex}", flush=True)
+                        candidate_msg = teacher.judge_regex(
+                            msg=candidate_msg,
+                            fst_gt=fst_gt,
+                            train_ex=agg_train_ex,
+                            train_labels=agg_train_labels,
+                            eval_ex=data["eval_ex"],
+                            eval_labels=data["eval_labels"]
+                        )
+                        _, candidate_retry_score = retry_builder(
+                            task=task,
+                            msg=candidate_msg,
+                            train_ex=agg_train_ex,
+                            train_labels=agg_train_labels,
+                        )
+                        candidate_msg["RepairScore"] = candidate_retry_score
+                        msgs.append(candidate_msg)
+                        if on_retry is not None:
+                            on_retry(epoch, msgs)
+
+                        if candidate_msg.get("Equivalent"):
+                            acc = max(acc, 1)
+                        if best_retry_msg is None or candidate_retry_score >= best_retry_score:
+                            best_retry_score = candidate_retry_score
+                            best_retry_msg = candidate_msg
+
+                        if candidate_retry_score >= 1.0:
+                            break
+                    break
+
+                print(f"Epoch {epoch}, Retry {retry_idx}\nPrediction: {msg['Prediction']}\nReasoning: {msg['Reasoning']}", flush=True)
+                msg = teacher.judge_regex(
+                    msg=msg,
+                    fst_gt=fst_gt,
+                    train_ex=agg_train_ex,
+                    train_labels=agg_train_labels,
+                    eval_ex=data["eval_ex"],
+                    eval_labels=data["eval_labels"]
+                )
+                if msg.get("Equivalent"):
+                    acc = max(acc, 1)
                 msgs.append(msg)
                 if on_retry is not None:
                     on_retry(epoch, msgs)
 
-                if len(candidates) == 0:
-                    msg["Error"] = "Not enough candidate regexes extracted from candidate repair response."
-                    break
-
-                for candidate_idx, candidate_regex in enumerate(candidates[:min(len(candidates), config.candidate_repair_count)]):
-                    candidate_msg = {
-                        **msg,
-                        "Prediction": candidate_regex,
-                        "Reasoning": msg.get("Reasoning"),
-                        "CandidateIndex": candidate_idx,
-                        "IsCandidateRepair": True,
-                    }
-                    print(f"Epoch {epoch}, Candidate {candidate_idx}\nPrediction: {candidate_regex}", flush=True)
-                    candidate_msg = teacher.judge_regex(
-                        msg=candidate_msg,
-                        fst_gt=fst_gt,
-                        train_ex=agg_train_ex,
-                        train_labels=agg_train_labels,
-                        eval_ex=data["eval_ex"],
-                        eval_labels=data["eval_labels"]
-                    )
-                    _, candidate_retry_score = retry_builder(
+                if uses_repair_loop(config.reasoning_mode):
+                    retry_prompt, retry_done_score = retry_builder(
                         task=task,
-                        msg=candidate_msg,
+                        msg=msg,
                         train_ex=agg_train_ex,
                         train_labels=agg_train_labels,
                     )
-                    candidate_msg["RepairScore"] = candidate_retry_score
-                    msgs.append(candidate_msg)
-                    if on_retry is not None:
-                        on_retry(epoch, msgs)
-
-                    if candidate_msg.get("Equivalent"):
-                        acc = max(acc, 1)
-                    if best_retry_msg is None or candidate_retry_score >= best_retry_score:
-                        best_retry_score = candidate_retry_score
-                        best_retry_msg = candidate_msg
-
-                    if candidate_retry_score >= 1.0:
+                    if best_retry_msg is None or retry_done_score >= best_retry_score:
+                        best_retry_score = retry_done_score
+                        best_retry_msg = msg
+                    if retry_done_score >= 1.0:
                         break
-                break
-
-            print(f"Epoch {epoch}, Retry {retry_idx}\nPrediction: {msg['Prediction']}\nReasoning: {msg['Reasoning']}", flush=True)
-            msg = teacher.judge_regex(
-                msg=msg,
-                fst_gt=fst_gt,
-                train_ex=agg_train_ex,
-                train_labels=agg_train_labels,
-                eval_ex=data["eval_ex"],
-                eval_labels=data["eval_labels"]
-            )
-            if msg.get("Equivalent"):
-                acc = max(acc, 1)
-            msgs.append(msg)
-            if on_retry is not None:
-                on_retry(epoch, msgs)
-            
-            if uses_repair_loop(config.reasoning_mode):
-                retry_prompt, retry_done_score = retry_builder(
-                    task=task,
-                    msg=msg,
-                    train_ex=agg_train_ex,
-                    train_labels=agg_train_labels,
-                )
-                if best_retry_msg is None or retry_done_score >= best_retry_score:
-                    best_retry_score = retry_done_score
-                    best_retry_msg = msg
-                if retry_done_score >= 1.0:
+                else:
+                    best_retry_msg = None
                     break
+                if msg.get("Equivalent"):
+                    break
+
+            if best_retry_msg is not None:
+                current_guess = best_retry_msg.get("Prediction")
+                current_guess_reasoning = best_retry_msg.get("Reasoning")
+            elif msg is not None and not msg.get("IsCandidateRepairBatch"):
+                current_guess = msg.get("Prediction")
+                current_guess_reasoning = msg.get("Reasoning")
             else:
-                best_retry_msg = None
+                current_guess = None
+                current_guess_reasoning = None
+
+            epoch_result = {
+                "Accuracy": acc,
+                "NumTrainingSamples": len(agg_train_ex),
+                "CurrentGuess": current_guess,
+                "CurrentGuessReasoning": current_guess_reasoning,
+                "Logs": msgs,
+                **epoch_usage.log_fields(),
+            }
+            epoch_results.append(epoch_result)
+            accs.append(acc)
+
+            if on_epoch_end is not None:
+                on_epoch_end(epoch, epoch_result)
+
+            if acc == 1.0:
                 break
-            if msg.get("Equivalent"):
-                break
-
-        if best_retry_msg is not None:
-            current_guess = best_retry_msg.get("Prediction")
-            current_guess_reasoning = best_retry_msg.get("Reasoning")
-        elif msg is not None and not msg.get("IsCandidateRepairBatch"):
-            current_guess = msg.get("Prediction")
-            current_guess_reasoning = msg.get("Reasoning")
-        else:
-            current_guess = None
-            current_guess_reasoning = None
-
-        epoch_result = {
-            "Accuracy": acc,
-            "NumTrainingSamples": len(agg_train_ex),
-            "CurrentGuess": current_guess,
-            "CurrentGuessReasoning": current_guess_reasoning,
-            "Logs": msgs,
-        }
-        epoch_results.append(epoch_result)
-        accs.append(acc)
-
-        if on_epoch_end is not None:
-            on_epoch_end(epoch, epoch_result)
-
-        if acc == 1.0:
-            break
 
     return {
         "epoch_results": epoch_results,
@@ -478,8 +484,8 @@ def main(argv=None):
     parser.add_argument("--max_length", type=int, default=32)
     parser.add_argument("--eval_max_length", type=int, default=32)
     parser.add_argument("--mkey", type=str, default="gpt5")
-    parser.add_argument("--tot_train_size", type=int, default=384)
-    parser.add_argument("--eval_size", type=int, default=32)
+    parser.add_argument("--tot_train_size",type=int,default=None,help="Benchmark default: full available training pool; positive value sets a cap")
+    parser.add_argument("--eval_size", type=int, default=None, help="Benchmark: all test IO by default; regex: 32. Positive value explicitly limits supported tasks.")
     parser.add_argument("--start_size", type=int, default=3)
     parser.add_argument("--scale_factor", type=float, default=2.0)
     parser.add_argument("--seed", type=int, default=43)
@@ -488,7 +494,8 @@ def main(argv=None):
     parser.add_argument("--retries", type=int, default=1)
     parser.add_argument("--use_reg", default=False, action="store_true")
     parser.add_argument("--use_ce", default=False, action="store_true")
-    parser.add_argument("--ce_epochs", type=int, default=8)
+    parser.add_argument("--rounds", type=int, default=10, help="Round budget for std/CE; 0 retains the natural std sample schedule")
+    parser.add_argument("--ce_epochs", type=int, default=None, help="Override CE round budget; otherwise use --rounds")
     parser.add_argument("--ce_start_size", type=int, default=8)
     parser.add_argument("--ce_batch_size", type=int, default=None,
                         help="Maximum counterexamples per benchmark round (default 8); regex default 128")
@@ -529,13 +536,19 @@ def main(argv=None):
     parser.add_argument("--indir", type=str, default="datasets")
     parser.add_argument("--outdir", type=str, default="logs/opt_prompt")
     args = parser.parse_args(argv)
+    if args.rounds<0 or (args.ce_epochs is not None and args.ce_epochs<1):
+        parser.error("rounds must be non-negative and ce_epochs must be positive")
     if args.task_type in BENCHMARK_PROMPTS:
+        if args.tot_train_size is None:args.tot_train_size=0
         if args.ce_batch_size is None:
             args.ce_batch_size = 8
         return run_benchmark(args)
+    if args.tot_train_size is None:args.tot_train_size=384
+    if args.eval_size is None:
+        args.eval_size = 32
     if args.ce_batch_size is None:
         args.ce_batch_size = 128
-    
+
     args.outdir = os.path.join(args.outdir, f"icl_gen_{args.task_type}")
     use_vllm = is_vllm_model(args.mkey)
 
@@ -579,7 +592,7 @@ def main(argv=None):
         config_name += f"prompt={args.prompt_mode}/" if args.prompt_mode != "full" else ""
         ce_mode = f"_{args.ce_generation_mode}"
         ce_clustered = "_clustered" if args.ce_clustered else ""
-        config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs}_ceBatch={args.ce_batch_size}{ce_mode}{ce_clustered}.json"
+        config_name += f"msgdict_regex={args.regex}_ceEpochs={args.ce_epochs or args.rounds or 10}_ceBatch={args.ce_batch_size}{ce_mode}{ce_clustered}.json"
 
     generate_dataset(args, task_type=args.task_type, outdir=args.indir)
     dataset = os.path.join(
@@ -667,7 +680,7 @@ def run_benchmark(args, model=None, tokenizer=None, response_fn=None):
         stage = 'oracle LLM' if prompt.startswith(('You are checking', 'You are the teacher oracle')) else 'candidate generation'
         print(f"[benchmark] {stage} started; prompt_chars={len(prompt)}", flush=True)
         started = time.monotonic()
-        response = response_fn(prompt)
+        response = call_with_usage(response_fn, prompt)
         print(f"[benchmark] {stage} finished ({time.monotonic()-started:.1f}s)", flush=True)
         return response
     outdir = os.path.join(args.outdir, f"icl_gen_{args.task_type}", f"model={args.mkey}",
@@ -688,7 +701,8 @@ def run_benchmark(args, model=None, tokenizer=None, response_fn=None):
             random.Random(args.seed + runid).shuffle(train)
         config_values = dict(vars(args))
         config_values.update(
-            tot_train_size=min(args.tot_train_size, len(train)),
+            tot_train_size=(len(train) if args.tot_train_size is None or args.tot_train_size<=0 else min(args.tot_train_size,len(train))),
+            rounds=getattr(args,"rounds",10),ce_epochs=getattr(args,"ce_epochs",None),
             reasoning_mode=getattr(args, "reasoning_mode", "agentic_reflection"),
             candidate_repair_count=getattr(args, "candidate_repair_count", 10),
             ce_clustered=getattr(args, "ce_clustered", False),
@@ -697,6 +711,11 @@ def run_benchmark(args, model=None, tokenizer=None, response_fn=None):
         )
         config_values.update(getattr(task, "episode_defaults", {}))
         config = SimpleNamespace(**config_values)
+        task.task_settings.update(TrainingPoolSize=len(train),ScheduledTrainingBudget=config.tot_train_size,
+                                  EvaluationPoolSize=len(task.eval),
+                                  RoundBudget=((config.ce_epochs or config.rounds or 10) if config.use_ce else config.rounds or None))
+        task.task_settings["StandardSampleSchedule"] = round_schedule(
+            log_scaling(config.tot_train_size,config.start_size,config.scale_factor),config.rounds)
         data = {"train_ex": [x for x, _ in train], "train_labels": [y for _, y in train],
                 "eval_ex": [x for x, _ in task.eval], "eval_labels": [y for _, y in task.eval]}
         adapter = BenchmarkEpisodeAdapter(task, config, data, logged_response)
@@ -717,7 +736,7 @@ def run_benchmark(args, model=None, tokenizer=None, response_fn=None):
             return {"Prompt": prompt, "Response": response,
                     "Prediction": task.extract_candidate(response, answer_extractor,
                                                          multiple=answer_extractor is extract_all_ans),
-                    "Reasoning": reasoning_extractor(response)}
+                    "Reasoning": reasoning_extractor(response), "TokenUsage": response_usage(response)}
 
         def on_retry(epoch, msgs):
             # Same incremental checkpoint callback as the regex entry point.

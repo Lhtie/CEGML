@@ -10,6 +10,8 @@ from pathlib import Path
 
 from prompting.benchmarks import ICL_PROMPT, ICL_TASKS
 from tasks.benchmarks import BenchmarkTask
+from scheduling import round_schedule
+from modeling.usage import track_token_usage, response_usage, call_with_usage
 
 
 DEFAULT_IDS = {
@@ -70,13 +72,13 @@ def _prompt(task: BenchmarkTask, seen, inputs, regularize=False):
 
 def _query(task, seen, batch, call_model, regularize=False):
     prompt = _prompt(task, seen, [x for x, _ in batch], regularize)
-    response = call_model(prompt)
+    response = call_with_usage(call_model, prompt)
     answers = _parse_answers(response, len(batch))
     correct = None if answers is None else sum(
         _equal(task.kind, prediction, expected)
         for prediction, (_, expected) in zip(answers, batch)
     )
-    return {"Prompt": prompt, "Response": response, "Prediction": answers,
+    return {"Prompt": prompt, "Response": response, "TokenUsage": response_usage(response), "Prediction": answers,
             "GroundTruth": [y for _, y in batch], "Correct": correct}
 
 
@@ -96,8 +98,12 @@ def run_icl(args, response_fn=None):
     if getattr(task, "shuffle_training", True):
         rng.shuffle(pool)
     defaults = getattr(task, "episode_defaults", {})
-    total = min(defaults.get("tot_train_size", args.tot_train_size), len(pool))
-    sizes = _schedule(total, defaults.get("start_size", args.start_size), args.scale_factor)
+    requested_total=defaults.get("tot_train_size",args.tot_train_size)
+    total=len(pool) if requested_total is None or requested_total<=0 else min(requested_total,len(pool))
+    task.task_settings.update(TrainingPoolSize=len(pool),ScheduledTrainingBudget=total,EvaluationPoolSize=len(task.eval))
+    sizes = round_schedule(_schedule(total,defaults.get("start_size",args.start_size),args.scale_factor),getattr(args,"rounds",10))
+    task.task_settings["RoundBudget"]=getattr(args,"rounds",10) or None
+    task.task_settings["StandardSampleSchedule"]=sizes
     ce_limit = getattr(args, "ce_batch_size", 8)
     if ce_limit < 1:
         raise ValueError("ce_batch_size must be positive")
@@ -112,42 +118,43 @@ def run_icl(args, response_fn=None):
     seen = []
     cursor = 0
     for epoch, target_size in enumerate(sizes):
-        candidates = pool[cursor:target_size]
-        cursor = target_size
-        if args.use_ce:
-            additions = []
-            ce_logs = []
-            for start in range(0, len(candidates), args.eval_batch_size):
-                if len(additions) >= ce_limit:
-                    break
-                batch = candidates[start:start + args.eval_batch_size]
-                log = _query(task, seen, batch, response_fn, args.use_reg)
-                ce_logs.append(log)
-                if log["Prediction"] is not None:
-                    additions.extend((x, y) for (x, y), prediction in zip(batch, log["Prediction"])
-                                     if not _equal(kind, prediction, y))
-            additions = additions[:ce_limit]
-            seen.extend(additions)
-        else:
-            additions = candidates
-            ce_logs = []
-            seen.extend(candidates)
+        with track_token_usage() as epoch_usage:
+            candidates = pool[cursor:target_size]
+            cursor = target_size
+            if args.use_ce:
+                additions = []
+                ce_logs = []
+                for start in range(0, len(candidates), args.eval_batch_size):
+                    if len(additions) >= ce_limit:
+                        break
+                    batch = candidates[start:start + args.eval_batch_size]
+                    log = _query(task, seen, batch, response_fn, args.use_reg)
+                    ce_logs.append(log)
+                    if log["Prediction"] is not None:
+                        additions.extend((x, y) for (x, y), prediction in zip(batch, log["Prediction"])
+                                         if not _equal(kind, prediction, y))
+                additions = additions[:ce_limit]
+                seen.extend(additions)
+            else:
+                additions = candidates
+                ce_logs = []
+                seen.extend(candidates)
 
-        correct = 0.0
-        eval_logs = []
-        for start in range(0, len(task.eval), args.eval_batch_size):
-            batch = task.eval[start:start + args.eval_batch_size]
-            retry_logs = [_query(task, seen, batch, response_fn, args.use_reg)
-                          for _ in range(args.retries)]
-            eval_logs.extend(retry_logs)
-            valid = [log["Correct"] for log in retry_logs if log["Correct"] is not None]
-            if valid:
-                correct += sum(valid) / len(valid)
-        accuracy = correct / len(task.eval) if task.eval else None
-        result["epochs"].append({"epoch": epoch, "NumTrainingSamples": len(seen),
-                                 "AddedExamples": len(additions), "Accuracy": accuracy,
-                                 "CounterexampleLogs": ce_logs, "EvalLogs": eval_logs})
-        with outpath.open("w", encoding="utf-8") as stream:
-            json.dump(result, stream, ensure_ascii=False, indent=2)
-        print(f"Epoch {epoch}: accuracy={accuracy}, training samples={len(seen)}")
+            correct = 0.0
+            eval_logs = []
+            for start in range(0, len(task.eval), args.eval_batch_size):
+                batch = task.eval[start:start + args.eval_batch_size]
+                retry_logs = [_query(task, seen, batch, response_fn, args.use_reg)
+                              for _ in range(args.retries)]
+                eval_logs.extend(retry_logs)
+                valid = [log["Correct"] for log in retry_logs if log["Correct"] is not None]
+                if valid:
+                    correct += sum(valid) / len(valid)
+            accuracy = correct / len(task.eval) if task.eval else None
+            result["epochs"].append({"epoch": epoch, "NumTrainingSamples": len(seen),
+                                     "AddedExamples": len(additions), "Accuracy": accuracy, **epoch_usage.log_fields(),
+                                     "CounterexampleLogs": ce_logs, "EvalLogs": eval_logs})
+            with outpath.open("w", encoding="utf-8") as stream:
+                json.dump(result, stream, ensure_ascii=False, indent=2)
+            print(f"Epoch {epoch}: accuracy={accuracy}, training samples={len(seen)}")
     return result

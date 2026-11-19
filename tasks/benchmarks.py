@@ -249,12 +249,12 @@ def _time_limit(seconds=1):
 
 
 class BenchmarkTask:
-    def __init__(self, kind, benchmark_id, seed=43, eval_size=32, *, crypto_setting="paper",
+    def __init__(self, kind, benchmark_id, seed=43, eval_size=None, *, crypto_setting="paper",
                  crypto_ood_ratio=0.):
         self.kind, self.benchmark_id = kind, benchmark_id
         self.rng = random.Random(seed)
         self.oracle_name = {"cryptography": "cvc5_QF_LIA", "list_functions": "cvc5_sequence_or_bounded_Python",
-                            "instruction_induction": "LLM", "scan": "exhaustive_enumeration", "ilp": "finite_Horn_forward_chaining"}[kind]
+                            "instruction_induction": "LLM", "scan": "exhaustive_enumeration", "ilp": "cvc5_finite_Horn_least_fixed_point"}[kind]
         if kind == "cryptography":
             family, row = benchmark_id.split(":") if ":" in benchmark_id else (benchmark_id, "0")
             if family not in {"caesar", "atbash", "keyboard"}:
@@ -266,7 +266,7 @@ class BenchmarkTask:
                 raise ValueError("crypto_setting must be paper or legacy")
             self.clean_train = _pairs(item["train"]["normal"])
             self.shift = (ord(self.clean_train[0][1][0].lower()) - ord(self.clean_train[0][0][0].lower())) % 26 if family == "caesar" else None
-            self.eval = _pairs(item["test"])[:eval_size]
+            self.eval = _pairs(item["test"])[:eval_size if eval_size and eval_size>0 else None]
             if crypto_setting == "paper":
                 from benchmarks.crypto import PAPER_PROMPT, paper_examples
                 self.train = paper_examples(item, ood_ratio=crypto_ood_ratio)
@@ -293,7 +293,7 @@ class BenchmarkTask:
             if item is None:
                 raise ValueError(f"Unknown list function: {benchmark_id}")
             self.train = _pairs(item["train"]["normal"])
-            self.eval = _pairs(item["test"])[:eval_size]
+            self.eval = _pairs(item["test"])[:eval_size if eval_size and eval_size>0 else None]
             self.reference_source = item["function"]
             self.reference_name = re.search(r"def (\w+)\(", self.reference_source).group(1)
             scope = {}
@@ -323,19 +323,20 @@ class BenchmarkTask:
             induce = json.loads((base / "induce" / f"{benchmark_id}.json").read_text())
             execute = json.loads((base / "execute" / f"{benchmark_id}.json").read_text())
             self.train = _instruction_pairs(induce["examples"].values(), benchmark_id)
-            self.eval = _instruction_pairs(execute["examples"].values(), benchmark_id)[:eval_size]
+            full_eval = _instruction_pairs(execute["examples"].values(), benchmark_id)
+            self.eval = full_eval[:eval_size] if eval_size and eval_size>0 else full_eval
             self.task_settings = {"oracle_policy": "grounded_instruction_oracle_v3",
                                   "oracle_groundtruth": "official_human_annotations",
                                   "oracle_reference_split": "induce_only",
                                   "oracle_verdict_semantics": "task_specification_not_execution_accuracy",
+                                  "n_train_available":len(self.train),"n_test_available":len(full_eval),"n_test_loaded":len(self.eval),
                                   "input_adapter": "official_cause_selection_v2" if benchmark_id == "cause_and_effect" else "raw_original"}
         elif kind == "scan":
-            splits = {"simple", "length", "addprim_jump", "addprim_turn_left",
-                      "template_around_right", "template_jump_around_right",
-                      "template_opposite_right", "template_right"}
-            if benchmark_id not in splits:
-                raise ValueError(f"Unknown SCAN split: {benchmark_id}")
             base = ROOT / "scan/raw"
+            if (not re.fullmatch(r"[A-Za-z0-9_]+",benchmark_id)
+                    or not (base/f"tasks_train_{benchmark_id}.txt").is_file()
+                    or not (base/f"tasks_test_{benchmark_id}.txt").is_file()):
+                raise ValueError(f"Unknown SCAN split: {benchmark_id}")
             def load(name):
                 return [tuple(line.strip().split(" OUT: ")) for line in (base / name).read_text().splitlines()]
             self.train = [(x.removeprefix("IN: "), y) for x, y in load(f"tasks_train_{benchmark_id}.txt")]
@@ -350,6 +351,11 @@ class BenchmarkTask:
                                   "method": "shared_CE_pipeline_not_original_seq2seq"}
         else:
             raise ValueError(f"Unknown benchmark: {kind}")
+
+        from benchmarks.difficulty import annotation
+        self.task_settings["Difficulty"] = annotation(kind,benchmark_id)
+        if kind == "cryptography":
+            self.task_settings["Difficulty"]["basis_config_matches"] = (crypto_setting=="paper" and crypto_ood_ratio==0)
 
     def extract_candidate(self, response, default_extractor, multiple=False):
         if self.kind == "ilp":
@@ -449,7 +455,11 @@ class BenchmarkTask:
         """Task-specific validity check exposed through the same runner interface."""
         if not isinstance(candidate, str) or not candidate.strip():
             raise ValueError("Expected a nonempty candidate")
-        if self.kind != "instruction_induction":
+        if self.kind == "ilp":
+            from benchmarks.ilp import parse_program, background_schema
+            n,_ = self.ilp._query(example)
+            parse_program(candidate, background_schema(self.ilp.backgrounds[n]), self.ilp.arity)
+        elif self.kind != "instruction_induction":
             self.predict(candidate, example)
 
     def training_errors(self, candidate, pairs):
@@ -466,6 +476,12 @@ class BenchmarkTask:
                 return None
             try:
                 correct = self.predict(candidate, x) == expected
+            except TimeoutError as exc:
+                if self.kind == "ilp":
+                    self.last_training_details = {"examples_checked":index,"training_complete":False,
+                                                  "stop_reason":"resource_limit","reason":str(exc)}
+                    return None
+                correct = False
             except Exception:
                 correct = False
             if not correct:
@@ -656,6 +672,11 @@ class BenchmarkTask:
                 return None
             try:
                 correct += self.predict(candidate, x) == y
+            except TimeoutError as exc:
+                if self.kind == "ilp":
+                    self.last_evaluation_details = {"examples_checked":checked,"evaluation_complete":False,
+                                                    "stop_reason":"resource_limit","reason":str(exc)}
+                    return None
             except Exception:
                 pass
             checked += 1
