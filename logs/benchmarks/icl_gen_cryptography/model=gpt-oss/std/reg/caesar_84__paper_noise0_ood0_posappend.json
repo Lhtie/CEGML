@@ -1,0 +1,232 @@
+{
+    "task_type": "cryptography",
+    "benchmark_id": "caesar:84",
+    "pipeline": "regex_run_episode",
+    "runs": [
+        [
+            {
+                "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: Cercocebus\nOutput: Dfsdpdfcvt\nInput: afterstain\nOutput: bgufstubjo\nInput: piano\nOutput: qjbop\nInput: cypressed\nOutput: dzqsfttfe\nInput: ownwayish\nOutput: pxoxbzjti\nInput: fierding\nOutput: gjfsejoh\nInput: belugite\nOutput: cfmvhjuf\nInput: intradermo\nOutput: jousbefsnp\nInput: submucosal\nOutput: tvcnvdptbm\nInput: derah\nOutput: efsbi\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                "Response": "analysisWe need to find rule mapping input strings to output strings. Let's examine.\n\nWe have pairs:\n\n1. \"Cercocebus\" -> \"Dfsdpdfcvt\"\n2. \"afterstain\" -> \"bgufstubjo\"\n3. \"piano\" -> \"qjbop\"\n4. \"cypressed\" -> \"dzqsfttfe\"\n5. \"ownwayish\" -> \"pxoxbzjti\"\n6. \"fierding\" -> \"gjfsejoh\"\n7. \"belugite\" -> \"cfmvhjuf\"\n8. \"intradermo\" -> \"jousbefsnp\"\n9. \"submucosal\" -> \"tvcnvdptbm\"\n10. \"derah\" -> \"efsbi\"\n\nWe need to find transformation. Likely each character shifted by some pattern, maybe Caesar shift varying per position. Let's compare letters.\n\nTake \"piano\" -> \"qjbop\". Input letters: p i a n o. Output: q j b o p.\n\nCompute shift (output - input) in alphabet positions (a=0). p(15) -> q(16): +1. i(8) -> j(9): +1. a(0) -> b(1): +1. n(13) -> o(14): +1. o(14) -> p(15): +1. So simple +1 Caesar for each letter. But check other examples.\n\n\"derah\" -> \"efsbi\". d->e (+1), e->f (+1), r->s (+1), a->b (+1), h->i (+1). Yes +1.\n\n\"afterstain\" -> \"bgufstubjo\". Let's test: a->b (+1), f->g (+1), t->u (+1), e->f (+1), r->s (+1), s->t (+1), t->u (+1), a->b (+1), i->j (+1), n->o (+1). Yes all +1.\n\n\"cypressed\" -> \"dzqsfttfe\". c->d (+1), y->z (+1), p->q (+1), r->s (+1), e->f (+1), s->t (+1), s->t (+1), e->f (+1), d->e (+1). Works.\n\n\"ownwayish\" -> \"pxoxbzjti\". o->p (+1), w->x (+1), n->o (+1), w->x (+1), a->b (+1), y->z (+1), i->j (+1), s->t (+1), h->i (+1). Yes.\n\n\"fierding\" -> \"gjfsejoh\". f->g (+1), i->j (+1), e->f (+1), r->s (+1), d->e (+1), i->j (+1), n->o (+1), g->h (+1). Works.\n\n\"belugite\" -> \"cfmvhjuf\". b->c (+1), e->f (+1), l->m (+1), u->v (+1), g->h (+1), i->j (+1), t->u (+1), e->f (+1). Works.\n\n\"intradermo\" -> \"jousbefsnp\". i->j (+1), n->o (+1), t->u (+1), r->s (+1), a->b (+1), d->e (+1), e->f (+1), r->s (+1), m->n (+1), o->p (+1). Works.\n\n\"submucosal\" -> \"tvcnvdptbm\". s->t (+1), u->v (+1), b->c (+1), m->n (+1), u->v (+1), c->d (+1), o->p (+1), s->t (+1), a->b (+1), l->m (+1). Works.\n\n\"Cercocebus\" -> \"Dfsdpdfcvt\". Let's test: C->D (+1), e->f (+1), r->s (+1), c->d (+1), o->p (+1), c->d (+1), e->f (+1), b->c (+1), u->v (+1), s->t (+1). Yes.\n\nThus rule: shift each alphabetic character forward by one (Caesar cipher +1). Preserve case? Input \"Cercocebus\" capital C becomes D capital. So maintain case: uppercase letters shift within uppercase alphabet; lowercase shift within lowercase. Also need to handle wrap-around: 'z' -> 'a', 'Z' -> 'A'. Not present but implement.\n\nThus function: iterate characters, if 'a' <= c <= 'z', shift ord(c)-ord('a')+1 mod 26 + ord('a'); similarly for uppercase.\n\nReturn new string.\n\nImplementation straightforward.\n\nNow produce answer with reasoning and ans tags.\n\nassistantfinal<reasoning>\nAll given examples show each character being replaced by the next letter in the alphabet, preserving the original case.  \nFor example, \u201cpiano\u201d \u2192 \u201cqjbop\u201d (p\u2192q, i\u2192j, a\u2192b, n\u2192o, o\u2192p) and \u201cCercocebus\u201d \u2192 \u201cDfsdpdfcvt\u201d (C\u2192D, e\u2192f, \u2026).  \nThus the rule is a Caesar shift of\u202f+1 with wrap\u2011around (z\u2192a, Z\u2192A). The function iterates over the input string, shifts alphabetic characters accordingly, and leaves any non\u2011alphabetic characters unchanged.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # shift within lowercase alphabet\n            res.append(chr((ord(ch) - ord('a') + 1) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            # shift within uppercase alphabet\n            res.append(chr((ord(ch) - ord('A') + 1) % 26 + ord('A')))\n        else:\n            # non\u2011alphabetic characters are unchanged\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # shift within lowercase alphabet\n            res.append(chr((ord(ch) - ord('a') + 1) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            # shift within uppercase alphabet\n            res.append(chr((ord(ch) - ord('A') + 1) % 26 + ord('A')))\n        else:\n            # non\u2011alphabetic characters are unchanged\n            res.append(ch)\n    return ''.join(res)",
+                "Reasoning": "All given examples show each character being replaced by the next letter in the alphabet, preserving the original case.  \nFor example, \u201cpiano\u201d \u2192 \u201cqjbop\u201d (p\u2192q, i\u2192j, a\u2192b, n\u2192o, o\u2192p) and \u201cCercocebus\u201d \u2192 \u201cDfsdpdfcvt\u201d (C\u2192D, e\u2192f, \u2026).  \nThus the rule is a Caesar shift of\u202f+1 with wrap\u2011around (z\u2192a, Z\u2192A). The function iterates over the input string, shifts alphabetic characters accordingly, and leaves any non\u2011alphabetic characters unchanged.",
+                "TokenUsage": {
+                    "InputTokens": 298,
+                    "OutputTokens": 1340,
+                    "TotalTokens": 1638,
+                    "ModelCalls": 1,
+                    "UsageComplete": true,
+                    "KnownInputTokens": 298,
+                    "KnownOutputTokens": 1340,
+                    "Calls": [
+                        {
+                            "InputTokens": 298,
+                            "OutputTokens": 1340,
+                            "TotalTokens": 1638,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids",
+                            "Model": "gpt-oss"
+                        }
+                    ]
+                },
+                "Equivalent": true,
+                "scoreTrainSet": 1.0,
+                "scoreEvalSet": 1.0,
+                "CandidateValid": true,
+                "OracleStatus": "accepted",
+                "OracleCounterexamples": [],
+                "OracleDetails": {
+                    "policy": "bounded_symbolic_python_crypto_v1",
+                    "backend": "cvc5_python_api",
+                    "guarantee": "equivalent_on_bounded_domain_only",
+                    "domain": {
+                        "alphabet": "ASCII A-Z/a-z",
+                        "min_length": 0,
+                        "max_length": 10
+                    },
+                    "timeout_ms_per_check": 10000,
+                    "queries": 11,
+                    "lengths_proved": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "lengths_searched": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "fallback": null,
+                    "status": "bounded_unsat"
+                },
+                "RepairExamples": [],
+                "EvaluationDetails": {
+                    "test_examples": 10,
+                    "correct": 10,
+                    "sample_accuracy": 1.0,
+                    "all_test_correct": true
+                },
+                "epoch": 0,
+                "NumTrainingSamples": 10,
+                "CurrentGuess": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # shift within lowercase alphabet\n            res.append(chr((ord(ch) - ord('a') + 1) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            # shift within uppercase alphabet\n            res.append(chr((ord(ch) - ord('A') + 1) % 26 + ord('A')))\n        else:\n            # non\u2011alphabetic characters are unchanged\n            res.append(ch)\n    return ''.join(res)",
+                "CurrentGuessReasoning": "All given examples show each character being replaced by the next letter in the alphabet, preserving the original case.  \nFor example, \u201cpiano\u201d \u2192 \u201cqjbop\u201d (p\u2192q, i\u2192j, a\u2192b, n\u2192o, o\u2192p) and \u201cCercocebus\u201d \u2192 \u201cDfsdpdfcvt\u201d (C\u2192D, e\u2192f, \u2026).  \nThus the rule is a Caesar shift of\u202f+1 with wrap\u2011around (z\u2192a, Z\u2192A). The function iterates over the input string, shifts alphabetic characters accordingly, and leaves any non\u2011alphabetic characters unchanged.",
+                "Accuracy": 1,
+                "Logs": [
+                    {
+                        "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: Cercocebus\nOutput: Dfsdpdfcvt\nInput: afterstain\nOutput: bgufstubjo\nInput: piano\nOutput: qjbop\nInput: cypressed\nOutput: dzqsfttfe\nInput: ownwayish\nOutput: pxoxbzjti\nInput: fierding\nOutput: gjfsejoh\nInput: belugite\nOutput: cfmvhjuf\nInput: intradermo\nOutput: jousbefsnp\nInput: submucosal\nOutput: tvcnvdptbm\nInput: derah\nOutput: efsbi\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                        "Response": "analysisWe need to find rule mapping input strings to output strings. Let's examine.\n\nWe have pairs:\n\n1. \"Cercocebus\" -> \"Dfsdpdfcvt\"\n2. \"afterstain\" -> \"bgufstubjo\"\n3. \"piano\" -> \"qjbop\"\n4. \"cypressed\" -> \"dzqsfttfe\"\n5. \"ownwayish\" -> \"pxoxbzjti\"\n6. \"fierding\" -> \"gjfsejoh\"\n7. \"belugite\" -> \"cfmvhjuf\"\n8. \"intradermo\" -> \"jousbefsnp\"\n9. \"submucosal\" -> \"tvcnvdptbm\"\n10. \"derah\" -> \"efsbi\"\n\nWe need to find transformation. Likely each character shifted by some pattern, maybe Caesar shift varying per position. Let's compare letters.\n\nTake \"piano\" -> \"qjbop\". Input letters: p i a n o. Output: q j b o p.\n\nCompute shift (output - input) in alphabet positions (a=0). p(15) -> q(16): +1. i(8) -> j(9): +1. a(0) -> b(1): +1. n(13) -> o(14): +1. o(14) -> p(15): +1. So simple +1 Caesar for each letter. But check other examples.\n\n\"derah\" -> \"efsbi\". d->e (+1), e->f (+1), r->s (+1), a->b (+1), h->i (+1). Yes +1.\n\n\"afterstain\" -> \"bgufstubjo\". Let's test: a->b (+1), f->g (+1), t->u (+1), e->f (+1), r->s (+1), s->t (+1), t->u (+1), a->b (+1), i->j (+1), n->o (+1). Yes all +1.\n\n\"cypressed\" -> \"dzqsfttfe\". c->d (+1), y->z (+1), p->q (+1), r->s (+1), e->f (+1), s->t (+1), s->t (+1), e->f (+1), d->e (+1). Works.\n\n\"ownwayish\" -> \"pxoxbzjti\". o->p (+1), w->x (+1), n->o (+1), w->x (+1), a->b (+1), y->z (+1), i->j (+1), s->t (+1), h->i (+1). Yes.\n\n\"fierding\" -> \"gjfsejoh\". f->g (+1), i->j (+1), e->f (+1), r->s (+1), d->e (+1), i->j (+1), n->o (+1), g->h (+1). Works.\n\n\"belugite\" -> \"cfmvhjuf\". b->c (+1), e->f (+1), l->m (+1), u->v (+1), g->h (+1), i->j (+1), t->u (+1), e->f (+1). Works.\n\n\"intradermo\" -> \"jousbefsnp\". i->j (+1), n->o (+1), t->u (+1), r->s (+1), a->b (+1), d->e (+1), e->f (+1), r->s (+1), m->n (+1), o->p (+1). Works.\n\n\"submucosal\" -> \"tvcnvdptbm\". s->t (+1), u->v (+1), b->c (+1), m->n (+1), u->v (+1), c->d (+1), o->p (+1), s->t (+1), a->b (+1), l->m (+1). Works.\n\n\"Cercocebus\" -> \"Dfsdpdfcvt\". Let's test: C->D (+1), e->f (+1), r->s (+1), c->d (+1), o->p (+1), c->d (+1), e->f (+1), b->c (+1), u->v (+1), s->t (+1). Yes.\n\nThus rule: shift each alphabetic character forward by one (Caesar cipher +1). Preserve case? Input \"Cercocebus\" capital C becomes D capital. So maintain case: uppercase letters shift within uppercase alphabet; lowercase shift within lowercase. Also need to handle wrap-around: 'z' -> 'a', 'Z' -> 'A'. Not present but implement.\n\nThus function: iterate characters, if 'a' <= c <= 'z', shift ord(c)-ord('a')+1 mod 26 + ord('a'); similarly for uppercase.\n\nReturn new string.\n\nImplementation straightforward.\n\nNow produce answer with reasoning and ans tags.\n\nassistantfinal<reasoning>\nAll given examples show each character being replaced by the next letter in the alphabet, preserving the original case.  \nFor example, \u201cpiano\u201d \u2192 \u201cqjbop\u201d (p\u2192q, i\u2192j, a\u2192b, n\u2192o, o\u2192p) and \u201cCercocebus\u201d \u2192 \u201cDfsdpdfcvt\u201d (C\u2192D, e\u2192f, \u2026).  \nThus the rule is a Caesar shift of\u202f+1 with wrap\u2011around (z\u2192a, Z\u2192A). The function iterates over the input string, shifts alphabetic characters accordingly, and leaves any non\u2011alphabetic characters unchanged.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # shift within lowercase alphabet\n            res.append(chr((ord(ch) - ord('a') + 1) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            # shift within uppercase alphabet\n            res.append(chr((ord(ch) - ord('A') + 1) % 26 + ord('A')))\n        else:\n            # non\u2011alphabetic characters are unchanged\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # shift within lowercase alphabet\n            res.append(chr((ord(ch) - ord('a') + 1) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            # shift within uppercase alphabet\n            res.append(chr((ord(ch) - ord('A') + 1) % 26 + ord('A')))\n        else:\n            # non\u2011alphabetic characters are unchanged\n            res.append(ch)\n    return ''.join(res)",
+                        "Reasoning": "All given examples show each character being replaced by the next letter in the alphabet, preserving the original case.  \nFor example, \u201cpiano\u201d \u2192 \u201cqjbop\u201d (p\u2192q, i\u2192j, a\u2192b, n\u2192o, o\u2192p) and \u201cCercocebus\u201d \u2192 \u201cDfsdpdfcvt\u201d (C\u2192D, e\u2192f, \u2026).  \nThus the rule is a Caesar shift of\u202f+1 with wrap\u2011around (z\u2192a, Z\u2192A). The function iterates over the input string, shifts alphabetic characters accordingly, and leaves any non\u2011alphabetic characters unchanged.",
+                        "TokenUsage": {
+                            "InputTokens": 298,
+                            "OutputTokens": 1340,
+                            "TotalTokens": 1638,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Equivalent": true,
+                        "scoreTrainSet": 1.0,
+                        "scoreEvalSet": 1.0,
+                        "CandidateValid": true,
+                        "OracleStatus": "accepted",
+                        "OracleCounterexamples": [],
+                        "OracleDetails": {
+                            "policy": "bounded_symbolic_python_crypto_v1",
+                            "backend": "cvc5_python_api",
+                            "guarantee": "equivalent_on_bounded_domain_only",
+                            "domain": {
+                                "alphabet": "ASCII A-Z/a-z",
+                                "min_length": 0,
+                                "max_length": 10
+                            },
+                            "timeout_ms_per_check": 10000,
+                            "queries": 11,
+                            "lengths_proved": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "lengths_searched": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "fallback": null,
+                            "status": "bounded_unsat"
+                        },
+                        "RepairExamples": [],
+                        "EvaluationDetails": {
+                            "test_examples": 10,
+                            "correct": 10,
+                            "sample_accuracy": 1.0,
+                            "all_test_correct": true
+                        }
+                    }
+                ],
+                "InputTokens": 298,
+                "OutputTokens": 1340,
+                "Counterexamples": [],
+                "TrainingExampleSource": "scheduled",
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to find rule mapping input strings to output strings. Let's examine.\n\nWe have pairs:\n\n1. \"Cercocebus\" -> \"Dfsdpdfcvt\"\n2. \"afterstain\" -> \"bgufstubjo\"\n3. \"piano\" -> \"qjbop\"\n4. \"cypressed\" -> \"dzqsfttfe\"\n5. \"ownwayish\" -> \"pxoxbzjti\"\n6. \"fierding\" -> \"gjfsejoh\"\n7. \"belugite\" -> \"cfmvhjuf\"\n8. \"intradermo\" -> \"jousbefsnp\"\n9. \"submucosal\" -> \"tvcnvdptbm\"\n10. \"derah\" -> \"efsbi\"\n\nWe need to find transformation. Likely each character shifted by some pattern, maybe Caesar shift varying per position. Let's compare letters.\n\nTake \"piano\" -> \"qjbop\". Input letters: p i a n o. Output: q j b o p.\n\nCompute shift (output - input) in alphabet positions (a=0). p(15) -> q(16): +1. i(8) -> j(9): +1. a(0) -> b(1): +1. n(13) -> o(14): +1. o(14) -> p(15): +1. So simple +1 Caesar for each letter. But check other examples.\n\n\"derah\" -> \"efsbi\". d->e (+1), e->f (+1), r->s (+1), a->b (+1), h->i (+1). Yes +1.\n\n\"afterstain\" -> \"bgufstubjo\". Let's test: a->b (+1), f->g (+1), t->u (+1), e->f (+1), r->s (+1), s->t (+1), t->u (+1), a->b (+1), i->j (+1), n->o (+1). Yes all +1.\n\n\"cypressed\" -> \"dzqsfttfe\". c->d (+1), y->z (+1), p->q (+1), r->s (+1), e->f (+1), s->t (+1), s->t (+1), e->f (+1), d->e (+1). Works.\n\n\"ownwayish\" -> \"pxoxbzjti\". o->p (+1), w->x (+1), n->o (+1), w->x (+1), a->b (+1), y->z (+1), i->j (+1), s->t (+1), h->i (+1). Yes.\n\n\"fierding\" -> \"gjfsejoh\". f->g (+1), i->j (+1), e->f (+1), r->s (+1), d->e (+1), i->j (+1), n->o (+1), g->h (+1). Works.\n\n\"belugite\" -> \"cfmvhjuf\". b->c (+1), e->f (+1), l->m (+1), u->v (+1), g->h (+1), i->j (+1), t->u (+1), e->f (+1). Works.\n\n\"intradermo\" -> \"jousbefsnp\". i->j (+1), n->o (+1), t->u (+1), r->s (+1), a->b (+1), d->e (+1), e->f (+1), r->s (+1), m->n (+1), o->p (+1). Works.\n\n\"submucosal\" -> \"tvcnvdptbm\". s->t (+1), u->v (+1), b->c (+1), m->n (+1), u->v (+1), c->d (+1), o->p (+1), s->t (+1), a->b (+1), l->m (+1). Works.\n\n\"Cercocebus\" -> \"Dfsdpdfcvt\". Let's test: C->D (+1), e->f (+1), r->s (+1), c->d (+1), o->p (+1), c->d (+1), e->f (+1), b->c (+1), u->v (+1), s->t (+1). Yes.\n\nThus rule: shift each alphabetic character forward by one (Caesar cipher +1). Preserve case? Input \"Cercocebus\" capital C becomes D capital. So maintain case: uppercase letters shift within uppercase alphabet; lowercase shift within lowercase. Also need to handle wrap-around: 'z' -> 'a', 'Z' -> 'A'. Not present but implement.\n\nThus function: iterate characters, if 'a' <= c <= 'z', shift ord(c)-ord('a')+1 mod 26 + ord('a'); similarly for uppercase.\n\nReturn new string.\n\nImplementation straightforward.\n\nNow produce answer with reasoning and ans tags.\n\nassistantfinal<reasoning>\nAll given examples show each character being replaced by the next letter in the alphabet, preserving the original case.  \nFor example, \u201cpiano\u201d \u2192 \u201cqjbop\u201d (p\u2192q, i\u2192j, a\u2192b, n\u2192o, o\u2192p) and \u201cCercocebus\u201d \u2192 \u201cDfsdpdfcvt\u201d (C\u2192D, e\u2192f, \u2026).  \nThus the rule is a Caesar shift of\u202f+1 with wrap\u2011around (z\u2192a, Z\u2192A). The function iterates over the input string, shifts alphabetic characters accordingly, and leaves any non\u2011alphabetic characters unchanged.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # shift within lowercase alphabet\n            res.append(chr((ord(ch) - ord('a') + 1) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            # shift within uppercase alphabet\n            res.append(chr((ord(ch) - ord('A') + 1) % 26 + ord('A')))\n        else:\n            # non\u2011alphabetic characters are unchanged\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # shift within lowercase alphabet\n            res.append(chr((ord(ch) - ord('a') + 1) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            # shift within uppercase alphabet\n            res.append(chr((ord(ch) - ord('A') + 1) % 26 + ord('A')))\n        else:\n            # non\u2011alphabetic characters are unchanged\n            res.append(ch)\n    return ''.join(res)",
+                        "Reasoning": "All given examples show each character being replaced by the next letter in the alphabet, preserving the original case.  \nFor example, \u201cpiano\u201d \u2192 \u201cqjbop\u201d (p\u2192q, i\u2192j, a\u2192b, n\u2192o, o\u2192p) and \u201cCercocebus\u201d \u2192 \u201cDfsdpdfcvt\u201d (C\u2192D, e\u2192f, \u2026).  \nThus the rule is a Caesar shift of\u202f+1 with wrap\u2011around (z\u2192a, Z\u2192A). The function iterates over the input string, shifts alphabetic characters accordingly, and leaves any non\u2011alphabetic characters unchanged.",
+                        "TokenUsage": {
+                            "InputTokens": 298,
+                            "OutputTokens": 1340,
+                            "TotalTokens": 1638,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Error": null
+                    }
+                ],
+                "StopReason": "oracle_accepted"
+            }
+        ]
+    ],
+    "oracle": "cvc5_bounded_symbolic_Python",
+    "TaskSettings": {
+        "crypto_setting": "paper",
+        "n_train": 10,
+        "n_test": 10,
+        "noise_ratio": 0.0,
+        "ood_ratio": 0.0,
+        "hypothesis": "Python_fn_x",
+        "paper_task_protocol": true,
+        "method": "shared_CE_pipeline_not_paper_SRR",
+        "regularization_applied": false,
+        "prompt_variant": "base_with_reasoning_and_ans",
+        "oracle_policy": "bounded_symbolic_python_crypto_v1",
+        "oracle_domain": {
+            "alphabet": "ASCII A-Z/a-z",
+            "min_length": 0,
+            "max_length": 10
+        },
+        "Difficulty": {
+            "catalog_version": "benchmark_difficulty_v2",
+            "id": "caesar:84",
+            "tier": "L2",
+            "level": 2,
+            "levels": 3,
+            "axis": "training_information_coverage",
+            "proxy": true,
+            "features": {
+                "missing_lowercase_letters": 6,
+                "missing_case_sensitive_letters": 31,
+                "family": "caesar",
+                "training_entries": 10,
+                "within_family_rank": 51
+            },
+            "basis_config_matches": true
+        },
+        "TrainingPoolSize": 10,
+        "ScheduledTrainingBudget": 10,
+        "EvaluationPoolSize": 10,
+        "RoundBudget": 10,
+        "StandardSampleSchedule": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+        ]
+    }
+}

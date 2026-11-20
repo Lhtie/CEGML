@@ -1,0 +1,232 @@
+{
+    "task_type": "cryptography",
+    "benchmark_id": "caesar:13",
+    "pipeline": "regex_run_episode",
+    "runs": [
+        [
+            {
+                "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: allegretto\nOutput: eppikvixxs\nInput: illusive\nOutput: mppywmzi\nInput: keeperess\nOutput: oiitiviww\nInput: tailor\nOutput: xempsv\nInput: Whiggism\nOutput: Almkkmwq\nInput: fundal\nOutput: jyrhep\nInput: pervert\nOutput: tivzivx\nInput: farinose\nOutput: jevmrswi\nInput: suttin\nOutput: wyxxmr\nInput: wheezy\nOutput: aliidc\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\nallegretto -> eppikvixxs\nillusive -> mppywmzi\nkeeperess -> oiitiviww\ntailor -> xempsv\nWhiggism -> Alm... Wait output: Almkkmwq (capital A then lower). Input capital W.\n\nfundal -> jyrhep\npervert -> tivzivx\nfarinose -> jevmrswi\nsuttin -> wyxxmr\nwheezy -> aliidc\n\nWe need to find transformation. Likely some Caesar shift per character maybe based on position? Let's compute.\n\nTake \"tailor\" -> \"xempsv\". Let's map letters:\n\nt -> x (shift +4)\na -> e (+4)\ni -> m (+4)\nl -> p (+4)\no -> s (+4)\nr -> v (+4)\n\nSo simple Caesar +4 for lowercase. Works for \"tailor\". Check \"fundal\" -> \"jyrhep\". f->j (+4), u->y (+4), n->r (+4), d->h (+4), a->e (+4), l->p (+4). Yes.\n\nCheck \"suttin\" -> \"wyxxmr\". s->w (+4), u->y (+4), t->x (+4), t->x (+4), i->m (+4), n->r (+4). Works.\n\nCheck \"wheezy\" -> \"aliidc\". w->a (+4, wrap), h->l (+4), e->i (+4), e->i (+4), z->d (+4 wrap), y->c (+4). Yes.\n\nNow check \"pervert\" -> \"tivzivx\". p->t (+4), e->i (+4), r->v (+4), v->z (+4), e->i (+4), r->v (+4), t->x (+4). Works.\n\nCheck \"farinose\" -> \"jevmrswi\". f->j (+4), a->e (+4), r->v (+4), i->m (+4), n->r (+4), o->s (+4), s->w (+4), e->i (+4). Works.\n\nNow \"keeperess\" -> \"oiitiviww\". Let's test: k->o (+4), e->i (+4), e->i (+4), p->t (+4), e->i (+4), r->v (+4) but output shows \"i\"? Wait output: \"oiitiviww\". Let's map each:\n\nInput: k e e p e r e s s\nIndices: 0 1 2 3 4 5 6 7 8\nOutput: o i i t i v i w w\n\nCheck mapping:\nk->o (+4) ok.\ne->i (+4) ok.\ne->i ok.\np->t (+4) ok.\ne->i ok.\nr->v (+4) but output at position5 is 'v'? Actually output char at index5 is 'v'? Let's see: \"oiitiviww\": characters: o i i t i v i w w. Yes index5 is 'v' correct.\ne (index6) -> i (+4) matches.\ns (index7) -> w (+4) matches.\ns (index8) -> w matches.\n\nSo works.\n\nNow \"illusive\" -> \"mppywmzi\". Let's test: i->m (+4) ok. l->p (+4) ok. l->p ok. u->y (+4) ok. s->w (+4) ok. i->m (+4) but output char at index5 is 'm'? Actually output \"mppywmzi\": characters: m p p y w m z i. Index5 is 'm' matches. v->z (+4) matches. e->i (+4) matches. Works.\n\nNow \"allegretto\" -> \"eppikvixxs\". Let's test: a->e (+4) ok. l->p (+4) ok. l->p ok. e->i (+4) ok. g->k (+4) ok. r->v (+4) ok. e->i (+4) ok. t->x (+4) ok. t->x ok. o->s (+4) ok. So all good.\n\nNow \"Whiggism\" -> \"Almkkmwq\". Input has capital W, rest lower? \"Whiggism\": W h i g g i s m. Output: A l m k k m w q. Let's see mapping with +4 preserving case? W uppercase -> shift +4 within uppercase alphabet: W->A (wrap) yes. h->l (+4) lower. i->m (+4). g->k (+4). g->k (+4). i->m (+4). s->w (+4). m->q (+4). So rule: Caesar shift by +4 preserving case.\n\nThus function: for each character, if alphabetic, shift by 4 within same case, wrapping. Non-alphabetic? Not present. So implement.\n\nEdge: need to handle both uppercase and lowercase.\n\nImplementation:\n\ndef fn(x):\n    res=[]\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            res.append(chr((ord(ch)-ord('a')+4)%26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            res.append(chr((ord(ch)-ord('A')+4)%26 + ord('A')))\n        else:\n            res.append(ch)\n    return ''.join(res)\n\nReturn string.\n\nNow produce answer with reasoning and ans tags.assistantfinal<reasoning>\nAll given examples are produced by a Caesar cipher that shifts each alphabetic character forward by 4 positions, wrapping around the alphabet. The case of each letter is preserved (lower\u2011case stays lower\u2011case, upper\u2011case stays upper\u2011case). Non\u2011alphabetic characters (none appear in the samples) would be left unchanged.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    out = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            out.append(chr((ord(ch) - ord('a') + 4) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            out.append(chr((ord(ch) - ord('A') + 4) % 26 + ord('A')))\n        else:\n            out.append(ch)\n    return ''.join(out)\n```\n</ans>",
+                "Prediction": "def fn(x):\n    out = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            out.append(chr((ord(ch) - ord('a') + 4) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            out.append(chr((ord(ch) - ord('A') + 4) % 26 + ord('A')))\n        else:\n            out.append(ch)\n    return ''.join(out)",
+                "Reasoning": "All given examples are produced by a Caesar cipher that shifts each alphabetic character forward by 4 positions, wrapping around the alphabet. The case of each letter is preserved (lower\u2011case stays lower\u2011case, upper\u2011case stays upper\u2011case). Non\u2011alphabetic characters (none appear in the samples) would be left unchanged.",
+                "TokenUsage": {
+                    "InputTokens": 284,
+                    "OutputTokens": 1402,
+                    "TotalTokens": 1686,
+                    "ModelCalls": 1,
+                    "UsageComplete": true,
+                    "KnownInputTokens": 284,
+                    "KnownOutputTokens": 1402,
+                    "Calls": [
+                        {
+                            "InputTokens": 284,
+                            "OutputTokens": 1402,
+                            "TotalTokens": 1686,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids",
+                            "Model": "gpt-oss"
+                        }
+                    ]
+                },
+                "Equivalent": true,
+                "scoreTrainSet": 1.0,
+                "scoreEvalSet": 1.0,
+                "CandidateValid": true,
+                "OracleStatus": "accepted",
+                "OracleCounterexamples": [],
+                "OracleDetails": {
+                    "policy": "bounded_symbolic_python_crypto_v1",
+                    "backend": "cvc5_python_api",
+                    "guarantee": "equivalent_on_bounded_domain_only",
+                    "domain": {
+                        "alphabet": "ASCII A-Z/a-z",
+                        "min_length": 0,
+                        "max_length": 10
+                    },
+                    "timeout_ms_per_check": 10000,
+                    "queries": 11,
+                    "lengths_proved": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "lengths_searched": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "fallback": null,
+                    "status": "bounded_unsat"
+                },
+                "RepairExamples": [],
+                "EvaluationDetails": {
+                    "test_examples": 10,
+                    "correct": 10,
+                    "sample_accuracy": 1.0,
+                    "all_test_correct": true
+                },
+                "epoch": 0,
+                "NumTrainingSamples": 10,
+                "CurrentGuess": "def fn(x):\n    out = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            out.append(chr((ord(ch) - ord('a') + 4) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            out.append(chr((ord(ch) - ord('A') + 4) % 26 + ord('A')))\n        else:\n            out.append(ch)\n    return ''.join(out)",
+                "CurrentGuessReasoning": "All given examples are produced by a Caesar cipher that shifts each alphabetic character forward by 4 positions, wrapping around the alphabet. The case of each letter is preserved (lower\u2011case stays lower\u2011case, upper\u2011case stays upper\u2011case). Non\u2011alphabetic characters (none appear in the samples) would be left unchanged.",
+                "Accuracy": 1,
+                "Logs": [
+                    {
+                        "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: allegretto\nOutput: eppikvixxs\nInput: illusive\nOutput: mppywmzi\nInput: keeperess\nOutput: oiitiviww\nInput: tailor\nOutput: xempsv\nInput: Whiggism\nOutput: Almkkmwq\nInput: fundal\nOutput: jyrhep\nInput: pervert\nOutput: tivzivx\nInput: farinose\nOutput: jevmrswi\nInput: suttin\nOutput: wyxxmr\nInput: wheezy\nOutput: aliidc\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                        "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\nallegretto -> eppikvixxs\nillusive -> mppywmzi\nkeeperess -> oiitiviww\ntailor -> xempsv\nWhiggism -> Alm... Wait output: Almkkmwq (capital A then lower). Input capital W.\n\nfundal -> jyrhep\npervert -> tivzivx\nfarinose -> jevmrswi\nsuttin -> wyxxmr\nwheezy -> aliidc\n\nWe need to find transformation. Likely some Caesar shift per character maybe based on position? Let's compute.\n\nTake \"tailor\" -> \"xempsv\". Let's map letters:\n\nt -> x (shift +4)\na -> e (+4)\ni -> m (+4)\nl -> p (+4)\no -> s (+4)\nr -> v (+4)\n\nSo simple Caesar +4 for lowercase. Works for \"tailor\". Check \"fundal\" -> \"jyrhep\". f->j (+4), u->y (+4), n->r (+4), d->h (+4), a->e (+4), l->p (+4). Yes.\n\nCheck \"suttin\" -> \"wyxxmr\". s->w (+4), u->y (+4), t->x (+4), t->x (+4), i->m (+4), n->r (+4). Works.\n\nCheck \"wheezy\" -> \"aliidc\". w->a (+4, wrap), h->l (+4), e->i (+4), e->i (+4), z->d (+4 wrap), y->c (+4). Yes.\n\nNow check \"pervert\" -> \"tivzivx\". p->t (+4), e->i (+4), r->v (+4), v->z (+4), e->i (+4), r->v (+4), t->x (+4). Works.\n\nCheck \"farinose\" -> \"jevmrswi\". f->j (+4), a->e (+4), r->v (+4), i->m (+4), n->r (+4), o->s (+4), s->w (+4), e->i (+4). Works.\n\nNow \"keeperess\" -> \"oiitiviww\". Let's test: k->o (+4), e->i (+4), e->i (+4), p->t (+4), e->i (+4), r->v (+4) but output shows \"i\"? Wait output: \"oiitiviww\". Let's map each:\n\nInput: k e e p e r e s s\nIndices: 0 1 2 3 4 5 6 7 8\nOutput: o i i t i v i w w\n\nCheck mapping:\nk->o (+4) ok.\ne->i (+4) ok.\ne->i ok.\np->t (+4) ok.\ne->i ok.\nr->v (+4) but output at position5 is 'v'? Actually output char at index5 is 'v'? Let's see: \"oiitiviww\": characters: o i i t i v i w w. Yes index5 is 'v' correct.\ne (index6) -> i (+4) matches.\ns (index7) -> w (+4) matches.\ns (index8) -> w matches.\n\nSo works.\n\nNow \"illusive\" -> \"mppywmzi\". Let's test: i->m (+4) ok. l->p (+4) ok. l->p ok. u->y (+4) ok. s->w (+4) ok. i->m (+4) but output char at index5 is 'm'? Actually output \"mppywmzi\": characters: m p p y w m z i. Index5 is 'm' matches. v->z (+4) matches. e->i (+4) matches. Works.\n\nNow \"allegretto\" -> \"eppikvixxs\". Let's test: a->e (+4) ok. l->p (+4) ok. l->p ok. e->i (+4) ok. g->k (+4) ok. r->v (+4) ok. e->i (+4) ok. t->x (+4) ok. t->x ok. o->s (+4) ok. So all good.\n\nNow \"Whiggism\" -> \"Almkkmwq\". Input has capital W, rest lower? \"Whiggism\": W h i g g i s m. Output: A l m k k m w q. Let's see mapping with +4 preserving case? W uppercase -> shift +4 within uppercase alphabet: W->A (wrap) yes. h->l (+4) lower. i->m (+4). g->k (+4). g->k (+4). i->m (+4). s->w (+4). m->q (+4). So rule: Caesar shift by +4 preserving case.\n\nThus function: for each character, if alphabetic, shift by 4 within same case, wrapping. Non-alphabetic? Not present. So implement.\n\nEdge: need to handle both uppercase and lowercase.\n\nImplementation:\n\ndef fn(x):\n    res=[]\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            res.append(chr((ord(ch)-ord('a')+4)%26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            res.append(chr((ord(ch)-ord('A')+4)%26 + ord('A')))\n        else:\n            res.append(ch)\n    return ''.join(res)\n\nReturn string.\n\nNow produce answer with reasoning and ans tags.assistantfinal<reasoning>\nAll given examples are produced by a Caesar cipher that shifts each alphabetic character forward by 4 positions, wrapping around the alphabet. The case of each letter is preserved (lower\u2011case stays lower\u2011case, upper\u2011case stays upper\u2011case). Non\u2011alphabetic characters (none appear in the samples) would be left unchanged.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    out = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            out.append(chr((ord(ch) - ord('a') + 4) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            out.append(chr((ord(ch) - ord('A') + 4) % 26 + ord('A')))\n        else:\n            out.append(ch)\n    return ''.join(out)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    out = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            out.append(chr((ord(ch) - ord('a') + 4) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            out.append(chr((ord(ch) - ord('A') + 4) % 26 + ord('A')))\n        else:\n            out.append(ch)\n    return ''.join(out)",
+                        "Reasoning": "All given examples are produced by a Caesar cipher that shifts each alphabetic character forward by 4 positions, wrapping around the alphabet. The case of each letter is preserved (lower\u2011case stays lower\u2011case, upper\u2011case stays upper\u2011case). Non\u2011alphabetic characters (none appear in the samples) would be left unchanged.",
+                        "TokenUsage": {
+                            "InputTokens": 284,
+                            "OutputTokens": 1402,
+                            "TotalTokens": 1686,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Equivalent": true,
+                        "scoreTrainSet": 1.0,
+                        "scoreEvalSet": 1.0,
+                        "CandidateValid": true,
+                        "OracleStatus": "accepted",
+                        "OracleCounterexamples": [],
+                        "OracleDetails": {
+                            "policy": "bounded_symbolic_python_crypto_v1",
+                            "backend": "cvc5_python_api",
+                            "guarantee": "equivalent_on_bounded_domain_only",
+                            "domain": {
+                                "alphabet": "ASCII A-Z/a-z",
+                                "min_length": 0,
+                                "max_length": 10
+                            },
+                            "timeout_ms_per_check": 10000,
+                            "queries": 11,
+                            "lengths_proved": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "lengths_searched": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "fallback": null,
+                            "status": "bounded_unsat"
+                        },
+                        "RepairExamples": [],
+                        "EvaluationDetails": {
+                            "test_examples": 10,
+                            "correct": 10,
+                            "sample_accuracy": 1.0,
+                            "all_test_correct": true
+                        }
+                    }
+                ],
+                "InputTokens": 284,
+                "OutputTokens": 1402,
+                "Counterexamples": [],
+                "TrainingExampleSource": "scheduled",
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\nallegretto -> eppikvixxs\nillusive -> mppywmzi\nkeeperess -> oiitiviww\ntailor -> xempsv\nWhiggism -> Alm... Wait output: Almkkmwq (capital A then lower). Input capital W.\n\nfundal -> jyrhep\npervert -> tivzivx\nfarinose -> jevmrswi\nsuttin -> wyxxmr\nwheezy -> aliidc\n\nWe need to find transformation. Likely some Caesar shift per character maybe based on position? Let's compute.\n\nTake \"tailor\" -> \"xempsv\". Let's map letters:\n\nt -> x (shift +4)\na -> e (+4)\ni -> m (+4)\nl -> p (+4)\no -> s (+4)\nr -> v (+4)\n\nSo simple Caesar +4 for lowercase. Works for \"tailor\". Check \"fundal\" -> \"jyrhep\". f->j (+4), u->y (+4), n->r (+4), d->h (+4), a->e (+4), l->p (+4). Yes.\n\nCheck \"suttin\" -> \"wyxxmr\". s->w (+4), u->y (+4), t->x (+4), t->x (+4), i->m (+4), n->r (+4). Works.\n\nCheck \"wheezy\" -> \"aliidc\". w->a (+4, wrap), h->l (+4), e->i (+4), e->i (+4), z->d (+4 wrap), y->c (+4). Yes.\n\nNow check \"pervert\" -> \"tivzivx\". p->t (+4), e->i (+4), r->v (+4), v->z (+4), e->i (+4), r->v (+4), t->x (+4). Works.\n\nCheck \"farinose\" -> \"jevmrswi\". f->j (+4), a->e (+4), r->v (+4), i->m (+4), n->r (+4), o->s (+4), s->w (+4), e->i (+4). Works.\n\nNow \"keeperess\" -> \"oiitiviww\". Let's test: k->o (+4), e->i (+4), e->i (+4), p->t (+4), e->i (+4), r->v (+4) but output shows \"i\"? Wait output: \"oiitiviww\". Let's map each:\n\nInput: k e e p e r e s s\nIndices: 0 1 2 3 4 5 6 7 8\nOutput: o i i t i v i w w\n\nCheck mapping:\nk->o (+4) ok.\ne->i (+4) ok.\ne->i ok.\np->t (+4) ok.\ne->i ok.\nr->v (+4) but output at position5 is 'v'? Actually output char at index5 is 'v'? Let's see: \"oiitiviww\": characters: o i i t i v i w w. Yes index5 is 'v' correct.\ne (index6) -> i (+4) matches.\ns (index7) -> w (+4) matches.\ns (index8) -> w matches.\n\nSo works.\n\nNow \"illusive\" -> \"mppywmzi\". Let's test: i->m (+4) ok. l->p (+4) ok. l->p ok. u->y (+4) ok. s->w (+4) ok. i->m (+4) but output char at index5 is 'm'? Actually output \"mppywmzi\": characters: m p p y w m z i. Index5 is 'm' matches. v->z (+4) matches. e->i (+4) matches. Works.\n\nNow \"allegretto\" -> \"eppikvixxs\". Let's test: a->e (+4) ok. l->p (+4) ok. l->p ok. e->i (+4) ok. g->k (+4) ok. r->v (+4) ok. e->i (+4) ok. t->x (+4) ok. t->x ok. o->s (+4) ok. So all good.\n\nNow \"Whiggism\" -> \"Almkkmwq\". Input has capital W, rest lower? \"Whiggism\": W h i g g i s m. Output: A l m k k m w q. Let's see mapping with +4 preserving case? W uppercase -> shift +4 within uppercase alphabet: W->A (wrap) yes. h->l (+4) lower. i->m (+4). g->k (+4). g->k (+4). i->m (+4). s->w (+4). m->q (+4). So rule: Caesar shift by +4 preserving case.\n\nThus function: for each character, if alphabetic, shift by 4 within same case, wrapping. Non-alphabetic? Not present. So implement.\n\nEdge: need to handle both uppercase and lowercase.\n\nImplementation:\n\ndef fn(x):\n    res=[]\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            res.append(chr((ord(ch)-ord('a')+4)%26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            res.append(chr((ord(ch)-ord('A')+4)%26 + ord('A')))\n        else:\n            res.append(ch)\n    return ''.join(res)\n\nReturn string.\n\nNow produce answer with reasoning and ans tags.assistantfinal<reasoning>\nAll given examples are produced by a Caesar cipher that shifts each alphabetic character forward by 4 positions, wrapping around the alphabet. The case of each letter is preserved (lower\u2011case stays lower\u2011case, upper\u2011case stays upper\u2011case). Non\u2011alphabetic characters (none appear in the samples) would be left unchanged.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    out = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            out.append(chr((ord(ch) - ord('a') + 4) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            out.append(chr((ord(ch) - ord('A') + 4) % 26 + ord('A')))\n        else:\n            out.append(ch)\n    return ''.join(out)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    out = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            out.append(chr((ord(ch) - ord('a') + 4) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            out.append(chr((ord(ch) - ord('A') + 4) % 26 + ord('A')))\n        else:\n            out.append(ch)\n    return ''.join(out)",
+                        "Reasoning": "All given examples are produced by a Caesar cipher that shifts each alphabetic character forward by 4 positions, wrapping around the alphabet. The case of each letter is preserved (lower\u2011case stays lower\u2011case, upper\u2011case stays upper\u2011case). Non\u2011alphabetic characters (none appear in the samples) would be left unchanged.",
+                        "TokenUsage": {
+                            "InputTokens": 284,
+                            "OutputTokens": 1402,
+                            "TotalTokens": 1686,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Error": null
+                    }
+                ],
+                "StopReason": "oracle_accepted"
+            }
+        ]
+    ],
+    "oracle": "cvc5_bounded_symbolic_Python",
+    "TaskSettings": {
+        "crypto_setting": "paper",
+        "n_train": 10,
+        "n_test": 10,
+        "noise_ratio": 0.0,
+        "ood_ratio": 0.0,
+        "hypothesis": "Python_fn_x",
+        "paper_task_protocol": true,
+        "method": "shared_CE_pipeline_not_paper_SRR",
+        "regularization_applied": false,
+        "prompt_variant": "base_with_reasoning_and_ans",
+        "oracle_policy": "bounded_symbolic_python_crypto_v1",
+        "oracle_domain": {
+            "alphabet": "ASCII A-Z/a-z",
+            "min_length": 0,
+            "max_length": 10
+        },
+        "Difficulty": {
+            "catalog_version": "benchmark_difficulty_v2",
+            "id": "caesar:13",
+            "tier": "L1",
+            "level": 1,
+            "levels": 3,
+            "axis": "training_information_coverage",
+            "proxy": true,
+            "features": {
+                "missing_lowercase_letters": 5,
+                "missing_case_sensitive_letters": 30,
+                "family": "caesar",
+                "training_entries": 10,
+                "within_family_rank": 21
+            },
+            "basis_config_matches": true
+        },
+        "TrainingPoolSize": 10,
+        "ScheduledTrainingBudget": 10,
+        "EvaluationPoolSize": 10,
+        "RoundBudget": 10,
+        "StandardSampleSchedule": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+        ]
+    }
+}

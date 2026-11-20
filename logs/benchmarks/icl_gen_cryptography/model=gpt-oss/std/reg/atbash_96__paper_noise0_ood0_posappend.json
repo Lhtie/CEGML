@@ -1,0 +1,232 @@
+{
+    "task_type": "cryptography",
+    "benchmark_id": "atbash:96",
+    "pipeline": "regex_run_episode",
+    "runs": [
+        [
+            {
+                "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: vulpinism\nOutput: efokrmrhn\nInput: unrambling\nOutput: fmiznyormt\nInput: rooter\nOutput: illgvi\nInput: ineducable\nOutput: rmvwfxzyov\nInput: maeandrine\nOutput: nzvzmwirmv\nInput: depthing\nOutput: wvkgsrmt\nInput: Limosi\nOutput: Ornlhr\nInput: parental\nOutput: kzivmgzo\nInput: yirr\nOutput: brii\nInput: starworm\nOutput: hgzidlin\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\nvulpinism -> efokrmrhn\nunrambling -> fmiznyormt\nrooter -> illgvi\nineducable -> rmvwfxzyov\nmaeandrine -> nzvzmwirmv\ndepthing -> wvkgsrmt\nLimosi -> Ornlhr\nparental -> kzivmgzo\nyirr -> brii\nstarworm -> hgzidlin\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift varying per position? Let's compare letters.\n\nTake \"vulpinism\" (9 letters) output \"efokrmrhn\" (9 letters). Let's map each position:\n\nv -> e\nu -> f\nl -> o\np -> k\ni -> r\nn -> m\ni -> r\ns -> h\nm -> n\n\nSeems like each letter shifted by some amount maybe based on position? Let's compute shift (alphabet positions a=0). v(21) -> e(4) shift = (4-21) mod26 = 9? Actually 4-21 = -17 mod26 = 9. So shift +9. u(20) -> f(5) shift = 11? 5-20 = -15 mod26 = 11. l(11) -> o(14) shift = 3. p(15) -> k(10) shift = -5 mod26 =21. i(8) -> r(17) shift =9. n(13) -> m(12) shift = -1 mod26 =25. i(8) -> r(17) shift=9. s(18) -> h(7) shift = -11 mod26 =15. m(12) -> n(13) shift=1.\n\nShifts: [9,11,3,21,9,25,9,15,1]. Not obvious pattern.\n\nMaybe it's a Vigenere cipher with a key? Let's see if same key applied to other words yields consistent shifts.\n\nTake \"unrambling\" (10) -> \"fmiznyormt\". Compute shifts:\n\nu(20)->f(5): shift = 11? 5-20=-15 mod26=11.\nn(13)->m(12): shift=25.\nr(17)->i(8): shift=17? 8-17=-9 mod26=17.\na(0)->z(25): shift=25.\nm(12)->n(13): shift=1.\nb(1)->y(24): shift=23? 24-1=23.\nl(11)->o(14): shift=3.\ni(8)->r(17): shift=9.\nn(13)->m(12): shift=25.\ng(6)->t(19): shift=13.\n\nShifts: [11,25,17,25,1,23,3,9,25,13].\n\nCompare with previous shifts for same positions maybe pattern: position 1 shift 9 vs 11; not same. So maybe key depends on letters themselves.\n\nCould be some substitution cipher like each letter replaced by letter 9 positions ahead in alphabet but with some transformation like reverse alphabet? Let's test: For v->e, that's +9 (or -17). For u->f also +11. Not consistent.\n\nMaybe it's a simple substitution mapping each letter to another fixed mapping (like a monoalphabetic cipher). Let's test mapping across examples.\n\nCollect mapping pairs:\n\nv->e\nu->f (also appears in other words: u->f again in \"unrambling\": u->f consistent)\nl->o (also appears: l in \"Limosi\" capital L -> O? Actually L->O, yes mapping L->O consistent)\np->k (p appears only there)\ni->r (i appears many times: in \"vulpinism\" i->r, also in \"unrambling\" i->r, also in \"starworm\": starworm has 'r' output? Wait starworm -> hgzidlin. Let's map: s->h, t->g, a->z, r->i, w->d, o->l, r->i, m->n. So r->i consistent with i->r? Actually mapping is from input to output: r->i (input r output i). In earlier mapping i->r. So it's symmetric? Could be a simple substitution where each letter maps to another, maybe using a fixed permutation that is its own inverse? Let's test: mapping i->r, r->i (yes). v->e, e->? Do we have e as input anywhere? Not in given inputs. u->f, f as input? Not present. l->o, o->l (in starworm, o->l). Good! p->k, k as input? Not present. n->m, m->n (in rooter: m->n, also in starworm m->n). s->h, h as input? Not present. So seems mapping is a substitution where each pair is swapped (involution). Let's verify more.\n\nCheck \"rooter\" -> \"illgvi\". Input letters: r o o t e r. Output: i l l g v i.\n\nMapping: r->i (as above). o->l (as above). t->g (so t maps to g). e->v (so e maps to v). So mapping pairs: t<->g, e<->v. Good.\n\nCheck \"ineducable\" -> \"rmvwfxzyov\". Input letters: i n e d u c a b l e. Output: r m v w f x z y o v.\n\nMapping: i->r (consistent). n->m (consistent). e->v (consistent). d->w (so d<->w). u->f (consistent). c->x (c<->x). a->z (a<->z). b->y (b<->y). l->o (consistent). e again v.\n\nGreat! So mapping is a simple substitution where each letter is swapped with its counterpart, forming pairs (a<->z, b<->y, c<->x, d<->w, e<->v, f<->u, g<->t, h<->s, i<->r, j<->q, k<->p, l<->o, m<->n). That's the classic Atbash cipher! Indeed Atbash maps a<->z, b<->y, etc. Let's verify: Atbash for 'v' (22) -> e (5) yes. 'u' -> f, yes. 'l' -> o, yes. 'p' -> k, yes. 'i' -> r, yes. 'n' -> m, yes. 's' -> h, yes. 'm' -> n, yes. So it's Atbash.\n\nCheck capital letters: \"Limosi\" -> \"Ornlhr\". Atbash preserving case: L (uppercase) -> O (uppercase). i->r, m->n, o->l, s->h, i->r. Output \"Ornlhr\". Yes.\n\nThus rule: Atbash cipher (reverse alphabet) preserving case.\n\nImplement function fn(x) that returns Atbash of string, preserving case, leaving non-letters unchanged? All inputs are letters only. We'll implement for both uppercase and lowercase.\n\nImplementation: For each char c, if 'a' <= c <= 'z', map to chr(ord('z') - (ord(c)-ord('a'))). Similarly for uppercase.\n\nReturn result.\n\nNow produce answer with reasoning and function.\n\nassistantfinal<reasoning>\nThe transformation swaps each letter with its counterpart in the reversed alphabet (Atbash cipher).  \n- a \u2194 z, b \u2194 y, c \u2194 x, \u2026, m \u2194 n  \n- The same mapping is applied to uppercase letters, preserving the case.  \nAll given examples follow this rule, e.g.,\u202fv \u2192 e,\u202fu \u2192 f,\u202fL \u2192 O, etc.  \nThe function therefore converts each alphabetic character to its Atbash equivalent and leaves any non\u2011alphabetic characters unchanged.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            res.append(ch)\n    return ''.join(res)",
+                "Reasoning": "The transformation swaps each letter with its counterpart in the reversed alphabet (Atbash cipher).  \n- a \u2194 z, b \u2194 y, c \u2194 x, \u2026, m \u2194 n  \n- The same mapping is applied to uppercase letters, preserving the case.  \nAll given examples follow this rule, e.g.,\u202fv \u2192 e,\u202fu \u2192 f,\u202fL \u2192 O, etc.  \nThe function therefore converts each alphabetic character to its Atbash equivalent and leaves any non\u2011alphabetic characters unchanged.",
+                "TokenUsage": {
+                    "InputTokens": 290,
+                    "OutputTokens": 1859,
+                    "TotalTokens": 2149,
+                    "ModelCalls": 1,
+                    "UsageComplete": true,
+                    "KnownInputTokens": 290,
+                    "KnownOutputTokens": 1859,
+                    "Calls": [
+                        {
+                            "InputTokens": 290,
+                            "OutputTokens": 1859,
+                            "TotalTokens": 2149,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids",
+                            "Model": "gpt-oss"
+                        }
+                    ]
+                },
+                "Equivalent": true,
+                "scoreTrainSet": 1.0,
+                "scoreEvalSet": 1.0,
+                "CandidateValid": true,
+                "OracleStatus": "accepted",
+                "OracleCounterexamples": [],
+                "OracleDetails": {
+                    "policy": "bounded_symbolic_python_crypto_v1",
+                    "backend": "cvc5_python_api",
+                    "guarantee": "equivalent_on_bounded_domain_only",
+                    "domain": {
+                        "alphabet": "ASCII A-Z/a-z",
+                        "min_length": 0,
+                        "max_length": 10
+                    },
+                    "timeout_ms_per_check": 10000,
+                    "queries": 11,
+                    "lengths_proved": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "lengths_searched": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "fallback": null,
+                    "status": "bounded_unsat"
+                },
+                "RepairExamples": [],
+                "EvaluationDetails": {
+                    "test_examples": 10,
+                    "correct": 10,
+                    "sample_accuracy": 1.0,
+                    "all_test_correct": true
+                },
+                "epoch": 0,
+                "NumTrainingSamples": 10,
+                "CurrentGuess": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            res.append(ch)\n    return ''.join(res)",
+                "CurrentGuessReasoning": "The transformation swaps each letter with its counterpart in the reversed alphabet (Atbash cipher).  \n- a \u2194 z, b \u2194 y, c \u2194 x, \u2026, m \u2194 n  \n- The same mapping is applied to uppercase letters, preserving the case.  \nAll given examples follow this rule, e.g.,\u202fv \u2192 e,\u202fu \u2192 f,\u202fL \u2192 O, etc.  \nThe function therefore converts each alphabetic character to its Atbash equivalent and leaves any non\u2011alphabetic characters unchanged.",
+                "Accuracy": 1,
+                "Logs": [
+                    {
+                        "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: vulpinism\nOutput: efokrmrhn\nInput: unrambling\nOutput: fmiznyormt\nInput: rooter\nOutput: illgvi\nInput: ineducable\nOutput: rmvwfxzyov\nInput: maeandrine\nOutput: nzvzmwirmv\nInput: depthing\nOutput: wvkgsrmt\nInput: Limosi\nOutput: Ornlhr\nInput: parental\nOutput: kzivmgzo\nInput: yirr\nOutput: brii\nInput: starworm\nOutput: hgzidlin\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                        "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\nvulpinism -> efokrmrhn\nunrambling -> fmiznyormt\nrooter -> illgvi\nineducable -> rmvwfxzyov\nmaeandrine -> nzvzmwirmv\ndepthing -> wvkgsrmt\nLimosi -> Ornlhr\nparental -> kzivmgzo\nyirr -> brii\nstarworm -> hgzidlin\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift varying per position? Let's compare letters.\n\nTake \"vulpinism\" (9 letters) output \"efokrmrhn\" (9 letters). Let's map each position:\n\nv -> e\nu -> f\nl -> o\np -> k\ni -> r\nn -> m\ni -> r\ns -> h\nm -> n\n\nSeems like each letter shifted by some amount maybe based on position? Let's compute shift (alphabet positions a=0). v(21) -> e(4) shift = (4-21) mod26 = 9? Actually 4-21 = -17 mod26 = 9. So shift +9. u(20) -> f(5) shift = 11? 5-20 = -15 mod26 = 11. l(11) -> o(14) shift = 3. p(15) -> k(10) shift = -5 mod26 =21. i(8) -> r(17) shift =9. n(13) -> m(12) shift = -1 mod26 =25. i(8) -> r(17) shift=9. s(18) -> h(7) shift = -11 mod26 =15. m(12) -> n(13) shift=1.\n\nShifts: [9,11,3,21,9,25,9,15,1]. Not obvious pattern.\n\nMaybe it's a Vigenere cipher with a key? Let's see if same key applied to other words yields consistent shifts.\n\nTake \"unrambling\" (10) -> \"fmiznyormt\". Compute shifts:\n\nu(20)->f(5): shift = 11? 5-20=-15 mod26=11.\nn(13)->m(12): shift=25.\nr(17)->i(8): shift=17? 8-17=-9 mod26=17.\na(0)->z(25): shift=25.\nm(12)->n(13): shift=1.\nb(1)->y(24): shift=23? 24-1=23.\nl(11)->o(14): shift=3.\ni(8)->r(17): shift=9.\nn(13)->m(12): shift=25.\ng(6)->t(19): shift=13.\n\nShifts: [11,25,17,25,1,23,3,9,25,13].\n\nCompare with previous shifts for same positions maybe pattern: position 1 shift 9 vs 11; not same. So maybe key depends on letters themselves.\n\nCould be some substitution cipher like each letter replaced by letter 9 positions ahead in alphabet but with some transformation like reverse alphabet? Let's test: For v->e, that's +9 (or -17). For u->f also +11. Not consistent.\n\nMaybe it's a simple substitution mapping each letter to another fixed mapping (like a monoalphabetic cipher). Let's test mapping across examples.\n\nCollect mapping pairs:\n\nv->e\nu->f (also appears in other words: u->f again in \"unrambling\": u->f consistent)\nl->o (also appears: l in \"Limosi\" capital L -> O? Actually L->O, yes mapping L->O consistent)\np->k (p appears only there)\ni->r (i appears many times: in \"vulpinism\" i->r, also in \"unrambling\" i->r, also in \"starworm\": starworm has 'r' output? Wait starworm -> hgzidlin. Let's map: s->h, t->g, a->z, r->i, w->d, o->l, r->i, m->n. So r->i consistent with i->r? Actually mapping is from input to output: r->i (input r output i). In earlier mapping i->r. So it's symmetric? Could be a simple substitution where each letter maps to another, maybe using a fixed permutation that is its own inverse? Let's test: mapping i->r, r->i (yes). v->e, e->? Do we have e as input anywhere? Not in given inputs. u->f, f as input? Not present. l->o, o->l (in starworm, o->l). Good! p->k, k as input? Not present. n->m, m->n (in rooter: m->n, also in starworm m->n). s->h, h as input? Not present. So seems mapping is a substitution where each pair is swapped (involution). Let's verify more.\n\nCheck \"rooter\" -> \"illgvi\". Input letters: r o o t e r. Output: i l l g v i.\n\nMapping: r->i (as above). o->l (as above). t->g (so t maps to g). e->v (so e maps to v). So mapping pairs: t<->g, e<->v. Good.\n\nCheck \"ineducable\" -> \"rmvwfxzyov\". Input letters: i n e d u c a b l e. Output: r m v w f x z y o v.\n\nMapping: i->r (consistent). n->m (consistent). e->v (consistent). d->w (so d<->w). u->f (consistent). c->x (c<->x). a->z (a<->z). b->y (b<->y). l->o (consistent). e again v.\n\nGreat! So mapping is a simple substitution where each letter is swapped with its counterpart, forming pairs (a<->z, b<->y, c<->x, d<->w, e<->v, f<->u, g<->t, h<->s, i<->r, j<->q, k<->p, l<->o, m<->n). That's the classic Atbash cipher! Indeed Atbash maps a<->z, b<->y, etc. Let's verify: Atbash for 'v' (22) -> e (5) yes. 'u' -> f, yes. 'l' -> o, yes. 'p' -> k, yes. 'i' -> r, yes. 'n' -> m, yes. 's' -> h, yes. 'm' -> n, yes. So it's Atbash.\n\nCheck capital letters: \"Limosi\" -> \"Ornlhr\". Atbash preserving case: L (uppercase) -> O (uppercase). i->r, m->n, o->l, s->h, i->r. Output \"Ornlhr\". Yes.\n\nThus rule: Atbash cipher (reverse alphabet) preserving case.\n\nImplement function fn(x) that returns Atbash of string, preserving case, leaving non-letters unchanged? All inputs are letters only. We'll implement for both uppercase and lowercase.\n\nImplementation: For each char c, if 'a' <= c <= 'z', map to chr(ord('z') - (ord(c)-ord('a'))). Similarly for uppercase.\n\nReturn result.\n\nNow produce answer with reasoning and function.\n\nassistantfinal<reasoning>\nThe transformation swaps each letter with its counterpart in the reversed alphabet (Atbash cipher).  \n- a \u2194 z, b \u2194 y, c \u2194 x, \u2026, m \u2194 n  \n- The same mapping is applied to uppercase letters, preserving the case.  \nAll given examples follow this rule, e.g.,\u202fv \u2192 e,\u202fu \u2192 f,\u202fL \u2192 O, etc.  \nThe function therefore converts each alphabetic character to its Atbash equivalent and leaves any non\u2011alphabetic characters unchanged.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            res.append(ch)\n    return ''.join(res)",
+                        "Reasoning": "The transformation swaps each letter with its counterpart in the reversed alphabet (Atbash cipher).  \n- a \u2194 z, b \u2194 y, c \u2194 x, \u2026, m \u2194 n  \n- The same mapping is applied to uppercase letters, preserving the case.  \nAll given examples follow this rule, e.g.,\u202fv \u2192 e,\u202fu \u2192 f,\u202fL \u2192 O, etc.  \nThe function therefore converts each alphabetic character to its Atbash equivalent and leaves any non\u2011alphabetic characters unchanged.",
+                        "TokenUsage": {
+                            "InputTokens": 290,
+                            "OutputTokens": 1859,
+                            "TotalTokens": 2149,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Equivalent": true,
+                        "scoreTrainSet": 1.0,
+                        "scoreEvalSet": 1.0,
+                        "CandidateValid": true,
+                        "OracleStatus": "accepted",
+                        "OracleCounterexamples": [],
+                        "OracleDetails": {
+                            "policy": "bounded_symbolic_python_crypto_v1",
+                            "backend": "cvc5_python_api",
+                            "guarantee": "equivalent_on_bounded_domain_only",
+                            "domain": {
+                                "alphabet": "ASCII A-Z/a-z",
+                                "min_length": 0,
+                                "max_length": 10
+                            },
+                            "timeout_ms_per_check": 10000,
+                            "queries": 11,
+                            "lengths_proved": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "lengths_searched": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "fallback": null,
+                            "status": "bounded_unsat"
+                        },
+                        "RepairExamples": [],
+                        "EvaluationDetails": {
+                            "test_examples": 10,
+                            "correct": 10,
+                            "sample_accuracy": 1.0,
+                            "all_test_correct": true
+                        }
+                    }
+                ],
+                "InputTokens": 290,
+                "OutputTokens": 1859,
+                "Counterexamples": [],
+                "TrainingExampleSource": "scheduled",
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\nvulpinism -> efokrmrhn\nunrambling -> fmiznyormt\nrooter -> illgvi\nineducable -> rmvwfxzyov\nmaeandrine -> nzvzmwirmv\ndepthing -> wvkgsrmt\nLimosi -> Ornlhr\nparental -> kzivmgzo\nyirr -> brii\nstarworm -> hgzidlin\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift varying per position? Let's compare letters.\n\nTake \"vulpinism\" (9 letters) output \"efokrmrhn\" (9 letters). Let's map each position:\n\nv -> e\nu -> f\nl -> o\np -> k\ni -> r\nn -> m\ni -> r\ns -> h\nm -> n\n\nSeems like each letter shifted by some amount maybe based on position? Let's compute shift (alphabet positions a=0). v(21) -> e(4) shift = (4-21) mod26 = 9? Actually 4-21 = -17 mod26 = 9. So shift +9. u(20) -> f(5) shift = 11? 5-20 = -15 mod26 = 11. l(11) -> o(14) shift = 3. p(15) -> k(10) shift = -5 mod26 =21. i(8) -> r(17) shift =9. n(13) -> m(12) shift = -1 mod26 =25. i(8) -> r(17) shift=9. s(18) -> h(7) shift = -11 mod26 =15. m(12) -> n(13) shift=1.\n\nShifts: [9,11,3,21,9,25,9,15,1]. Not obvious pattern.\n\nMaybe it's a Vigenere cipher with a key? Let's see if same key applied to other words yields consistent shifts.\n\nTake \"unrambling\" (10) -> \"fmiznyormt\". Compute shifts:\n\nu(20)->f(5): shift = 11? 5-20=-15 mod26=11.\nn(13)->m(12): shift=25.\nr(17)->i(8): shift=17? 8-17=-9 mod26=17.\na(0)->z(25): shift=25.\nm(12)->n(13): shift=1.\nb(1)->y(24): shift=23? 24-1=23.\nl(11)->o(14): shift=3.\ni(8)->r(17): shift=9.\nn(13)->m(12): shift=25.\ng(6)->t(19): shift=13.\n\nShifts: [11,25,17,25,1,23,3,9,25,13].\n\nCompare with previous shifts for same positions maybe pattern: position 1 shift 9 vs 11; not same. So maybe key depends on letters themselves.\n\nCould be some substitution cipher like each letter replaced by letter 9 positions ahead in alphabet but with some transformation like reverse alphabet? Let's test: For v->e, that's +9 (or -17). For u->f also +11. Not consistent.\n\nMaybe it's a simple substitution mapping each letter to another fixed mapping (like a monoalphabetic cipher). Let's test mapping across examples.\n\nCollect mapping pairs:\n\nv->e\nu->f (also appears in other words: u->f again in \"unrambling\": u->f consistent)\nl->o (also appears: l in \"Limosi\" capital L -> O? Actually L->O, yes mapping L->O consistent)\np->k (p appears only there)\ni->r (i appears many times: in \"vulpinism\" i->r, also in \"unrambling\" i->r, also in \"starworm\": starworm has 'r' output? Wait starworm -> hgzidlin. Let's map: s->h, t->g, a->z, r->i, w->d, o->l, r->i, m->n. So r->i consistent with i->r? Actually mapping is from input to output: r->i (input r output i). In earlier mapping i->r. So it's symmetric? Could be a simple substitution where each letter maps to another, maybe using a fixed permutation that is its own inverse? Let's test: mapping i->r, r->i (yes). v->e, e->? Do we have e as input anywhere? Not in given inputs. u->f, f as input? Not present. l->o, o->l (in starworm, o->l). Good! p->k, k as input? Not present. n->m, m->n (in rooter: m->n, also in starworm m->n). s->h, h as input? Not present. So seems mapping is a substitution where each pair is swapped (involution). Let's verify more.\n\nCheck \"rooter\" -> \"illgvi\". Input letters: r o o t e r. Output: i l l g v i.\n\nMapping: r->i (as above). o->l (as above). t->g (so t maps to g). e->v (so e maps to v). So mapping pairs: t<->g, e<->v. Good.\n\nCheck \"ineducable\" -> \"rmvwfxzyov\". Input letters: i n e d u c a b l e. Output: r m v w f x z y o v.\n\nMapping: i->r (consistent). n->m (consistent). e->v (consistent). d->w (so d<->w). u->f (consistent). c->x (c<->x). a->z (a<->z). b->y (b<->y). l->o (consistent). e again v.\n\nGreat! So mapping is a simple substitution where each letter is swapped with its counterpart, forming pairs (a<->z, b<->y, c<->x, d<->w, e<->v, f<->u, g<->t, h<->s, i<->r, j<->q, k<->p, l<->o, m<->n). That's the classic Atbash cipher! Indeed Atbash maps a<->z, b<->y, etc. Let's verify: Atbash for 'v' (22) -> e (5) yes. 'u' -> f, yes. 'l' -> o, yes. 'p' -> k, yes. 'i' -> r, yes. 'n' -> m, yes. 's' -> h, yes. 'm' -> n, yes. So it's Atbash.\n\nCheck capital letters: \"Limosi\" -> \"Ornlhr\". Atbash preserving case: L (uppercase) -> O (uppercase). i->r, m->n, o->l, s->h, i->r. Output \"Ornlhr\". Yes.\n\nThus rule: Atbash cipher (reverse alphabet) preserving case.\n\nImplement function fn(x) that returns Atbash of string, preserving case, leaving non-letters unchanged? All inputs are letters only. We'll implement for both uppercase and lowercase.\n\nImplementation: For each char c, if 'a' <= c <= 'z', map to chr(ord('z') - (ord(c)-ord('a'))). Similarly for uppercase.\n\nReturn result.\n\nNow produce answer with reasoning and function.\n\nassistantfinal<reasoning>\nThe transformation swaps each letter with its counterpart in the reversed alphabet (Atbash cipher).  \n- a \u2194 z, b \u2194 y, c \u2194 x, \u2026, m \u2194 n  \n- The same mapping is applied to uppercase letters, preserving the case.  \nAll given examples follow this rule, e.g.,\u202fv \u2192 e,\u202fu \u2192 f,\u202fL \u2192 O, etc.  \nThe function therefore converts each alphabetic character to its Atbash equivalent and leaves any non\u2011alphabetic characters unchanged.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            res.append(ch)\n    return ''.join(res)",
+                        "Reasoning": "The transformation swaps each letter with its counterpart in the reversed alphabet (Atbash cipher).  \n- a \u2194 z, b \u2194 y, c \u2194 x, \u2026, m \u2194 n  \n- The same mapping is applied to uppercase letters, preserving the case.  \nAll given examples follow this rule, e.g.,\u202fv \u2192 e,\u202fu \u2192 f,\u202fL \u2192 O, etc.  \nThe function therefore converts each alphabetic character to its Atbash equivalent and leaves any non\u2011alphabetic characters unchanged.",
+                        "TokenUsage": {
+                            "InputTokens": 290,
+                            "OutputTokens": 1859,
+                            "TotalTokens": 2149,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Error": null
+                    }
+                ],
+                "StopReason": "oracle_accepted"
+            }
+        ]
+    ],
+    "oracle": "cvc5_bounded_symbolic_Python",
+    "TaskSettings": {
+        "crypto_setting": "paper",
+        "n_train": 10,
+        "n_test": 10,
+        "noise_ratio": 0.0,
+        "ood_ratio": 0.0,
+        "hypothesis": "Python_fn_x",
+        "paper_task_protocol": true,
+        "method": "shared_CE_pipeline_not_paper_SRR",
+        "regularization_applied": false,
+        "prompt_variant": "base_with_reasoning_and_ans",
+        "oracle_policy": "bounded_symbolic_python_crypto_v1",
+        "oracle_domain": {
+            "alphabet": "ASCII A-Z/a-z",
+            "min_length": 0,
+            "max_length": 10
+        },
+        "Difficulty": {
+            "catalog_version": "benchmark_difficulty_v2",
+            "id": "atbash:96",
+            "tier": "L2",
+            "level": 2,
+            "levels": 3,
+            "axis": "training_information_coverage",
+            "proxy": true,
+            "features": {
+                "missing_lowercase_letters": 6,
+                "missing_case_sensitive_letters": 31,
+                "family": "atbash",
+                "training_entries": 10,
+                "within_family_rank": 43
+            },
+            "basis_config_matches": true
+        },
+        "TrainingPoolSize": 10,
+        "ScheduledTrainingBudget": 10,
+        "EvaluationPoolSize": 10,
+        "RoundBudget": 10,
+        "StandardSampleSchedule": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+        ]
+    }
+}

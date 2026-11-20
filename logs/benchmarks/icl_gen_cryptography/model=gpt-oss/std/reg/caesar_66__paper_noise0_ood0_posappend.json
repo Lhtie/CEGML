@@ -1,0 +1,232 @@
+{
+    "task_type": "cryptography",
+    "benchmark_id": "caesar:66",
+    "pipeline": "regex_run_episode",
+    "runs": [
+        [
+            {
+                "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: diagonal\nOutput: fkciqpcn\nInput: overlive\nOutput: qxgtnkxg\nInput: carving\nOutput: ectxkpi\nInput: albumean\nOutput: cndwogcp\nInput: glabellar\nOutput: incdgnnct\nInput: equipluve\nOutput: gswkrnwxg\nInput: instroke\nOutput: kpuvtqmg\nInput: reblock\nOutput: tgdnqem\nInput: recubant\nOutput: tgewdcpv\nInput: phymatid\nOutput: rjaocvkf\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\n1. diagonal -> fkciqpcn\n2. overlive -> qxgtnkxg\n3. carving -> ectxkpi\n4. albumean -> cndwogcp\n5. glabellar -> incdgnnct\n6. equipluve -> gswkrnwxg\n7. instroke -> kpuvtqmg\n8. reblock -> tgdnqem\n9. recubant -> tgewdcpv\n10. phymatid -> rjaocvkf\n\nWe need to find transformation. Input length vs output length: Let's compute.\n\n- diagonal length 8, output length 8.\n- overlive length 8, output length 8.\n- carving length 7, output length 7.\n- albumean length 8, output length 8.\n- glabellar length 9, output length 9.\n- equipluve length 9, output length 9.\n- instroke length 8, output length 8.\n- reblock length 7, output length 7.\n- recubant length 8, output length 8.\n- phymatid length 8, output length 8.\n\nSo same length.\n\nProbably each character transformed via some substitution cipher maybe Caesar shift varying per position? Let's compare letters.\n\nTake diagonal: d i a g o n a l\nOutput: f k c i q p c n\n\nCompute shift (output - input) using alphabet positions (a=0). d=3 -> f=5 shift +2. i=8 -> k=10 shift +2. a=0 -> c=2 shift +2. g=6 -> i=8 shift +2. o=14 -> q=16 shift +2. n=13 -> p=15 shift +2. a=0 -> c=2 shift +2. l=11 -> n=13 shift +2. So simple Caesar +2! Let's test other examples.\n\noverlive: o(14)->q(16) +2, v(21)->x(23)+2, e(4)->g(6)+2, r(17)->t(19)+2, l(11)->n(13)+2, i(8)->k(10)+2, v(21)->x(23)+2, e(4)->g(6)+2 => qxgtnkxg matches! Good.\n\ncarving: c(2)->e(4)+2, a(0)->c(2)+2, r(17)->t(19)+2, v(21)->x(23)+2, i(8)->k(10)+2, n(13)->p(15)+2, g(6)->i(8)+2 => ectxkpi matches! Good.\n\nalbumean: a->c (+2), l->n (+2), b->d (+2), u->w (+2), m->o (+2), e->g (+2), a->c (+2), n->p (+2) => cndwogcp matches.\n\nglabellar: g->i (+2), l->n (+2), a->c (+2), b->d (+2), e->g (+2), l->n (+2), l->n (+2), a->c (+2), r->t (+2) => incdgnnct matches.\n\nequipluve: e->g (+2), q->s (+2), u->w (+2), i->k (+2), p->r (+2), l->n (+2), u->w (+2), v->x (+2), e->g (+2) => gswkrnwxg matches.\n\ninstroke: i->k (+2), n->p (+2), s->u (+2), t->v (+2), r->t (+2), o->q (+2), k->m (+2), e->g (+2) => kpuvtqmg matches.\n\nreblock: r->t (+2), e->g (+2), b->d (+2), l->n (+2), o->q (+2), c->e (+2), k->m (+2) => tgdnqem matches.\n\nrecubant: r->t (+2), e->g (+2), c->e (+2), u->w (+2), b->d (+2), a->c (+2), n->p (+2), t->v (+2) => tgewdcpv matches.\n\nphymatid: p->r (+2), h->j (+2), y->a? Wait y (24) +2 => 26 -> wrap to 0? Actually alphabet 0-25, y=24, +2 => 26 -> 0 => a. Output is a? Let's see output: r j a o c v k f. Yes third char a matches wrap. m (12) +2 => o (14) matches. a (0)+2 => c (2) matches. t (19)+2 => v (21) matches. i (8)+2 => k (10) matches. d (3)+2 => f (5) matches. So rule: Caesar shift +2 with wrap.\n\nThus function: shift each character by 2 positions in alphabet, preserving case? All inputs lower case, output lower case. So implement.\n\nEdge cases: only letters a-z. We'll implement generic.\n\nImplementation:\n\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            res.append(chr((ord(ch)-97+2)%26 + 97))\n        elif 'A' <= ch <= 'Z':\n            res.append(chr((ord(ch)-65+2)%26 + 65))\n        else:\n            res.append(ch)\n    return ''.join(res)\n\nReturn string.\n\nNow produce answer with reasoning and ans tags.assistantfinal<reasoning>\nAll given examples keep the same length and consist only of lowercase letters.  \nComparing each input character with the corresponding output character shows a constant shift of **+2** in the alphabet (with wrap\u2011around, e.g., \u2018y\u2019 \u2192 \u2018a\u2019).  \nThus the rule is a Caesar cipher with a shift of 2. The function applies this shift to every alphabetic character, preserving case and leaving any non\u2011letter unchanged.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    out = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            out.append(chr((ord(ch) - ord('a') + 2) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            out.append(chr((ord(ch) - ord('A') + 2) % 26 + ord('A')))\n        else:\n            out.append(ch)\n    return ''.join(out)\n```\n</ans>",
+                "Prediction": "def fn(x):\n    out = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            out.append(chr((ord(ch) - ord('a') + 2) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            out.append(chr((ord(ch) - ord('A') + 2) % 26 + ord('A')))\n        else:\n            out.append(ch)\n    return ''.join(out)",
+                "Reasoning": "All given examples keep the same length and consist only of lowercase letters.  \nComparing each input character with the corresponding output character shows a constant shift of **+2** in the alphabet (with wrap\u2011around, e.g., \u2018y\u2019 \u2192 \u2018a\u2019).  \nThus the rule is a Caesar cipher with a shift of 2. The function applies this shift to every alphabetic character, preserving case and leaving any non\u2011letter unchanged.",
+                "TokenUsage": {
+                    "InputTokens": 297,
+                    "OutputTokens": 1480,
+                    "TotalTokens": 1777,
+                    "ModelCalls": 1,
+                    "UsageComplete": true,
+                    "KnownInputTokens": 297,
+                    "KnownOutputTokens": 1480,
+                    "Calls": [
+                        {
+                            "InputTokens": 297,
+                            "OutputTokens": 1480,
+                            "TotalTokens": 1777,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids",
+                            "Model": "gpt-oss"
+                        }
+                    ]
+                },
+                "Equivalent": true,
+                "scoreTrainSet": 1.0,
+                "scoreEvalSet": 1.0,
+                "CandidateValid": true,
+                "OracleStatus": "accepted",
+                "OracleCounterexamples": [],
+                "OracleDetails": {
+                    "policy": "bounded_symbolic_python_crypto_v1",
+                    "backend": "cvc5_python_api",
+                    "guarantee": "equivalent_on_bounded_domain_only",
+                    "domain": {
+                        "alphabet": "ASCII A-Z/a-z",
+                        "min_length": 0,
+                        "max_length": 10
+                    },
+                    "timeout_ms_per_check": 10000,
+                    "queries": 11,
+                    "lengths_proved": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "lengths_searched": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "fallback": null,
+                    "status": "bounded_unsat"
+                },
+                "RepairExamples": [],
+                "EvaluationDetails": {
+                    "test_examples": 10,
+                    "correct": 10,
+                    "sample_accuracy": 1.0,
+                    "all_test_correct": true
+                },
+                "epoch": 0,
+                "NumTrainingSamples": 10,
+                "CurrentGuess": "def fn(x):\n    out = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            out.append(chr((ord(ch) - ord('a') + 2) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            out.append(chr((ord(ch) - ord('A') + 2) % 26 + ord('A')))\n        else:\n            out.append(ch)\n    return ''.join(out)",
+                "CurrentGuessReasoning": "All given examples keep the same length and consist only of lowercase letters.  \nComparing each input character with the corresponding output character shows a constant shift of **+2** in the alphabet (with wrap\u2011around, e.g., \u2018y\u2019 \u2192 \u2018a\u2019).  \nThus the rule is a Caesar cipher with a shift of 2. The function applies this shift to every alphabetic character, preserving case and leaving any non\u2011letter unchanged.",
+                "Accuracy": 1,
+                "Logs": [
+                    {
+                        "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: diagonal\nOutput: fkciqpcn\nInput: overlive\nOutput: qxgtnkxg\nInput: carving\nOutput: ectxkpi\nInput: albumean\nOutput: cndwogcp\nInput: glabellar\nOutput: incdgnnct\nInput: equipluve\nOutput: gswkrnwxg\nInput: instroke\nOutput: kpuvtqmg\nInput: reblock\nOutput: tgdnqem\nInput: recubant\nOutput: tgewdcpv\nInput: phymatid\nOutput: rjaocvkf\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                        "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\n1. diagonal -> fkciqpcn\n2. overlive -> qxgtnkxg\n3. carving -> ectxkpi\n4. albumean -> cndwogcp\n5. glabellar -> incdgnnct\n6. equipluve -> gswkrnwxg\n7. instroke -> kpuvtqmg\n8. reblock -> tgdnqem\n9. recubant -> tgewdcpv\n10. phymatid -> rjaocvkf\n\nWe need to find transformation. Input length vs output length: Let's compute.\n\n- diagonal length 8, output length 8.\n- overlive length 8, output length 8.\n- carving length 7, output length 7.\n- albumean length 8, output length 8.\n- glabellar length 9, output length 9.\n- equipluve length 9, output length 9.\n- instroke length 8, output length 8.\n- reblock length 7, output length 7.\n- recubant length 8, output length 8.\n- phymatid length 8, output length 8.\n\nSo same length.\n\nProbably each character transformed via some substitution cipher maybe Caesar shift varying per position? Let's compare letters.\n\nTake diagonal: d i a g o n a l\nOutput: f k c i q p c n\n\nCompute shift (output - input) using alphabet positions (a=0). d=3 -> f=5 shift +2. i=8 -> k=10 shift +2. a=0 -> c=2 shift +2. g=6 -> i=8 shift +2. o=14 -> q=16 shift +2. n=13 -> p=15 shift +2. a=0 -> c=2 shift +2. l=11 -> n=13 shift +2. So simple Caesar +2! Let's test other examples.\n\noverlive: o(14)->q(16) +2, v(21)->x(23)+2, e(4)->g(6)+2, r(17)->t(19)+2, l(11)->n(13)+2, i(8)->k(10)+2, v(21)->x(23)+2, e(4)->g(6)+2 => qxgtnkxg matches! Good.\n\ncarving: c(2)->e(4)+2, a(0)->c(2)+2, r(17)->t(19)+2, v(21)->x(23)+2, i(8)->k(10)+2, n(13)->p(15)+2, g(6)->i(8)+2 => ectxkpi matches! Good.\n\nalbumean: a->c (+2), l->n (+2), b->d (+2), u->w (+2), m->o (+2), e->g (+2), a->c (+2), n->p (+2) => cndwogcp matches.\n\nglabellar: g->i (+2), l->n (+2), a->c (+2), b->d (+2), e->g (+2), l->n (+2), l->n (+2), a->c (+2), r->t (+2) => incdgnnct matches.\n\nequipluve: e->g (+2), q->s (+2), u->w (+2), i->k (+2), p->r (+2), l->n (+2), u->w (+2), v->x (+2), e->g (+2) => gswkrnwxg matches.\n\ninstroke: i->k (+2), n->p (+2), s->u (+2), t->v (+2), r->t (+2), o->q (+2), k->m (+2), e->g (+2) => kpuvtqmg matches.\n\nreblock: r->t (+2), e->g (+2), b->d (+2), l->n (+2), o->q (+2), c->e (+2), k->m (+2) => tgdnqem matches.\n\nrecubant: r->t (+2), e->g (+2), c->e (+2), u->w (+2), b->d (+2), a->c (+2), n->p (+2), t->v (+2) => tgewdcpv matches.\n\nphymatid: p->r (+2), h->j (+2), y->a? Wait y (24) +2 => 26 -> wrap to 0? Actually alphabet 0-25, y=24, +2 => 26 -> 0 => a. Output is a? Let's see output: r j a o c v k f. Yes third char a matches wrap. m (12) +2 => o (14) matches. a (0)+2 => c (2) matches. t (19)+2 => v (21) matches. i (8)+2 => k (10) matches. d (3)+2 => f (5) matches. So rule: Caesar shift +2 with wrap.\n\nThus function: shift each character by 2 positions in alphabet, preserving case? All inputs lower case, output lower case. So implement.\n\nEdge cases: only letters a-z. We'll implement generic.\n\nImplementation:\n\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            res.append(chr((ord(ch)-97+2)%26 + 97))\n        elif 'A' <= ch <= 'Z':\n            res.append(chr((ord(ch)-65+2)%26 + 65))\n        else:\n            res.append(ch)\n    return ''.join(res)\n\nReturn string.\n\nNow produce answer with reasoning and ans tags.assistantfinal<reasoning>\nAll given examples keep the same length and consist only of lowercase letters.  \nComparing each input character with the corresponding output character shows a constant shift of **+2** in the alphabet (with wrap\u2011around, e.g., \u2018y\u2019 \u2192 \u2018a\u2019).  \nThus the rule is a Caesar cipher with a shift of 2. The function applies this shift to every alphabetic character, preserving case and leaving any non\u2011letter unchanged.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    out = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            out.append(chr((ord(ch) - ord('a') + 2) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            out.append(chr((ord(ch) - ord('A') + 2) % 26 + ord('A')))\n        else:\n            out.append(ch)\n    return ''.join(out)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    out = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            out.append(chr((ord(ch) - ord('a') + 2) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            out.append(chr((ord(ch) - ord('A') + 2) % 26 + ord('A')))\n        else:\n            out.append(ch)\n    return ''.join(out)",
+                        "Reasoning": "All given examples keep the same length and consist only of lowercase letters.  \nComparing each input character with the corresponding output character shows a constant shift of **+2** in the alphabet (with wrap\u2011around, e.g., \u2018y\u2019 \u2192 \u2018a\u2019).  \nThus the rule is a Caesar cipher with a shift of 2. The function applies this shift to every alphabetic character, preserving case and leaving any non\u2011letter unchanged.",
+                        "TokenUsage": {
+                            "InputTokens": 297,
+                            "OutputTokens": 1480,
+                            "TotalTokens": 1777,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Equivalent": true,
+                        "scoreTrainSet": 1.0,
+                        "scoreEvalSet": 1.0,
+                        "CandidateValid": true,
+                        "OracleStatus": "accepted",
+                        "OracleCounterexamples": [],
+                        "OracleDetails": {
+                            "policy": "bounded_symbolic_python_crypto_v1",
+                            "backend": "cvc5_python_api",
+                            "guarantee": "equivalent_on_bounded_domain_only",
+                            "domain": {
+                                "alphabet": "ASCII A-Z/a-z",
+                                "min_length": 0,
+                                "max_length": 10
+                            },
+                            "timeout_ms_per_check": 10000,
+                            "queries": 11,
+                            "lengths_proved": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "lengths_searched": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "fallback": null,
+                            "status": "bounded_unsat"
+                        },
+                        "RepairExamples": [],
+                        "EvaluationDetails": {
+                            "test_examples": 10,
+                            "correct": 10,
+                            "sample_accuracy": 1.0,
+                            "all_test_correct": true
+                        }
+                    }
+                ],
+                "InputTokens": 297,
+                "OutputTokens": 1480,
+                "Counterexamples": [],
+                "TrainingExampleSource": "scheduled",
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\n1. diagonal -> fkciqpcn\n2. overlive -> qxgtnkxg\n3. carving -> ectxkpi\n4. albumean -> cndwogcp\n5. glabellar -> incdgnnct\n6. equipluve -> gswkrnwxg\n7. instroke -> kpuvtqmg\n8. reblock -> tgdnqem\n9. recubant -> tgewdcpv\n10. phymatid -> rjaocvkf\n\nWe need to find transformation. Input length vs output length: Let's compute.\n\n- diagonal length 8, output length 8.\n- overlive length 8, output length 8.\n- carving length 7, output length 7.\n- albumean length 8, output length 8.\n- glabellar length 9, output length 9.\n- equipluve length 9, output length 9.\n- instroke length 8, output length 8.\n- reblock length 7, output length 7.\n- recubant length 8, output length 8.\n- phymatid length 8, output length 8.\n\nSo same length.\n\nProbably each character transformed via some substitution cipher maybe Caesar shift varying per position? Let's compare letters.\n\nTake diagonal: d i a g o n a l\nOutput: f k c i q p c n\n\nCompute shift (output - input) using alphabet positions (a=0). d=3 -> f=5 shift +2. i=8 -> k=10 shift +2. a=0 -> c=2 shift +2. g=6 -> i=8 shift +2. o=14 -> q=16 shift +2. n=13 -> p=15 shift +2. a=0 -> c=2 shift +2. l=11 -> n=13 shift +2. So simple Caesar +2! Let's test other examples.\n\noverlive: o(14)->q(16) +2, v(21)->x(23)+2, e(4)->g(6)+2, r(17)->t(19)+2, l(11)->n(13)+2, i(8)->k(10)+2, v(21)->x(23)+2, e(4)->g(6)+2 => qxgtnkxg matches! Good.\n\ncarving: c(2)->e(4)+2, a(0)->c(2)+2, r(17)->t(19)+2, v(21)->x(23)+2, i(8)->k(10)+2, n(13)->p(15)+2, g(6)->i(8)+2 => ectxkpi matches! Good.\n\nalbumean: a->c (+2), l->n (+2), b->d (+2), u->w (+2), m->o (+2), e->g (+2), a->c (+2), n->p (+2) => cndwogcp matches.\n\nglabellar: g->i (+2), l->n (+2), a->c (+2), b->d (+2), e->g (+2), l->n (+2), l->n (+2), a->c (+2), r->t (+2) => incdgnnct matches.\n\nequipluve: e->g (+2), q->s (+2), u->w (+2), i->k (+2), p->r (+2), l->n (+2), u->w (+2), v->x (+2), e->g (+2) => gswkrnwxg matches.\n\ninstroke: i->k (+2), n->p (+2), s->u (+2), t->v (+2), r->t (+2), o->q (+2), k->m (+2), e->g (+2) => kpuvtqmg matches.\n\nreblock: r->t (+2), e->g (+2), b->d (+2), l->n (+2), o->q (+2), c->e (+2), k->m (+2) => tgdnqem matches.\n\nrecubant: r->t (+2), e->g (+2), c->e (+2), u->w (+2), b->d (+2), a->c (+2), n->p (+2), t->v (+2) => tgewdcpv matches.\n\nphymatid: p->r (+2), h->j (+2), y->a? Wait y (24) +2 => 26 -> wrap to 0? Actually alphabet 0-25, y=24, +2 => 26 -> 0 => a. Output is a? Let's see output: r j a o c v k f. Yes third char a matches wrap. m (12) +2 => o (14) matches. a (0)+2 => c (2) matches. t (19)+2 => v (21) matches. i (8)+2 => k (10) matches. d (3)+2 => f (5) matches. So rule: Caesar shift +2 with wrap.\n\nThus function: shift each character by 2 positions in alphabet, preserving case? All inputs lower case, output lower case. So implement.\n\nEdge cases: only letters a-z. We'll implement generic.\n\nImplementation:\n\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            res.append(chr((ord(ch)-97+2)%26 + 97))\n        elif 'A' <= ch <= 'Z':\n            res.append(chr((ord(ch)-65+2)%26 + 65))\n        else:\n            res.append(ch)\n    return ''.join(res)\n\nReturn string.\n\nNow produce answer with reasoning and ans tags.assistantfinal<reasoning>\nAll given examples keep the same length and consist only of lowercase letters.  \nComparing each input character with the corresponding output character shows a constant shift of **+2** in the alphabet (with wrap\u2011around, e.g., \u2018y\u2019 \u2192 \u2018a\u2019).  \nThus the rule is a Caesar cipher with a shift of 2. The function applies this shift to every alphabetic character, preserving case and leaving any non\u2011letter unchanged.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    out = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            out.append(chr((ord(ch) - ord('a') + 2) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            out.append(chr((ord(ch) - ord('A') + 2) % 26 + ord('A')))\n        else:\n            out.append(ch)\n    return ''.join(out)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    out = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            out.append(chr((ord(ch) - ord('a') + 2) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            out.append(chr((ord(ch) - ord('A') + 2) % 26 + ord('A')))\n        else:\n            out.append(ch)\n    return ''.join(out)",
+                        "Reasoning": "All given examples keep the same length and consist only of lowercase letters.  \nComparing each input character with the corresponding output character shows a constant shift of **+2** in the alphabet (with wrap\u2011around, e.g., \u2018y\u2019 \u2192 \u2018a\u2019).  \nThus the rule is a Caesar cipher with a shift of 2. The function applies this shift to every alphabetic character, preserving case and leaving any non\u2011letter unchanged.",
+                        "TokenUsage": {
+                            "InputTokens": 297,
+                            "OutputTokens": 1480,
+                            "TotalTokens": 1777,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Error": null
+                    }
+                ],
+                "StopReason": "oracle_accepted"
+            }
+        ]
+    ],
+    "oracle": "cvc5_bounded_symbolic_Python",
+    "TaskSettings": {
+        "crypto_setting": "paper",
+        "n_train": 10,
+        "n_test": 10,
+        "noise_ratio": 0.0,
+        "ood_ratio": 0.0,
+        "hypothesis": "Python_fn_x",
+        "paper_task_protocol": true,
+        "method": "shared_CE_pipeline_not_paper_SRR",
+        "regularization_applied": false,
+        "prompt_variant": "base_with_reasoning_and_ans",
+        "oracle_policy": "bounded_symbolic_python_crypto_v1",
+        "oracle_domain": {
+            "alphabet": "ASCII A-Z/a-z",
+            "min_length": 0,
+            "max_length": 10
+        },
+        "Difficulty": {
+            "catalog_version": "benchmark_difficulty_v2",
+            "id": "caesar:66",
+            "tier": "L2",
+            "level": 2,
+            "levels": 3,
+            "axis": "training_information_coverage",
+            "proxy": true,
+            "features": {
+                "missing_lowercase_letters": 5,
+                "missing_case_sensitive_letters": 31,
+                "family": "caesar",
+                "training_entries": 10,
+                "within_family_rank": 35
+            },
+            "basis_config_matches": true
+        },
+        "TrainingPoolSize": 10,
+        "ScheduledTrainingBudget": 10,
+        "EvaluationPoolSize": 10,
+        "RoundBudget": 10,
+        "StandardSampleSchedule": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+        ]
+    }
+}

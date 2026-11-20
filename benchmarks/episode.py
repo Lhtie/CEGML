@@ -84,12 +84,23 @@ class BenchmarkEpisodeAdapter:
         verdict = self.task.verify(candidate, self.config.ce_batch_size, llm_call=self.call_model)
         self.verdicts[candidate] = verdict
         result.update(verdict.log_fields())
-        if (self.task.kind == 'ilp' and verdict.equivalent is None
-                and (verdict.details or {}).get('status') == 'resource_limit'):
+        if (
+            self.task.kind == 'ilp'
+            and verdict.equivalent is None
+            and (verdict.details or {}).get('status') == 'resource_limit'
+        ):
             result['RepairExamples'] = []
-            result['TrainingDetails'] = {'training_complete':False,'stop_reason':'oracle_resource_limit'}
-            result['EvaluationDetails'] = {'evaluation_complete':False,'stop_reason':'oracle_resource_limit'}
+            result['TrainingDetails'] = {
+                'training_complete': False,
+                'stop_reason': 'oracle_resource_limit',
+            }
+            result['EvaluationDetails'] = {
+                'evaluation_complete': False,
+                'stop_reason': 'oracle_resource_limit',
+            }
             return result
+        if self.task.kind == "scan":
+            print(f"[SCAN] scoring training entries: {len(self.seen)}", flush=True)
         errors = self.task.training_errors(candidate, self.seen)
         if getattr(self.task, 'last_training_details', None) is not None:
             result['TrainingDetails'] = self.task.last_training_details
@@ -97,6 +108,8 @@ class BenchmarkEpisodeAdapter:
         if errors is not None and self.seen:
             result['scoreTrainSet'] = 1.0 - len(errors) / len(self.seen)
         try:
+            if self.task.kind == "scan":
+                print(f"[SCAN] scoring evaluation entries: {len(self.task.eval)}", flush=True)
             result['scoreEvalSet'] = self.task.score(candidate, self.config.eval_size)
             if getattr(self.task, 'last_evaluation_details', None) is not None:
                 result['EvaluationDetails'] = self.task.last_evaluation_details

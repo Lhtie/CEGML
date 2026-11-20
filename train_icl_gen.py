@@ -9,6 +9,7 @@ import numpy as np
 from tqdm import tqdm
 from types import SimpleNamespace
 from scheduling import round_schedule
+from modeling.response import last_tag, all_tags
 
 from modeling.llm import is_vllm_model, load_model_and_tokenizer
 from tasks.rl import SimplyRegularLanguage, ExtRegularLanguage
@@ -43,27 +44,15 @@ from prompting.rl import (
 train_data_template = "{0}, {1}"
 
 def extract_ans(res):
-    if res is None: return None
-    matches = re.search(r"(?:.*)<ans>\s*(.*?)\s*</ans>", res, re.DOTALL)
-    if matches:
-        return matches.group(1)
-    return None
+    return last_tag(res, "ans")
+
 
 def extract_all_ans(res):
-    if res is None:
-        return []
-    return [
-        match.strip()
-        for match in re.findall(r"<ans>\s*(.*?)\s*</ans>", res, re.DOTALL)
-        if match.strip()
-    ]
+    return [value for value in all_tags(res, "ans") if value]
+
 
 def extract_reasoning(res):
-    if res is None: return None
-    matches = re.search(r"(?:.*)<reasoning>\s*(.*?)\s*</reasoning>", res, re.DOTALL)
-    if matches:
-        return matches.group(1)
-    return None
+    return last_tag(res, "reasoning")
 
 def log_scaling(total, start, scale_factor):
     sizes = []
@@ -681,7 +670,12 @@ def run_benchmark(args, model=None, tokenizer=None, response_fn=None):
         print(f"[benchmark] {stage} started; prompt_chars={len(prompt)}", flush=True)
         started = time.monotonic()
         response = call_with_usage(response_fn, prompt)
-        print(f"[benchmark] {stage} finished ({time.monotonic()-started:.1f}s)", flush=True)
+        usage = response_usage(response)
+        print(
+            f"[benchmark] {stage} finished ({time.monotonic() - started:.1f}s); "
+            f"input_tokens={usage['InputTokens']}, output_tokens={usage['OutputTokens']}",
+            flush=True,
+        )
         return response
     outdir = os.path.join(args.outdir, f"icl_gen_{args.task_type}", f"model={args.mkey}",
                           "ce" if args.use_ce else "std", "reg" if args.use_reg else "noreg")
@@ -733,10 +727,29 @@ def run_benchmark(args, model=None, tokenizer=None, response_fn=None):
             if args.use_reg and getattr(task, "allow_regularization", True):
                 prompt = BENCHMARK_REGULARIZATION + prompt
             response = logged_response(prompt)
-            return {"Prompt": prompt, "Response": response,
-                    "Prediction": task.extract_candidate(response, answer_extractor,
-                                                         multiple=answer_extractor is extract_all_ans),
-                    "Reasoning": reasoning_extractor(response), "TokenUsage": response_usage(response)}
+            import time
+            started = time.monotonic()
+            print(
+                f"[benchmark] candidate extraction started; response_chars={len(response or '')}",
+                flush=True,
+            )
+            prediction = task.extract_candidate(
+                response,
+                answer_extractor,
+                multiple=answer_extractor is extract_all_ans,
+            )
+            reasoning = reasoning_extractor(response)
+            print(
+                f"[benchmark] candidate extraction finished ({time.monotonic() - started:.3f}s)",
+                flush=True,
+            )
+            return {
+                "Prompt": prompt,
+                "Response": response,
+                "Prediction": prediction,
+                "Reasoning": reasoning,
+                "TokenUsage": response_usage(response),
+            }
 
         def on_retry(epoch, msgs):
             # Same incremental checkpoint callback as the regex entry point.

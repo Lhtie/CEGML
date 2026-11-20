@@ -1,0 +1,232 @@
+{
+    "task_type": "cryptography",
+    "benchmark_id": "atbash:92",
+    "pipeline": "regex_run_episode",
+    "runs": [
+        [
+            {
+                "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: limpin\nOutput: ornkrm\nInput: questingly\nOutput: jfvhgrmtob\nInput: teicher\nOutput: gvrxsvi\nInput: Billie\nOutput: Yroorv\nInput: arizonite\nOutput: ziralmrgv\nInput: exhale\nOutput: vcszov\nInput: lawyery\nOutput: ozdbvib\nInput: spondylid\nOutput: hklmwborw\nInput: biflorous\nOutput: yruolilfh\nInput: willy\nOutput: droob\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\n1. limpin -> ornkrm\n2. questingly -> jfvhgrmtob\n3. teicher -> gvrxsvi\n4. Billie -> Yroorv\n5. arizonite -> ziralmrgv\n6. exhale -> vcszov\n7. lawyery -> ozdbvib\n8. spondylid -> hklmwborw\n9. biflorous -> yruolilfh\n10. willy -> droob\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift with varying shift per character? Let's compare letters.\n\nTake \"limpin\" (lowercase) -> \"ornkrm\". Let's map each char:\n\nl -> o (shift +3)\ni -> r (shift +9)\nm -> n (+1)\np -> k (-5) or +? p->k is -5 (or +21)\ni -> r (+9)\nn -> m (-1)\n\nNot consistent.\n\nMaybe reversed and shifted? Reverse \"limpin\" => \"nipmil\". Output \"ornkrm\". Not match.\n\nMaybe each output char is input char shifted by position index? Let's compute: For index 0 (l) shift +? l->o = +3 (index 0 maybe +3). index1 i->r = +9 (maybe +8?). index2 m->n = +1 (maybe +2?). Not.\n\nMaybe using some key phrase? Could be Vigenere with key \"??\". Let's try to see pattern across examples.\n\nTake \"exhale\" -> \"vcszov\". Input e x h a l e. Output v c s z o v.\n\nCompute shift (output - input) using alphabet positions (a=0). e(4)->v(21) shift +17 (or -9). x(23)->c(2) shift +5 (or -21). h(7)->s(18) shift +11. a(0)->z(25) shift -1 (or +25). l(11)->o(14) shift +3. e(4)->v(21) shift +17 again.\n\nPattern maybe symmetrical: shifts: +17, +5, +11, -1, +3, +17. Not obvious.\n\nMaybe it's some substitution based on keyboard adjacency? Not.\n\nMaybe it's a simple transposition plus Caesar? Let's see \"willy\" -> \"droob\". Input w i l l y. Output d r o o b.\n\nShifts: w(22)->d(3) +7 (wrap). i(8)->r(17) +9. l(11)->o(14) +3. l->o +3. y(24)->b(1) +3? Actually y->b is +3 (wrap). So pattern maybe: first two letters have different shifts, rest +3? Let's test with other words.\n\n\"exhale\": e->v (+17) not +3. So not.\n\nMaybe it's using ROT13 but with some modifications? Let's apply ROT13 to \"willy\": w->j, i->v, l->y, l->y, y->l => \"jvyy l\"? Actually \"jvyy l\"? Wait \"jvyy l\"? That's \"jvyy l\". Not \"droob\". So not.\n\nMaybe it's using Atbash (reverse alphabet). Atbash: a<->z, b<->y, etc. Let's compute Atbash of \"willy\": w->d (since w (22) maps to d (3)). i->r (8->17). l->o (11->14). l->o. y->b (24->1). That yields \"droob\". That's exactly the output! Great! So rule is Atbash cipher (mirror alphabet). Let's test with others.\n\nCheck \"exhale\": Atbash: e->v, x->c, h->s, a->z, l->o, e->v => \"vcszov\". Matches! Good.\n\nCheck \"limpin\": l->o, i->r, m->n, p->k, i->r, n->m => \"ornkrm\". Yes matches! So it's Atbash.\n\nCheck \"Billie\": Input \"Billie\" (case-sensitive). Atbash preserving case? Let's compute: B (uppercase) -> Y (since A<->Z). i->r, l->o, l->o, i->r, e->v => \"Yroorv\". matches! Good.\n\nThus rule: Atbash cipher (mirror alphabet) preserving case.\n\nNow we need to implement function fn(x) that returns Atbash of string x, preserving case for letters, leaving other characters unchanged? All inputs are alphabetic. We'll implement.\n\nImplementation: For each char c in x: if c.islower(): transformed = chr(ord('a') + (25 - (ord(c)-ord('a')))). Similarly for uppercase.\n\nReturn string.\n\nNow produce answer with reasoning and function inside <ans> tags.\n\nassistantfinal<reasoning>\nThe given pairs are produced by the **Atbash cipher** \u2013 each letter is replaced by its mirror in the alphabet (a\u2194z, b\u2194y, \u2026). The case of the original letter is preserved (uppercase stays uppercase, lowercase stays lowercase). No other characters appear, so non\u2011letters can be left unchanged.\n\nThe function iterates over the input string, computes the mirrored character for letters, and builds the result.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # mirror in lowercase alphabet\n            res.append(chr(ord('a') + (25 - (ord(ch) - ord('a')))))\n        elif 'A' <= ch <= 'Z':\n            # mirror in uppercase alphabet\n            res.append(chr(ord('A') + (25 - (ord(ch) - ord('A')))))\n        else:\n            # non\u2011alphabetic characters are unchanged\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # mirror in lowercase alphabet\n            res.append(chr(ord('a') + (25 - (ord(ch) - ord('a')))))\n        elif 'A' <= ch <= 'Z':\n            # mirror in uppercase alphabet\n            res.append(chr(ord('A') + (25 - (ord(ch) - ord('A')))))\n        else:\n            # non\u2011alphabetic characters are unchanged\n            res.append(ch)\n    return ''.join(res)",
+                "Reasoning": "The given pairs are produced by the **Atbash cipher** \u2013 each letter is replaced by its mirror in the alphabet (a\u2194z, b\u2194y, \u2026). The case of the original letter is preserved (uppercase stays uppercase, lowercase stays lowercase). No other characters appear, so non\u2011letters can be left unchanged.\n\nThe function iterates over the input string, computes the mirrored character for letters, and builds the result.",
+                "TokenUsage": {
+                    "InputTokens": 287,
+                    "OutputTokens": 1307,
+                    "TotalTokens": 1594,
+                    "ModelCalls": 1,
+                    "UsageComplete": true,
+                    "KnownInputTokens": 287,
+                    "KnownOutputTokens": 1307,
+                    "Calls": [
+                        {
+                            "InputTokens": 287,
+                            "OutputTokens": 1307,
+                            "TotalTokens": 1594,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids",
+                            "Model": "gpt-oss"
+                        }
+                    ]
+                },
+                "Equivalent": true,
+                "scoreTrainSet": 1.0,
+                "scoreEvalSet": 1.0,
+                "CandidateValid": true,
+                "OracleStatus": "accepted",
+                "OracleCounterexamples": [],
+                "OracleDetails": {
+                    "policy": "bounded_symbolic_python_crypto_v1",
+                    "backend": "cvc5_python_api",
+                    "guarantee": "equivalent_on_bounded_domain_only",
+                    "domain": {
+                        "alphabet": "ASCII A-Z/a-z",
+                        "min_length": 0,
+                        "max_length": 10
+                    },
+                    "timeout_ms_per_check": 10000,
+                    "queries": 11,
+                    "lengths_proved": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "lengths_searched": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "fallback": null,
+                    "status": "bounded_unsat"
+                },
+                "RepairExamples": [],
+                "EvaluationDetails": {
+                    "test_examples": 10,
+                    "correct": 10,
+                    "sample_accuracy": 1.0,
+                    "all_test_correct": true
+                },
+                "epoch": 0,
+                "NumTrainingSamples": 10,
+                "CurrentGuess": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # mirror in lowercase alphabet\n            res.append(chr(ord('a') + (25 - (ord(ch) - ord('a')))))\n        elif 'A' <= ch <= 'Z':\n            # mirror in uppercase alphabet\n            res.append(chr(ord('A') + (25 - (ord(ch) - ord('A')))))\n        else:\n            # non\u2011alphabetic characters are unchanged\n            res.append(ch)\n    return ''.join(res)",
+                "CurrentGuessReasoning": "The given pairs are produced by the **Atbash cipher** \u2013 each letter is replaced by its mirror in the alphabet (a\u2194z, b\u2194y, \u2026). The case of the original letter is preserved (uppercase stays uppercase, lowercase stays lowercase). No other characters appear, so non\u2011letters can be left unchanged.\n\nThe function iterates over the input string, computes the mirrored character for letters, and builds the result.",
+                "Accuracy": 1,
+                "Logs": [
+                    {
+                        "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: limpin\nOutput: ornkrm\nInput: questingly\nOutput: jfvhgrmtob\nInput: teicher\nOutput: gvrxsvi\nInput: Billie\nOutput: Yroorv\nInput: arizonite\nOutput: ziralmrgv\nInput: exhale\nOutput: vcszov\nInput: lawyery\nOutput: ozdbvib\nInput: spondylid\nOutput: hklmwborw\nInput: biflorous\nOutput: yruolilfh\nInput: willy\nOutput: droob\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                        "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\n1. limpin -> ornkrm\n2. questingly -> jfvhgrmtob\n3. teicher -> gvrxsvi\n4. Billie -> Yroorv\n5. arizonite -> ziralmrgv\n6. exhale -> vcszov\n7. lawyery -> ozdbvib\n8. spondylid -> hklmwborw\n9. biflorous -> yruolilfh\n10. willy -> droob\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift with varying shift per character? Let's compare letters.\n\nTake \"limpin\" (lowercase) -> \"ornkrm\". Let's map each char:\n\nl -> o (shift +3)\ni -> r (shift +9)\nm -> n (+1)\np -> k (-5) or +? p->k is -5 (or +21)\ni -> r (+9)\nn -> m (-1)\n\nNot consistent.\n\nMaybe reversed and shifted? Reverse \"limpin\" => \"nipmil\". Output \"ornkrm\". Not match.\n\nMaybe each output char is input char shifted by position index? Let's compute: For index 0 (l) shift +? l->o = +3 (index 0 maybe +3). index1 i->r = +9 (maybe +8?). index2 m->n = +1 (maybe +2?). Not.\n\nMaybe using some key phrase? Could be Vigenere with key \"??\". Let's try to see pattern across examples.\n\nTake \"exhale\" -> \"vcszov\". Input e x h a l e. Output v c s z o v.\n\nCompute shift (output - input) using alphabet positions (a=0). e(4)->v(21) shift +17 (or -9). x(23)->c(2) shift +5 (or -21). h(7)->s(18) shift +11. a(0)->z(25) shift -1 (or +25). l(11)->o(14) shift +3. e(4)->v(21) shift +17 again.\n\nPattern maybe symmetrical: shifts: +17, +5, +11, -1, +3, +17. Not obvious.\n\nMaybe it's some substitution based on keyboard adjacency? Not.\n\nMaybe it's a simple transposition plus Caesar? Let's see \"willy\" -> \"droob\". Input w i l l y. Output d r o o b.\n\nShifts: w(22)->d(3) +7 (wrap). i(8)->r(17) +9. l(11)->o(14) +3. l->o +3. y(24)->b(1) +3? Actually y->b is +3 (wrap). So pattern maybe: first two letters have different shifts, rest +3? Let's test with other words.\n\n\"exhale\": e->v (+17) not +3. So not.\n\nMaybe it's using ROT13 but with some modifications? Let's apply ROT13 to \"willy\": w->j, i->v, l->y, l->y, y->l => \"jvyy l\"? Actually \"jvyy l\"? Wait \"jvyy l\"? That's \"jvyy l\". Not \"droob\". So not.\n\nMaybe it's using Atbash (reverse alphabet). Atbash: a<->z, b<->y, etc. Let's compute Atbash of \"willy\": w->d (since w (22) maps to d (3)). i->r (8->17). l->o (11->14). l->o. y->b (24->1). That yields \"droob\". That's exactly the output! Great! So rule is Atbash cipher (mirror alphabet). Let's test with others.\n\nCheck \"exhale\": Atbash: e->v, x->c, h->s, a->z, l->o, e->v => \"vcszov\". Matches! Good.\n\nCheck \"limpin\": l->o, i->r, m->n, p->k, i->r, n->m => \"ornkrm\". Yes matches! So it's Atbash.\n\nCheck \"Billie\": Input \"Billie\" (case-sensitive). Atbash preserving case? Let's compute: B (uppercase) -> Y (since A<->Z). i->r, l->o, l->o, i->r, e->v => \"Yroorv\". matches! Good.\n\nThus rule: Atbash cipher (mirror alphabet) preserving case.\n\nNow we need to implement function fn(x) that returns Atbash of string x, preserving case for letters, leaving other characters unchanged? All inputs are alphabetic. We'll implement.\n\nImplementation: For each char c in x: if c.islower(): transformed = chr(ord('a') + (25 - (ord(c)-ord('a')))). Similarly for uppercase.\n\nReturn string.\n\nNow produce answer with reasoning and function inside <ans> tags.\n\nassistantfinal<reasoning>\nThe given pairs are produced by the **Atbash cipher** \u2013 each letter is replaced by its mirror in the alphabet (a\u2194z, b\u2194y, \u2026). The case of the original letter is preserved (uppercase stays uppercase, lowercase stays lowercase). No other characters appear, so non\u2011letters can be left unchanged.\n\nThe function iterates over the input string, computes the mirrored character for letters, and builds the result.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # mirror in lowercase alphabet\n            res.append(chr(ord('a') + (25 - (ord(ch) - ord('a')))))\n        elif 'A' <= ch <= 'Z':\n            # mirror in uppercase alphabet\n            res.append(chr(ord('A') + (25 - (ord(ch) - ord('A')))))\n        else:\n            # non\u2011alphabetic characters are unchanged\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # mirror in lowercase alphabet\n            res.append(chr(ord('a') + (25 - (ord(ch) - ord('a')))))\n        elif 'A' <= ch <= 'Z':\n            # mirror in uppercase alphabet\n            res.append(chr(ord('A') + (25 - (ord(ch) - ord('A')))))\n        else:\n            # non\u2011alphabetic characters are unchanged\n            res.append(ch)\n    return ''.join(res)",
+                        "Reasoning": "The given pairs are produced by the **Atbash cipher** \u2013 each letter is replaced by its mirror in the alphabet (a\u2194z, b\u2194y, \u2026). The case of the original letter is preserved (uppercase stays uppercase, lowercase stays lowercase). No other characters appear, so non\u2011letters can be left unchanged.\n\nThe function iterates over the input string, computes the mirrored character for letters, and builds the result.",
+                        "TokenUsage": {
+                            "InputTokens": 287,
+                            "OutputTokens": 1307,
+                            "TotalTokens": 1594,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Equivalent": true,
+                        "scoreTrainSet": 1.0,
+                        "scoreEvalSet": 1.0,
+                        "CandidateValid": true,
+                        "OracleStatus": "accepted",
+                        "OracleCounterexamples": [],
+                        "OracleDetails": {
+                            "policy": "bounded_symbolic_python_crypto_v1",
+                            "backend": "cvc5_python_api",
+                            "guarantee": "equivalent_on_bounded_domain_only",
+                            "domain": {
+                                "alphabet": "ASCII A-Z/a-z",
+                                "min_length": 0,
+                                "max_length": 10
+                            },
+                            "timeout_ms_per_check": 10000,
+                            "queries": 11,
+                            "lengths_proved": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "lengths_searched": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "fallback": null,
+                            "status": "bounded_unsat"
+                        },
+                        "RepairExamples": [],
+                        "EvaluationDetails": {
+                            "test_examples": 10,
+                            "correct": 10,
+                            "sample_accuracy": 1.0,
+                            "all_test_correct": true
+                        }
+                    }
+                ],
+                "InputTokens": 287,
+                "OutputTokens": 1307,
+                "Counterexamples": [],
+                "TrainingExampleSource": "scheduled",
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\n1. limpin -> ornkrm\n2. questingly -> jfvhgrmtob\n3. teicher -> gvrxsvi\n4. Billie -> Yroorv\n5. arizonite -> ziralmrgv\n6. exhale -> vcszov\n7. lawyery -> ozdbvib\n8. spondylid -> hklmwborw\n9. biflorous -> yruolilfh\n10. willy -> droob\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift with varying shift per character? Let's compare letters.\n\nTake \"limpin\" (lowercase) -> \"ornkrm\". Let's map each char:\n\nl -> o (shift +3)\ni -> r (shift +9)\nm -> n (+1)\np -> k (-5) or +? p->k is -5 (or +21)\ni -> r (+9)\nn -> m (-1)\n\nNot consistent.\n\nMaybe reversed and shifted? Reverse \"limpin\" => \"nipmil\". Output \"ornkrm\". Not match.\n\nMaybe each output char is input char shifted by position index? Let's compute: For index 0 (l) shift +? l->o = +3 (index 0 maybe +3). index1 i->r = +9 (maybe +8?). index2 m->n = +1 (maybe +2?). Not.\n\nMaybe using some key phrase? Could be Vigenere with key \"??\". Let's try to see pattern across examples.\n\nTake \"exhale\" -> \"vcszov\". Input e x h a l e. Output v c s z o v.\n\nCompute shift (output - input) using alphabet positions (a=0). e(4)->v(21) shift +17 (or -9). x(23)->c(2) shift +5 (or -21). h(7)->s(18) shift +11. a(0)->z(25) shift -1 (or +25). l(11)->o(14) shift +3. e(4)->v(21) shift +17 again.\n\nPattern maybe symmetrical: shifts: +17, +5, +11, -1, +3, +17. Not obvious.\n\nMaybe it's some substitution based on keyboard adjacency? Not.\n\nMaybe it's a simple transposition plus Caesar? Let's see \"willy\" -> \"droob\". Input w i l l y. Output d r o o b.\n\nShifts: w(22)->d(3) +7 (wrap). i(8)->r(17) +9. l(11)->o(14) +3. l->o +3. y(24)->b(1) +3? Actually y->b is +3 (wrap). So pattern maybe: first two letters have different shifts, rest +3? Let's test with other words.\n\n\"exhale\": e->v (+17) not +3. So not.\n\nMaybe it's using ROT13 but with some modifications? Let's apply ROT13 to \"willy\": w->j, i->v, l->y, l->y, y->l => \"jvyy l\"? Actually \"jvyy l\"? Wait \"jvyy l\"? That's \"jvyy l\". Not \"droob\". So not.\n\nMaybe it's using Atbash (reverse alphabet). Atbash: a<->z, b<->y, etc. Let's compute Atbash of \"willy\": w->d (since w (22) maps to d (3)). i->r (8->17). l->o (11->14). l->o. y->b (24->1). That yields \"droob\". That's exactly the output! Great! So rule is Atbash cipher (mirror alphabet). Let's test with others.\n\nCheck \"exhale\": Atbash: e->v, x->c, h->s, a->z, l->o, e->v => \"vcszov\". Matches! Good.\n\nCheck \"limpin\": l->o, i->r, m->n, p->k, i->r, n->m => \"ornkrm\". Yes matches! So it's Atbash.\n\nCheck \"Billie\": Input \"Billie\" (case-sensitive). Atbash preserving case? Let's compute: B (uppercase) -> Y (since A<->Z). i->r, l->o, l->o, i->r, e->v => \"Yroorv\". matches! Good.\n\nThus rule: Atbash cipher (mirror alphabet) preserving case.\n\nNow we need to implement function fn(x) that returns Atbash of string x, preserving case for letters, leaving other characters unchanged? All inputs are alphabetic. We'll implement.\n\nImplementation: For each char c in x: if c.islower(): transformed = chr(ord('a') + (25 - (ord(c)-ord('a')))). Similarly for uppercase.\n\nReturn string.\n\nNow produce answer with reasoning and function inside <ans> tags.\n\nassistantfinal<reasoning>\nThe given pairs are produced by the **Atbash cipher** \u2013 each letter is replaced by its mirror in the alphabet (a\u2194z, b\u2194y, \u2026). The case of the original letter is preserved (uppercase stays uppercase, lowercase stays lowercase). No other characters appear, so non\u2011letters can be left unchanged.\n\nThe function iterates over the input string, computes the mirrored character for letters, and builds the result.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # mirror in lowercase alphabet\n            res.append(chr(ord('a') + (25 - (ord(ch) - ord('a')))))\n        elif 'A' <= ch <= 'Z':\n            # mirror in uppercase alphabet\n            res.append(chr(ord('A') + (25 - (ord(ch) - ord('A')))))\n        else:\n            # non\u2011alphabetic characters are unchanged\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # mirror in lowercase alphabet\n            res.append(chr(ord('a') + (25 - (ord(ch) - ord('a')))))\n        elif 'A' <= ch <= 'Z':\n            # mirror in uppercase alphabet\n            res.append(chr(ord('A') + (25 - (ord(ch) - ord('A')))))\n        else:\n            # non\u2011alphabetic characters are unchanged\n            res.append(ch)\n    return ''.join(res)",
+                        "Reasoning": "The given pairs are produced by the **Atbash cipher** \u2013 each letter is replaced by its mirror in the alphabet (a\u2194z, b\u2194y, \u2026). The case of the original letter is preserved (uppercase stays uppercase, lowercase stays lowercase). No other characters appear, so non\u2011letters can be left unchanged.\n\nThe function iterates over the input string, computes the mirrored character for letters, and builds the result.",
+                        "TokenUsage": {
+                            "InputTokens": 287,
+                            "OutputTokens": 1307,
+                            "TotalTokens": 1594,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Error": null
+                    }
+                ],
+                "StopReason": "oracle_accepted"
+            }
+        ]
+    ],
+    "oracle": "cvc5_bounded_symbolic_Python",
+    "TaskSettings": {
+        "crypto_setting": "paper",
+        "n_train": 10,
+        "n_test": 10,
+        "noise_ratio": 0.0,
+        "ood_ratio": 0.0,
+        "hypothesis": "Python_fn_x",
+        "paper_task_protocol": true,
+        "method": "shared_CE_pipeline_not_paper_SRR",
+        "regularization_applied": false,
+        "prompt_variant": "base_with_reasoning_and_ans",
+        "oracle_policy": "bounded_symbolic_python_crypto_v1",
+        "oracle_domain": {
+            "alphabet": "ASCII A-Z/a-z",
+            "min_length": 0,
+            "max_length": 10
+        },
+        "Difficulty": {
+            "catalog_version": "benchmark_difficulty_v2",
+            "id": "atbash:92",
+            "tier": "L1",
+            "level": 1,
+            "levels": 3,
+            "axis": "training_information_coverage",
+            "proxy": true,
+            "features": {
+                "missing_lowercase_letters": 3,
+                "missing_case_sensitive_letters": 28,
+                "family": "atbash",
+                "training_entries": 10,
+                "within_family_rank": 1
+            },
+            "basis_config_matches": true
+        },
+        "TrainingPoolSize": 10,
+        "ScheduledTrainingBudget": 10,
+        "EvaluationPoolSize": 10,
+        "RoundBudget": 10,
+        "StandardSampleSchedule": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+        ]
+    }
+}

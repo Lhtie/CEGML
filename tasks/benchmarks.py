@@ -10,6 +10,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from contextlib import contextmanager
 from pathlib import Path
+from modeling.response import all_tags
 
 
 ROOT = Path(__file__).resolve().parents[1] / "datasets"
@@ -369,7 +370,7 @@ class BenchmarkTask:
             return default_extractor(response)
         if not multiple:
             return extract_program(response)
-        sources = re.findall(r"<ans>\s*(.*?)\s*</ans>", response or "", re.S)
+        sources = all_tags(response,"ans")
         if not sources:
             sources = re.findall(r"```(?:python)?\s*\n(.*?)```", response or "", re.S)
         return [program for source in sources if (program := extract_program(source)) is not None]

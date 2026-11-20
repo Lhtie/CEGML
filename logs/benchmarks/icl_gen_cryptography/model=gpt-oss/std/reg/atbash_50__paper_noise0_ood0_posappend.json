@@ -1,0 +1,232 @@
+{
+    "task_type": "cryptography",
+    "benchmark_id": "atbash:50",
+    "pipeline": "regex_run_episode",
+    "runs": [
+        [
+            {
+                "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: impala\nOutput: rnkzoz\nInput: smore\nOutput: hnliv\nInput: cerata\nOutput: xvizgz\nInput: urge\nOutput: fitv\nInput: reseminate\nOutput: ivhvnrmzgv\nInput: soulful\nOutput: hlfoufo\nInput: crowstick\nOutput: xildhgrxp\nInput: hemopathy\nOutput: svnlkzgsb\nInput: plaudation\nOutput: kozfwzgrlm\nInput: Origanum\nOutput: Lirtzmfn\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                "Response": "analysisWe need to find mapping rule from given inputs to outputs. Let's analyze.\n\nWe have pairs:\n\nimpala -> rnkzoz\nsmore -> hnliv\ncerata -> xvizgz\nurge -> fitv\nreseminate -> ivhvnrmzgv\nsoulful -> hlfoufo\ncrowstick -> xildhgrxp\nhemopathy -> svnlkzgsb\nplaudation -> kozfwzgrlm\nOriganum -> Lirtzmfn\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift per character? Let's compare lengths: impala (6) -> rnkzoz (6). smore (5) -> hnliv (5). cerata (6) -> xvizgz (6). urge (4) -> fitv (4). reseminate (10) -> ivhvnrmzgv (10). soulful (7) -> hlfoufo (7). crowstick (9) -> xildhgrxp (9). hemopathy (9) -> svnlkzgsb (9). plaudation (10) -> kozfwzgrlm (10). Origanum (8) -> Lirtzmfn (8). So same length.\n\nCheck case: Input \"Origanum\" capital O, output \"Lirtzmfn\" capital L. So maybe preserve case? Input first letter uppercase, output first letter uppercase, rest lower.\n\nLet's compute letter shifts. Use alphabet positions (a=0). For impala -> r n k z o z.\n\ni (8) -> r (17) shift +9\nm (12) -> n (13) shift +1\np (15) -> k (10) shift -5 (or +21)\na (0) -> z (25) shift -1 (or +25)\nl (11) -> o (14) shift +3\na (0) -> z (25) shift -1\n\nPattern not consistent.\n\nMaybe it's some kind of Vigenere with key? Let's compute differences for each position across words maybe same key repeated.\n\nTake impala vs rnkzoz: shifts: +9, +1, -5, -1, +3, -1.\n\nsmore -> h n l i v: s(18)->h(7) shift -11 (+15). m(12)->n(13)+1. o(14)->l(11)-3 (+23). r(17)->i(8)-9 (+17). e(4)->v(21)+17.\n\nNot same.\n\nMaybe it's reversed alphabet (Atbash) plus shift? Atbash: a<->z, b<->y etc. Let's compute Atbash of impala: i->r (since i (8) maps to r (17) indeed Atbash). m->n (12->13) Atbash of m is n. p->k (15->10) Atbash of p is k. a->z (0->25) Atbash of a is z. l->o (11->14) Atbash of l is o. a->z. So impala Atbash yields exactly rnkzoz! So rule is Atbash cipher (mirror alphabet). Let's test others.\n\nsmore: s->h (Atbash: s (18) maps to h (7) correct). m->n (12->13) correct. o->l (14->11) correct. r->i (17->8) correct. e->v (4->21) correct. So matches.\n\ncerata: c->x (2->23) correct. e->v (4->21) correct. r->i (17->8) correct. a->z (0->25) correct. t->g (19->6) correct. a->z correct. So matches.\n\nurge: u->f (20->5) correct. r->i (17->8) correct. g->t (6->19) correct. e->v (4->21) correct. So matches.\n\nreseminate: r->i, e->v, s->h, e->v, m->n, i->r, n->m, a->z, t->g, e->v => ivhvnrmzgv matches.\n\nsoulful: s->h, o->l, u->f, l->o, f->u, u->f, l->o => hlfoufo matches.\n\ncrowstick: c->x, r->i, o->l, w->d, s->h, t->g, i->r, c->x, k->p => xildhgrxp matches.\n\nhemopathy: h->s, e->v, m->n, o->l, p->k, a->z, t->g, h->s, y->b => svnlkzgsb matches.\n\nplaudation: p->k, l->o, a->z, u->f, d->w, a->z, t->g, i->r, o->l, n->m => kozfwzgrlm matches.\n\nOriganum: O uppercase -> L (Atbash of O is L). r->i, i->r, g->t, a->z, n->m, u->f, m->n => Lirtzmfn matches.\n\nThus rule is Atbash cipher (mirror alphabet). So function should map each letter to its counterpart, preserving case. Non-letters maybe unchanged (not needed). Implementation: for each char, if 'a' <= c <= 'z', replace with chr(ord('z') - (ord(c)-ord('a'))). If uppercase, similar with 'A' and 'Z'.\n\nReturn string.\n\nProvide explanation and function.\n\nassistantfinal<reasoning>\nThe transformation is the classic **Atbash cipher**: each letter is replaced by its mirror in the alphabet (a\u2194z, b\u2194y, \u2026). The examples show that the case of the first letter is preserved (uppercase stays uppercase). Non\u2011alphabetic characters would be left unchanged, though they do not appear in the given data.\n\nThe function iterates over the input string, maps each alphabetic character to its Atbash counterpart while keeping the original case, and builds the resulting string.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # mirror in lowercase alphabet\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            # mirror in uppercase alphabet\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            # leave any other character unchanged\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # mirror in lowercase alphabet\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            # mirror in uppercase alphabet\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            # leave any other character unchanged\n            res.append(ch)\n    return ''.join(res)",
+                "Reasoning": "The transformation is the classic **Atbash cipher**: each letter is replaced by its mirror in the alphabet (a\u2194z, b\u2194y, \u2026). The examples show that the case of the first letter is preserved (uppercase stays uppercase). Non\u2011alphabetic characters would be left unchanged, though they do not appear in the given data.\n\nThe function iterates over the input string, maps each alphabetic character to its Atbash counterpart while keeping the original case, and builds the resulting string.",
+                "TokenUsage": {
+                    "InputTokens": 287,
+                    "OutputTokens": 1462,
+                    "TotalTokens": 1749,
+                    "ModelCalls": 1,
+                    "UsageComplete": true,
+                    "KnownInputTokens": 287,
+                    "KnownOutputTokens": 1462,
+                    "Calls": [
+                        {
+                            "InputTokens": 287,
+                            "OutputTokens": 1462,
+                            "TotalTokens": 1749,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids",
+                            "Model": "gpt-oss"
+                        }
+                    ]
+                },
+                "Equivalent": true,
+                "scoreTrainSet": 1.0,
+                "scoreEvalSet": 1.0,
+                "CandidateValid": true,
+                "OracleStatus": "accepted",
+                "OracleCounterexamples": [],
+                "OracleDetails": {
+                    "policy": "bounded_symbolic_python_crypto_v1",
+                    "backend": "cvc5_python_api",
+                    "guarantee": "equivalent_on_bounded_domain_only",
+                    "domain": {
+                        "alphabet": "ASCII A-Z/a-z",
+                        "min_length": 0,
+                        "max_length": 10
+                    },
+                    "timeout_ms_per_check": 10000,
+                    "queries": 11,
+                    "lengths_proved": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "lengths_searched": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "fallback": null,
+                    "status": "bounded_unsat"
+                },
+                "RepairExamples": [],
+                "EvaluationDetails": {
+                    "test_examples": 10,
+                    "correct": 10,
+                    "sample_accuracy": 1.0,
+                    "all_test_correct": true
+                },
+                "epoch": 0,
+                "NumTrainingSamples": 10,
+                "CurrentGuess": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # mirror in lowercase alphabet\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            # mirror in uppercase alphabet\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            # leave any other character unchanged\n            res.append(ch)\n    return ''.join(res)",
+                "CurrentGuessReasoning": "The transformation is the classic **Atbash cipher**: each letter is replaced by its mirror in the alphabet (a\u2194z, b\u2194y, \u2026). The examples show that the case of the first letter is preserved (uppercase stays uppercase). Non\u2011alphabetic characters would be left unchanged, though they do not appear in the given data.\n\nThe function iterates over the input string, maps each alphabetic character to its Atbash counterpart while keeping the original case, and builds the resulting string.",
+                "Accuracy": 1,
+                "Logs": [
+                    {
+                        "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: impala\nOutput: rnkzoz\nInput: smore\nOutput: hnliv\nInput: cerata\nOutput: xvizgz\nInput: urge\nOutput: fitv\nInput: reseminate\nOutput: ivhvnrmzgv\nInput: soulful\nOutput: hlfoufo\nInput: crowstick\nOutput: xildhgrxp\nInput: hemopathy\nOutput: svnlkzgsb\nInput: plaudation\nOutput: kozfwzgrlm\nInput: Origanum\nOutput: Lirtzmfn\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                        "Response": "analysisWe need to find mapping rule from given inputs to outputs. Let's analyze.\n\nWe have pairs:\n\nimpala -> rnkzoz\nsmore -> hnliv\ncerata -> xvizgz\nurge -> fitv\nreseminate -> ivhvnrmzgv\nsoulful -> hlfoufo\ncrowstick -> xildhgrxp\nhemopathy -> svnlkzgsb\nplaudation -> kozfwzgrlm\nOriganum -> Lirtzmfn\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift per character? Let's compare lengths: impala (6) -> rnkzoz (6). smore (5) -> hnliv (5). cerata (6) -> xvizgz (6). urge (4) -> fitv (4). reseminate (10) -> ivhvnrmzgv (10). soulful (7) -> hlfoufo (7). crowstick (9) -> xildhgrxp (9). hemopathy (9) -> svnlkzgsb (9). plaudation (10) -> kozfwzgrlm (10). Origanum (8) -> Lirtzmfn (8). So same length.\n\nCheck case: Input \"Origanum\" capital O, output \"Lirtzmfn\" capital L. So maybe preserve case? Input first letter uppercase, output first letter uppercase, rest lower.\n\nLet's compute letter shifts. Use alphabet positions (a=0). For impala -> r n k z o z.\n\ni (8) -> r (17) shift +9\nm (12) -> n (13) shift +1\np (15) -> k (10) shift -5 (or +21)\na (0) -> z (25) shift -1 (or +25)\nl (11) -> o (14) shift +3\na (0) -> z (25) shift -1\n\nPattern not consistent.\n\nMaybe it's some kind of Vigenere with key? Let's compute differences for each position across words maybe same key repeated.\n\nTake impala vs rnkzoz: shifts: +9, +1, -5, -1, +3, -1.\n\nsmore -> h n l i v: s(18)->h(7) shift -11 (+15). m(12)->n(13)+1. o(14)->l(11)-3 (+23). r(17)->i(8)-9 (+17). e(4)->v(21)+17.\n\nNot same.\n\nMaybe it's reversed alphabet (Atbash) plus shift? Atbash: a<->z, b<->y etc. Let's compute Atbash of impala: i->r (since i (8) maps to r (17) indeed Atbash). m->n (12->13) Atbash of m is n. p->k (15->10) Atbash of p is k. a->z (0->25) Atbash of a is z. l->o (11->14) Atbash of l is o. a->z. So impala Atbash yields exactly rnkzoz! So rule is Atbash cipher (mirror alphabet). Let's test others.\n\nsmore: s->h (Atbash: s (18) maps to h (7) correct). m->n (12->13) correct. o->l (14->11) correct. r->i (17->8) correct. e->v (4->21) correct. So matches.\n\ncerata: c->x (2->23) correct. e->v (4->21) correct. r->i (17->8) correct. a->z (0->25) correct. t->g (19->6) correct. a->z correct. So matches.\n\nurge: u->f (20->5) correct. r->i (17->8) correct. g->t (6->19) correct. e->v (4->21) correct. So matches.\n\nreseminate: r->i, e->v, s->h, e->v, m->n, i->r, n->m, a->z, t->g, e->v => ivhvnrmzgv matches.\n\nsoulful: s->h, o->l, u->f, l->o, f->u, u->f, l->o => hlfoufo matches.\n\ncrowstick: c->x, r->i, o->l, w->d, s->h, t->g, i->r, c->x, k->p => xildhgrxp matches.\n\nhemopathy: h->s, e->v, m->n, o->l, p->k, a->z, t->g, h->s, y->b => svnlkzgsb matches.\n\nplaudation: p->k, l->o, a->z, u->f, d->w, a->z, t->g, i->r, o->l, n->m => kozfwzgrlm matches.\n\nOriganum: O uppercase -> L (Atbash of O is L). r->i, i->r, g->t, a->z, n->m, u->f, m->n => Lirtzmfn matches.\n\nThus rule is Atbash cipher (mirror alphabet). So function should map each letter to its counterpart, preserving case. Non-letters maybe unchanged (not needed). Implementation: for each char, if 'a' <= c <= 'z', replace with chr(ord('z') - (ord(c)-ord('a'))). If uppercase, similar with 'A' and 'Z'.\n\nReturn string.\n\nProvide explanation and function.\n\nassistantfinal<reasoning>\nThe transformation is the classic **Atbash cipher**: each letter is replaced by its mirror in the alphabet (a\u2194z, b\u2194y, \u2026). The examples show that the case of the first letter is preserved (uppercase stays uppercase). Non\u2011alphabetic characters would be left unchanged, though they do not appear in the given data.\n\nThe function iterates over the input string, maps each alphabetic character to its Atbash counterpart while keeping the original case, and builds the resulting string.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # mirror in lowercase alphabet\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            # mirror in uppercase alphabet\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            # leave any other character unchanged\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # mirror in lowercase alphabet\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            # mirror in uppercase alphabet\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            # leave any other character unchanged\n            res.append(ch)\n    return ''.join(res)",
+                        "Reasoning": "The transformation is the classic **Atbash cipher**: each letter is replaced by its mirror in the alphabet (a\u2194z, b\u2194y, \u2026). The examples show that the case of the first letter is preserved (uppercase stays uppercase). Non\u2011alphabetic characters would be left unchanged, though they do not appear in the given data.\n\nThe function iterates over the input string, maps each alphabetic character to its Atbash counterpart while keeping the original case, and builds the resulting string.",
+                        "TokenUsage": {
+                            "InputTokens": 287,
+                            "OutputTokens": 1462,
+                            "TotalTokens": 1749,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Equivalent": true,
+                        "scoreTrainSet": 1.0,
+                        "scoreEvalSet": 1.0,
+                        "CandidateValid": true,
+                        "OracleStatus": "accepted",
+                        "OracleCounterexamples": [],
+                        "OracleDetails": {
+                            "policy": "bounded_symbolic_python_crypto_v1",
+                            "backend": "cvc5_python_api",
+                            "guarantee": "equivalent_on_bounded_domain_only",
+                            "domain": {
+                                "alphabet": "ASCII A-Z/a-z",
+                                "min_length": 0,
+                                "max_length": 10
+                            },
+                            "timeout_ms_per_check": 10000,
+                            "queries": 11,
+                            "lengths_proved": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "lengths_searched": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "fallback": null,
+                            "status": "bounded_unsat"
+                        },
+                        "RepairExamples": [],
+                        "EvaluationDetails": {
+                            "test_examples": 10,
+                            "correct": 10,
+                            "sample_accuracy": 1.0,
+                            "all_test_correct": true
+                        }
+                    }
+                ],
+                "InputTokens": 287,
+                "OutputTokens": 1462,
+                "Counterexamples": [],
+                "TrainingExampleSource": "scheduled",
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to find mapping rule from given inputs to outputs. Let's analyze.\n\nWe have pairs:\n\nimpala -> rnkzoz\nsmore -> hnliv\ncerata -> xvizgz\nurge -> fitv\nreseminate -> ivhvnrmzgv\nsoulful -> hlfoufo\ncrowstick -> xildhgrxp\nhemopathy -> svnlkzgsb\nplaudation -> kozfwzgrlm\nOriganum -> Lirtzmfn\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift per character? Let's compare lengths: impala (6) -> rnkzoz (6). smore (5) -> hnliv (5). cerata (6) -> xvizgz (6). urge (4) -> fitv (4). reseminate (10) -> ivhvnrmzgv (10). soulful (7) -> hlfoufo (7). crowstick (9) -> xildhgrxp (9). hemopathy (9) -> svnlkzgsb (9). plaudation (10) -> kozfwzgrlm (10). Origanum (8) -> Lirtzmfn (8). So same length.\n\nCheck case: Input \"Origanum\" capital O, output \"Lirtzmfn\" capital L. So maybe preserve case? Input first letter uppercase, output first letter uppercase, rest lower.\n\nLet's compute letter shifts. Use alphabet positions (a=0). For impala -> r n k z o z.\n\ni (8) -> r (17) shift +9\nm (12) -> n (13) shift +1\np (15) -> k (10) shift -5 (or +21)\na (0) -> z (25) shift -1 (or +25)\nl (11) -> o (14) shift +3\na (0) -> z (25) shift -1\n\nPattern not consistent.\n\nMaybe it's some kind of Vigenere with key? Let's compute differences for each position across words maybe same key repeated.\n\nTake impala vs rnkzoz: shifts: +9, +1, -5, -1, +3, -1.\n\nsmore -> h n l i v: s(18)->h(7) shift -11 (+15). m(12)->n(13)+1. o(14)->l(11)-3 (+23). r(17)->i(8)-9 (+17). e(4)->v(21)+17.\n\nNot same.\n\nMaybe it's reversed alphabet (Atbash) plus shift? Atbash: a<->z, b<->y etc. Let's compute Atbash of impala: i->r (since i (8) maps to r (17) indeed Atbash). m->n (12->13) Atbash of m is n. p->k (15->10) Atbash of p is k. a->z (0->25) Atbash of a is z. l->o (11->14) Atbash of l is o. a->z. So impala Atbash yields exactly rnkzoz! So rule is Atbash cipher (mirror alphabet). Let's test others.\n\nsmore: s->h (Atbash: s (18) maps to h (7) correct). m->n (12->13) correct. o->l (14->11) correct. r->i (17->8) correct. e->v (4->21) correct. So matches.\n\ncerata: c->x (2->23) correct. e->v (4->21) correct. r->i (17->8) correct. a->z (0->25) correct. t->g (19->6) correct. a->z correct. So matches.\n\nurge: u->f (20->5) correct. r->i (17->8) correct. g->t (6->19) correct. e->v (4->21) correct. So matches.\n\nreseminate: r->i, e->v, s->h, e->v, m->n, i->r, n->m, a->z, t->g, e->v => ivhvnrmzgv matches.\n\nsoulful: s->h, o->l, u->f, l->o, f->u, u->f, l->o => hlfoufo matches.\n\ncrowstick: c->x, r->i, o->l, w->d, s->h, t->g, i->r, c->x, k->p => xildhgrxp matches.\n\nhemopathy: h->s, e->v, m->n, o->l, p->k, a->z, t->g, h->s, y->b => svnlkzgsb matches.\n\nplaudation: p->k, l->o, a->z, u->f, d->w, a->z, t->g, i->r, o->l, n->m => kozfwzgrlm matches.\n\nOriganum: O uppercase -> L (Atbash of O is L). r->i, i->r, g->t, a->z, n->m, u->f, m->n => Lirtzmfn matches.\n\nThus rule is Atbash cipher (mirror alphabet). So function should map each letter to its counterpart, preserving case. Non-letters maybe unchanged (not needed). Implementation: for each char, if 'a' <= c <= 'z', replace with chr(ord('z') - (ord(c)-ord('a'))). If uppercase, similar with 'A' and 'Z'.\n\nReturn string.\n\nProvide explanation and function.\n\nassistantfinal<reasoning>\nThe transformation is the classic **Atbash cipher**: each letter is replaced by its mirror in the alphabet (a\u2194z, b\u2194y, \u2026). The examples show that the case of the first letter is preserved (uppercase stays uppercase). Non\u2011alphabetic characters would be left unchanged, though they do not appear in the given data.\n\nThe function iterates over the input string, maps each alphabetic character to its Atbash counterpart while keeping the original case, and builds the resulting string.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # mirror in lowercase alphabet\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            # mirror in uppercase alphabet\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            # leave any other character unchanged\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # mirror in lowercase alphabet\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            # mirror in uppercase alphabet\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            # leave any other character unchanged\n            res.append(ch)\n    return ''.join(res)",
+                        "Reasoning": "The transformation is the classic **Atbash cipher**: each letter is replaced by its mirror in the alphabet (a\u2194z, b\u2194y, \u2026). The examples show that the case of the first letter is preserved (uppercase stays uppercase). Non\u2011alphabetic characters would be left unchanged, though they do not appear in the given data.\n\nThe function iterates over the input string, maps each alphabetic character to its Atbash counterpart while keeping the original case, and builds the resulting string.",
+                        "TokenUsage": {
+                            "InputTokens": 287,
+                            "OutputTokens": 1462,
+                            "TotalTokens": 1749,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Error": null
+                    }
+                ],
+                "StopReason": "oracle_accepted"
+            }
+        ]
+    ],
+    "oracle": "cvc5_bounded_symbolic_Python",
+    "TaskSettings": {
+        "crypto_setting": "paper",
+        "n_train": 10,
+        "n_test": 10,
+        "noise_ratio": 0.0,
+        "ood_ratio": 0.0,
+        "hypothesis": "Python_fn_x",
+        "paper_task_protocol": true,
+        "method": "shared_CE_pipeline_not_paper_SRR",
+        "regularization_applied": false,
+        "prompt_variant": "base_with_reasoning_and_ans",
+        "oracle_policy": "bounded_symbolic_python_crypto_v1",
+        "oracle_domain": {
+            "alphabet": "ASCII A-Z/a-z",
+            "min_length": 0,
+            "max_length": 10
+        },
+        "Difficulty": {
+            "catalog_version": "benchmark_difficulty_v2",
+            "id": "atbash:50",
+            "tier": "L2",
+            "level": 2,
+            "levels": 3,
+            "axis": "training_information_coverage",
+            "proxy": true,
+            "features": {
+                "missing_lowercase_letters": 6,
+                "missing_case_sensitive_letters": 31,
+                "family": "atbash",
+                "training_entries": 10,
+                "within_family_rank": 41
+            },
+            "basis_config_matches": true
+        },
+        "TrainingPoolSize": 10,
+        "ScheduledTrainingBudget": 10,
+        "EvaluationPoolSize": 10,
+        "RoundBudget": 10,
+        "StandardSampleSchedule": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+        ]
+    }
+}

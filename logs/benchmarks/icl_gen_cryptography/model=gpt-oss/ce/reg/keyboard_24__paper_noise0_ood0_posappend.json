@@ -1,0 +1,504 @@
+{
+    "task_type": "cryptography",
+    "benchmark_id": "keyboard:24",
+    "pipeline": "regex_run_episode",
+    "runs": [
+        [
+            {
+                "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: schooner\nOutput: leiggftk\nInput: colors\nOutput: egsgkl\nInput: pock\nOutput: hgea\nInput: photalgia\nOutput: higzqsuoq\nInput: bonnyvis\nOutput: wgffncol\nInput: envapour\nOutput: tfcqhgxk\nInput: tautly\nOutput: zqxzsn\nInput: makeshifty\nOutput: dqatlioyzn\nInput: aglitter\nOutput: qusozztk\nInput: outspeaker\nOutput: gxzlhtqatk\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                "Response": "analysisWe need to find rule mapping input strings to output strings. Let's analyze.\n\nWe have pairs:\n\nschooner -> leiggftk\ncolors -> egsgkl\npock -> hgea\nphotalgia -> higzqsuoq\nbonnyvis -> wgffncol\nenvapour -> tfcqhgxk\ntautly -> zqxzsn\nmakeshifty -> dqatlioyzn\naglitter -> qusozztk\noutspeaker -> gxzlhtqatk\n\nWe need to find transformation. Likely some substitution cipher maybe using a key derived from something like shifting letters based on position, maybe using a Vigenere with a key? Let's compare lengths:\n\nschooner (8) -> leiggftk (8) same length.\ncolors (6) -> egsgkl (6)\npock (4) -> hgea (4)\nphotalgia (9) -> higzqsuoq (9)\nbonnyvis (8) -> wgffncol (8)\nenvapour (8) -> tfcqhgxk (8)\ntautly (6) -> zqxzsn (6)\nmakeshifty (10) -> dqatlioyzn (10)\naglitter (8) -> qusozztk (8)\noutspeaker (10) -> gxzlhtqatk (10)\n\nSo same length.\n\nLet's compute letter differences (maybe Caesar shift varying). Let's map letters to positions (a=0). Compute for first pair:\n\ns (18) -> l (11): diff -7 (or +19 mod26)\nc (2) -> e (4): +2\nh (7) -> i (8): +1\no (14) -> g (6): -8 (+18)\no (14) -> g (6): -8\nn (13) -> f (5): -8\ne (4) -> t (19): +15\nr (17) -> k (10): -7\n\nPattern? maybe using key \"something\"? Differences: [-7,+2,+1,-8,-8,-8,+15,-7]. Not consistent.\n\nMaybe it's a substitution based on reversed alphabet? Let's see: a->z, b->y etc. For s (19) reversed is h (7). Output is l (11). Not match.\n\nMaybe it's a Caesar shift based on previous letter? Or maybe using a keyed Caesar with a keyword derived from something like \"cryptic\"? Let's compute for colors:\n\nc (2) -> e (4): +2\no (14) -> g (6): -8\nl (11) -> s (18): +7\no (14) -> g (6): -8\nr (17) -> k (10): -7\ns (18) -> l (11): -7\n\nInteresting: many -8, -7, +2, +7.\n\npock:\np (15) -> h (7): -8\no (14) -> g (6): -8\nc (2) -> e (4): +2\nk (10) -> a (0): -10? Actually -10 mod26 = 16? Wait k->a diff -10.\n\nphotalgia:\np->h (-8)\nh->i (+1)\no->g (-8)\nt->z (+6) (t=19, z=25 diff +6)\na->q (+16)\nl->s (+7)\ng->u (+14)\ni->o (+6)\na->q (+16)\n\nNot consistent.\n\nMaybe it's using a substitution cipher where each letter maps to another fixed letter (like a simple substitution). Let's test mapping across pairs: For letter 's' appears in schooner (first char) maps to 'l'. Also appears in colors (last char) maps to 'l' as well. So s->l consistent. Good.\n\nCheck 'c' appears in schooner (second char) maps to 'e'. Also appears in colors (first char) maps to 'e'. Also appears in pock (third char) maps to 'e'. Also appears in makeshifty (maybe not). So c->e consistent.\n\n'h' appears in schooner third char maps to 'i'. Also appears in photalgia second char maps to 'i'. Also appears in makeshifty maybe? makeshifty letters: m a k e s h i f t y. Output d q a t l i o y z n. Let's map: m->d, a->q, k->a, e->t, s->l, h->i, i->o, f->y, t->z, y->n. So h->i consistent.\n\n'o' appears many times: schooner third char 'o' maps to 'g'. colors second char 'o' maps to 'g'. pock second char 'o' maps to 'g'. photalgia third char 'o' maps to 'g'. envapour second char 'v'? Wait envapour letters: e n v a p o u r. Output tfcqhgxk. Let's map: e->t, n->f, v->c, a->q, p->h, o->g, u->x, r->k. So o->g consistent.\n\n'n' appears in schooner 6th char maps to 'f'. Also in envapour second char 'n' maps to 'f'. Also in bonnyvis first n? Actually bonnyvis letters: b o n n y v i s. Output wgffncol. Map: b->w, o->g, n->f, n->f, y->n, v->c, i->o, s->l. So n->f consistent.\n\n'e' appears in schooner 7th char maps to 't'. Also in makeshifty 4th char e->t. Also in envapour first char e->t. So e->t consistent.\n\n'r' appears in schooner last char maps to 'k'. Also in envapour last char r->k. Also in outspeaker maybe? outspeaker letters: o u t s p e a k e r. Output gxzlhtqatk. Map: o->g, u->x, t->z, s->l, p->h, e->t, a->q, k->a, e->t, r->k. So r->k consistent.\n\nThus appears to be a simple substitution cipher (monoalphabetic). Let's derive mapping from all pairs.\n\nCollect mapping:\n\na -> q (from makeshifty, also from aglitter? Let's see aglitter: a g l i t t e r -> output qusozztk. Map: a->q, g->u, l->s, i->o, t->z, t->z, e->t, r->k. So consistent a->q.)\n\nb -> w (bonnyvis)\n\nc -> e (as above)\n\nd -> ? Not seen yet.\n\ne -> t\n\nf -> y (makeshifty f->y)\n\ng -> u (photalgia? Actually g in photalgia maps to u, also in aglitter g->u, also in makeshifty? No.)\n\nh -> i\n\ni -> o\n\nj -> ?\n\nk -> a (makeshifty k->a, also outspeaker k->a)\n\nl -> s (schooner l? Wait l appears in schooner? Actually schooner has l? No. colors has l->s, aglitter l->s, makeshifty? no.)\n\nm -> d (makeshifty m->d)\n\nn -> f\n\no -> g\n\np -> h (envapour p->h, outspeaker p->h)\n\nq -> ? Not seen.\n\nr -> k\n\ns -> l\n\nt -> z (tautly t->z, makeshifty t->z, aglitter t->z)\n\nu -> x (outspeaker u->x, envapour u->x)\n\nv -> c (envapour v->c, bonnyvis v->c)\n\nw -> ? Not seen.\n\nx -> ? Not seen.\n\ny -> n (bonnyvis y->n, makeshifty y->n)\n\nz -> ? Not seen.\n\nCheck also letters in outputs that map back: output letters include: l e i g g f t k etc. So mapping seems consistent.\n\nThus we can implement function that uses this substitution mapping. Need to handle any input string (lowercase). For letters not in mapping, maybe we can infer they map to themselves? But likely all letters appear in test set. Let's derive full mapping for all 26 letters using known pairs; maybe we can deduce missing ones by ensuring it's a permutation (bijection). Let's list mapping we have:\n\na->q\nb->w\nc->e\nd->? (unknown)\ne->t\nf->y\ng->u\nh->i\ni->o\nj->? \nk->a\nl->s\nm->d\nn->f\no->g\np->h\nq->? \nr->k\ns->l\nt->z\nu->x\nv->c\nw->? \nx->? \ny->n\nz->? \n\nWe have 26 letters, 9 unknown: d, j, q, w, x, z, maybe others.\n\nBut maybe mapping is simply Caesar shift with some pattern? Let's see mapping order: a->q (shift +16), b->w (+21), c->e (+2), d->? maybe +?; e->t (+15), f->y (+19), g->u (+14), h->i (+1), i->o (+6), j->?; k->a (+? -10), l->s (+7), m->d (+? -9), n->f (+? -8), o->g (+? -8), p->h (+? -8), q->?; r->k (+? -7), s->l (+? -7), t->z (+? +6), u->x (+? +3), v->c (+? -19), w->?; x->?; y->n (+? -10), z->?.\n\nNot simple.\n\nMaybe mapping is derived from a keyword cipher using a key phrase. For example, key \"something\" then alphabet mapping. Let's try to see if output alphabet (cipher) is a permutation: list outputs for a-z in order of input a-z mapping we have:\n\na q\nb w\nc e\nd ?\ne t\nf y\ng u\nh i\ni o\nj ?\nk a\nl s\nm d\nn f\no g\np h\nq ?\nr k\ns l\nt z\nu x\nv c\nw ?\nx ?\ny n\nz ?\n\nNow, maybe the missing letters map to remaining unused letters: Let's list used output letters: q,w,e,t,y,u,i,o,a,s,d,f,g,h,k,l,z,x,c,n. That's 19 letters. Missing output letters: b, j, m, p, r, v, ? maybe? Let's compute: full alphabet: a b c d e f g h i j k l m n o p q r s t u v w x y z. Used: a,c,d,e,f,g,h,i,k,l,n,q,s,t,u,w,x,y,z. That's 19. Missing: b, j, m, o? Wait o is used as output for i->o, yes. p, r, v. Also maybe? Let's list systematically.\n\nUsed set = {q,w,e,t,y,u,i,o,a,s,d,f,g,h,k,l,z,x,c,n}. Count 19.\n\nMissing letters = {b, j, m, p, r, v, ? maybe? also? let's compute all letters not in set: a present, b missing, c present, d present, e present, f present, g present, h present, i present, j missing, k present, l present, m missing, n present, o present, p missing, q present, r missing, s present, t present, u present, v missing, w present, x present, y present, z present. That's 7 missing letters: b, j, m, p, r, v, ? Wait we have 7 missing: b, j, m, p, r, v, ? Actually we counted 7 but there are 26-19=7. Good.\n\nThus unknown input letters likely map to these missing output letters in some order.\n\nWe can try to deduce mapping by assuming it's a simple substitution derived from a keyword. For example, maybe the cipher alphabet is \"QWETYUIOASDFGHJKLZXCVBNMPR\"? Not sure.\n\nLet's attempt to see pattern: The mapping seems to follow alphabetical order of output maybe based on some shift of 2? Not.\n\nMaybe it's a ROT13 of reversed alphabet? Let's compute for a: reversed is z, ROT? Not.\n\nCould be a simple substitution where each letter maps to the letter 2 positions ahead in the alphabet of the previous mapping? Not.\n\nGiven we only need to implement function that works for given inputs? The problem likely expects to deduce the substitution mapping fully. Could be that mapping is derived from a known cipher like \"Atbash\" then Caesar? Let's test Atbash (a->z, b->y, c->x...). For a we get z, but output is q. Not.\n\nMaybe it's a keyed Caesar using key \"cryptogram\"? Let's attempt to generate cipher alphabet by writing key then remaining letters. Suppose key = \"qwertyuiopasdfghjklzxcvbnm\"? That's QWERTY... Actually mapping we have: a->q, b->w, c->e, d->r? Wait we have d unknown but maybe d->r (makes sense as key \"qwertyuiopasdfghjklzxcvbnm\" is QWERTYUIOPASDFGHJKLZXCVBNM. That mapping would be: a->q, b->w, c->e, d->r, e->t, f->y, g->u, h->i, i->o, j->p, k->a, l->s, m->d, n->f, o->g, p->h, q->j, r->k, s->l, t->z, u->x, v->c, w->v, x->b, y->n, z->m. Let's compare with known mappings:\n\nOur known mapping matches many: a->q (yes), b->w (yes), c->e (yes), e->t (yes), f->y (yes), g->u (yes), h->i (yes), i->o (yes), k->a (yes), l->s (yes), m->d (yes), n->f (yes), o->g (yes), p->h (yes), r->k (yes), s->l (yes), t->z (yes), u->x (yes), v->c (yes), y->n (yes). Perfect! So the cipher is the QWERTY keyboard order mapping! Indeed the key string \"qwertyuiopasdfghjklzxcvbnm\" is the QWERTY layout. So mapping is: plaintext alphabet a-z maps to cipher alphabet \"qwertyuiopasdfghjklzxcvbnm\". That matches all known pairs. Let's verify unknown letters: d should map to r (since after c->e, d->r). j should map to p. q should map to j. w should map to v. x should map to b. z should map to m. That fills missing outputs: b, j, m, p, r, v, ? Wait we predicted d->r (output r), j->p (output p), q->j (output j), w->v (output v), x->b (output b), z->m (output m). That uses missing output letters: r, p, j, v, b, m. That's 6, but we had 7 missing letters earlier; we also missing maybe something else: we have mapping for all 26 now.\n\nLet's list full mapping:\n\na q\nb w\nc e\nd r\ne t\nf y\ng u\nh i\ni o\nj p\nk a\nl s\nm d\nn f\no g\np h\nq j\nr k\ns l\nt z\nu x\nv c\nw v\nx b\ny n\nz m\n\nCheck that output letters set now includes all 26 distinct letters. Yes.\n\nThus function is simple substitution using that mapping.\n\nImplement fn(x): for each char lower case, map using dict, else keep unchanged (maybe). Return string.\n\nLet's produce code.\n\nassistantfinal<reasoning>\nThe given pairs all have the same length, and each letter of the input is always transformed to the same output letter in every example.  \nCollecting the correspondences we obtain:\n\n```\na\u2192q  b\u2192w  c\u2192e  d\u2192r  e\u2192t  f\u2192y  g\u2192u  h\u2192i  i\u2192o  j\u2192p\nk\u2192a  l\u2192s  m\u2192d  n\u2192f  o\u2192g  p\u2192h  q\u2192j  r\u2192k  s\u2192l  t\u2192z\nu\u2192x  v\u2192c  w\u2192v  x\u2192b  y\u2192n  z\u2192m\n```\n\nThese are exactly the letters of the QWERTY keyboard written in order:\n\n```\nplain : abcdefghijklmnopqrstuvwxyz\ncipher: qwertyuiopasdfghjklzxcvbnm\n```\n\nSo the rule is a mono\u2011alphabetic substitution where each alphabetic character is replaced by the character at the same position in the string `\"qwertyuiopasdfghjklzxcvbnm\"`.\n\nThe Python function below implements this mapping (leaving any non\u2011alphabetic characters unchanged).\n\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    # substitution based on QWERTY keyboard order\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyz\",\n        \"qwertyuiopasdfghjklzxcvbnm\"\n    )\n    return x.translate(trans)\n```\n</ans>",
+                "Prediction": "def fn(x):\n    # substitution based on QWERTY keyboard order\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyz\",\n        \"qwertyuiopasdfghjklzxcvbnm\"\n    )\n    return x.translate(trans)",
+                "Reasoning": "The given pairs all have the same length, and each letter of the input is always transformed to the same output letter in every example.  \nCollecting the correspondences we obtain:\n\n```\na\u2192q  b\u2192w  c\u2192e  d\u2192r  e\u2192t  f\u2192y  g\u2192u  h\u2192i  i\u2192o  j\u2192p\nk\u2192a  l\u2192s  m\u2192d  n\u2192f  o\u2192g  p\u2192h  q\u2192j  r\u2192k  s\u2192l  t\u2192z\nu\u2192x  v\u2192c  w\u2192v  x\u2192b  y\u2192n  z\u2192m\n```\n\nThese are exactly the letters of the QWERTY keyboard written in order:\n\n```\nplain : abcdefghijklmnopqrstuvwxyz\ncipher: qwertyuiopasdfghjklzxcvbnm\n```\n\nSo the rule is a mono\u2011alphabetic substitution where each alphabetic character is replaced by the character at the same position in the string `\"qwertyuiopasdfghjklzxcvbnm\"`.\n\nThe Python function below implements this mapping (leaving any non\u2011alphabetic characters unchanged).",
+                "TokenUsage": {
+                    "InputTokens": 289,
+                    "OutputTokens": 3922,
+                    "TotalTokens": 4211,
+                    "ModelCalls": 1,
+                    "UsageComplete": true,
+                    "KnownInputTokens": 289,
+                    "KnownOutputTokens": 3922,
+                    "Calls": [
+                        {
+                            "InputTokens": 289,
+                            "OutputTokens": 3922,
+                            "TotalTokens": 4211,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids",
+                            "Model": "gpt-oss"
+                        }
+                    ]
+                },
+                "Equivalent": false,
+                "scoreTrainSet": 1.0,
+                "scoreEvalSet": 0.8,
+                "CandidateValid": true,
+                "OracleStatus": "rejected",
+                "OracleCounterexamples": [
+                    [
+                        "Z",
+                        "M"
+                    ],
+                    [
+                        "Y",
+                        "N"
+                    ],
+                    [
+                        "X",
+                        "B"
+                    ],
+                    [
+                        "W",
+                        "V"
+                    ],
+                    [
+                        "V",
+                        "C"
+                    ],
+                    [
+                        "U",
+                        "X"
+                    ],
+                    [
+                        "T",
+                        "Z"
+                    ],
+                    [
+                        "S",
+                        "L"
+                    ]
+                ],
+                "OracleDetails": {
+                    "policy": "bounded_symbolic_python_crypto_v1",
+                    "backend": "cvc5_python_api",
+                    "guarantee": "equivalent_on_bounded_domain_only",
+                    "domain": {
+                        "alphabet": "ASCII A-Z/a-z",
+                        "min_length": 0,
+                        "max_length": 10
+                    },
+                    "timeout_ms_per_check": 10000,
+                    "queries": 9,
+                    "lengths_proved": [
+                        0
+                    ],
+                    "lengths_searched": [
+                        0,
+                        1
+                    ],
+                    "fallback": null,
+                    "status": "counterexample"
+                },
+                "RepairExamples": [],
+                "EvaluationDetails": {
+                    "test_examples": 10,
+                    "correct": 8,
+                    "sample_accuracy": 0.8,
+                    "all_test_correct": false
+                },
+                "epoch": 0,
+                "NumTrainingSamples": 10,
+                "CurrentGuess": "def fn(x):\n    # substitution based on QWERTY keyboard order\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyz\",\n        \"qwertyuiopasdfghjklzxcvbnm\"\n    )\n    return x.translate(trans)",
+                "CurrentGuessReasoning": "The given pairs all have the same length, and each letter of the input is always transformed to the same output letter in every example.  \nCollecting the correspondences we obtain:\n\n```\na\u2192q  b\u2192w  c\u2192e  d\u2192r  e\u2192t  f\u2192y  g\u2192u  h\u2192i  i\u2192o  j\u2192p\nk\u2192a  l\u2192s  m\u2192d  n\u2192f  o\u2192g  p\u2192h  q\u2192j  r\u2192k  s\u2192l  t\u2192z\nu\u2192x  v\u2192c  w\u2192v  x\u2192b  y\u2192n  z\u2192m\n```\n\nThese are exactly the letters of the QWERTY keyboard written in order:\n\n```\nplain : abcdefghijklmnopqrstuvwxyz\ncipher: qwertyuiopasdfghjklzxcvbnm\n```\n\nSo the rule is a mono\u2011alphabetic substitution where each alphabetic character is replaced by the character at the same position in the string `\"qwertyuiopasdfghjklzxcvbnm\"`.\n\nThe Python function below implements this mapping (leaving any non\u2011alphabetic characters unchanged).",
+                "Accuracy": 0,
+                "Logs": [
+                    {
+                        "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: schooner\nOutput: leiggftk\nInput: colors\nOutput: egsgkl\nInput: pock\nOutput: hgea\nInput: photalgia\nOutput: higzqsuoq\nInput: bonnyvis\nOutput: wgffncol\nInput: envapour\nOutput: tfcqhgxk\nInput: tautly\nOutput: zqxzsn\nInput: makeshifty\nOutput: dqatlioyzn\nInput: aglitter\nOutput: qusozztk\nInput: outspeaker\nOutput: gxzlhtqatk\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                        "Response": "analysisWe need to find rule mapping input strings to output strings. Let's analyze.\n\nWe have pairs:\n\nschooner -> leiggftk\ncolors -> egsgkl\npock -> hgea\nphotalgia -> higzqsuoq\nbonnyvis -> wgffncol\nenvapour -> tfcqhgxk\ntautly -> zqxzsn\nmakeshifty -> dqatlioyzn\naglitter -> qusozztk\noutspeaker -> gxzlhtqatk\n\nWe need to find transformation. Likely some substitution cipher maybe using a key derived from something like shifting letters based on position, maybe using a Vigenere with a key? Let's compare lengths:\n\nschooner (8) -> leiggftk (8) same length.\ncolors (6) -> egsgkl (6)\npock (4) -> hgea (4)\nphotalgia (9) -> higzqsuoq (9)\nbonnyvis (8) -> wgffncol (8)\nenvapour (8) -> tfcqhgxk (8)\ntautly (6) -> zqxzsn (6)\nmakeshifty (10) -> dqatlioyzn (10)\naglitter (8) -> qusozztk (8)\noutspeaker (10) -> gxzlhtqatk (10)\n\nSo same length.\n\nLet's compute letter differences (maybe Caesar shift varying). Let's map letters to positions (a=0). Compute for first pair:\n\ns (18) -> l (11): diff -7 (or +19 mod26)\nc (2) -> e (4): +2\nh (7) -> i (8): +1\no (14) -> g (6): -8 (+18)\no (14) -> g (6): -8\nn (13) -> f (5): -8\ne (4) -> t (19): +15\nr (17) -> k (10): -7\n\nPattern? maybe using key \"something\"? Differences: [-7,+2,+1,-8,-8,-8,+15,-7]. Not consistent.\n\nMaybe it's a substitution based on reversed alphabet? Let's see: a->z, b->y etc. For s (19) reversed is h (7). Output is l (11). Not match.\n\nMaybe it's a Caesar shift based on previous letter? Or maybe using a keyed Caesar with a keyword derived from something like \"cryptic\"? Let's compute for colors:\n\nc (2) -> e (4): +2\no (14) -> g (6): -8\nl (11) -> s (18): +7\no (14) -> g (6): -8\nr (17) -> k (10): -7\ns (18) -> l (11): -7\n\nInteresting: many -8, -7, +2, +7.\n\npock:\np (15) -> h (7): -8\no (14) -> g (6): -8\nc (2) -> e (4): +2\nk (10) -> a (0): -10? Actually -10 mod26 = 16? Wait k->a diff -10.\n\nphotalgia:\np->h (-8)\nh->i (+1)\no->g (-8)\nt->z (+6) (t=19, z=25 diff +6)\na->q (+16)\nl->s (+7)\ng->u (+14)\ni->o (+6)\na->q (+16)\n\nNot consistent.\n\nMaybe it's using a substitution cipher where each letter maps to another fixed letter (like a simple substitution). Let's test mapping across pairs: For letter 's' appears in schooner (first char) maps to 'l'. Also appears in colors (last char) maps to 'l' as well. So s->l consistent. Good.\n\nCheck 'c' appears in schooner (second char) maps to 'e'. Also appears in colors (first char) maps to 'e'. Also appears in pock (third char) maps to 'e'. Also appears in makeshifty (maybe not). So c->e consistent.\n\n'h' appears in schooner third char maps to 'i'. Also appears in photalgia second char maps to 'i'. Also appears in makeshifty maybe? makeshifty letters: m a k e s h i f t y. Output d q a t l i o y z n. Let's map: m->d, a->q, k->a, e->t, s->l, h->i, i->o, f->y, t->z, y->n. So h->i consistent.\n\n'o' appears many times: schooner third char 'o' maps to 'g'. colors second char 'o' maps to 'g'. pock second char 'o' maps to 'g'. photalgia third char 'o' maps to 'g'. envapour second char 'v'? Wait envapour letters: e n v a p o u r. Output tfcqhgxk. Let's map: e->t, n->f, v->c, a->q, p->h, o->g, u->x, r->k. So o->g consistent.\n\n'n' appears in schooner 6th char maps to 'f'. Also in envapour second char 'n' maps to 'f'. Also in bonnyvis first n? Actually bonnyvis letters: b o n n y v i s. Output wgffncol. Map: b->w, o->g, n->f, n->f, y->n, v->c, i->o, s->l. So n->f consistent.\n\n'e' appears in schooner 7th char maps to 't'. Also in makeshifty 4th char e->t. Also in envapour first char e->t. So e->t consistent.\n\n'r' appears in schooner last char maps to 'k'. Also in envapour last char r->k. Also in outspeaker maybe? outspeaker letters: o u t s p e a k e r. Output gxzlhtqatk. Map: o->g, u->x, t->z, s->l, p->h, e->t, a->q, k->a, e->t, r->k. So r->k consistent.\n\nThus appears to be a simple substitution cipher (monoalphabetic). Let's derive mapping from all pairs.\n\nCollect mapping:\n\na -> q (from makeshifty, also from aglitter? Let's see aglitter: a g l i t t e r -> output qusozztk. Map: a->q, g->u, l->s, i->o, t->z, t->z, e->t, r->k. So consistent a->q.)\n\nb -> w (bonnyvis)\n\nc -> e (as above)\n\nd -> ? Not seen yet.\n\ne -> t\n\nf -> y (makeshifty f->y)\n\ng -> u (photalgia? Actually g in photalgia maps to u, also in aglitter g->u, also in makeshifty? No.)\n\nh -> i\n\ni -> o\n\nj -> ?\n\nk -> a (makeshifty k->a, also outspeaker k->a)\n\nl -> s (schooner l? Wait l appears in schooner? Actually schooner has l? No. colors has l->s, aglitter l->s, makeshifty? no.)\n\nm -> d (makeshifty m->d)\n\nn -> f\n\no -> g\n\np -> h (envapour p->h, outspeaker p->h)\n\nq -> ? Not seen.\n\nr -> k\n\ns -> l\n\nt -> z (tautly t->z, makeshifty t->z, aglitter t->z)\n\nu -> x (outspeaker u->x, envapour u->x)\n\nv -> c (envapour v->c, bonnyvis v->c)\n\nw -> ? Not seen.\n\nx -> ? Not seen.\n\ny -> n (bonnyvis y->n, makeshifty y->n)\n\nz -> ? Not seen.\n\nCheck also letters in outputs that map back: output letters include: l e i g g f t k etc. So mapping seems consistent.\n\nThus we can implement function that uses this substitution mapping. Need to handle any input string (lowercase). For letters not in mapping, maybe we can infer they map to themselves? But likely all letters appear in test set. Let's derive full mapping for all 26 letters using known pairs; maybe we can deduce missing ones by ensuring it's a permutation (bijection). Let's list mapping we have:\n\na->q\nb->w\nc->e\nd->? (unknown)\ne->t\nf->y\ng->u\nh->i\ni->o\nj->? \nk->a\nl->s\nm->d\nn->f\no->g\np->h\nq->? \nr->k\ns->l\nt->z\nu->x\nv->c\nw->? \nx->? \ny->n\nz->? \n\nWe have 26 letters, 9 unknown: d, j, q, w, x, z, maybe others.\n\nBut maybe mapping is simply Caesar shift with some pattern? Let's see mapping order: a->q (shift +16), b->w (+21), c->e (+2), d->? maybe +?; e->t (+15), f->y (+19), g->u (+14), h->i (+1), i->o (+6), j->?; k->a (+? -10), l->s (+7), m->d (+? -9), n->f (+? -8), o->g (+? -8), p->h (+? -8), q->?; r->k (+? -7), s->l (+? -7), t->z (+? +6), u->x (+? +3), v->c (+? -19), w->?; x->?; y->n (+? -10), z->?.\n\nNot simple.\n\nMaybe mapping is derived from a keyword cipher using a key phrase. For example, key \"something\" then alphabet mapping. Let's try to see if output alphabet (cipher) is a permutation: list outputs for a-z in order of input a-z mapping we have:\n\na q\nb w\nc e\nd ?\ne t\nf y\ng u\nh i\ni o\nj ?\nk a\nl s\nm d\nn f\no g\np h\nq ?\nr k\ns l\nt z\nu x\nv c\nw ?\nx ?\ny n\nz ?\n\nNow, maybe the missing letters map to remaining unused letters: Let's list used output letters: q,w,e,t,y,u,i,o,a,s,d,f,g,h,k,l,z,x,c,n. That's 19 letters. Missing output letters: b, j, m, p, r, v, ? maybe? Let's compute: full alphabet: a b c d e f g h i j k l m n o p q r s t u v w x y z. Used: a,c,d,e,f,g,h,i,k,l,n,q,s,t,u,w,x,y,z. That's 19. Missing: b, j, m, o? Wait o is used as output for i->o, yes. p, r, v. Also maybe? Let's list systematically.\n\nUsed set = {q,w,e,t,y,u,i,o,a,s,d,f,g,h,k,l,z,x,c,n}. Count 19.\n\nMissing letters = {b, j, m, p, r, v, ? maybe? also? let's compute all letters not in set: a present, b missing, c present, d present, e present, f present, g present, h present, i present, j missing, k present, l present, m missing, n present, o present, p missing, q present, r missing, s present, t present, u present, v missing, w present, x present, y present, z present. That's 7 missing letters: b, j, m, p, r, v, ? Wait we have 7 missing: b, j, m, p, r, v, ? Actually we counted 7 but there are 26-19=7. Good.\n\nThus unknown input letters likely map to these missing output letters in some order.\n\nWe can try to deduce mapping by assuming it's a simple substitution derived from a keyword. For example, maybe the cipher alphabet is \"QWETYUIOASDFGHJKLZXCVBNMPR\"? Not sure.\n\nLet's attempt to see pattern: The mapping seems to follow alphabetical order of output maybe based on some shift of 2? Not.\n\nMaybe it's a ROT13 of reversed alphabet? Let's compute for a: reversed is z, ROT? Not.\n\nCould be a simple substitution where each letter maps to the letter 2 positions ahead in the alphabet of the previous mapping? Not.\n\nGiven we only need to implement function that works for given inputs? The problem likely expects to deduce the substitution mapping fully. Could be that mapping is derived from a known cipher like \"Atbash\" then Caesar? Let's test Atbash (a->z, b->y, c->x...). For a we get z, but output is q. Not.\n\nMaybe it's a keyed Caesar using key \"cryptogram\"? Let's attempt to generate cipher alphabet by writing key then remaining letters. Suppose key = \"qwertyuiopasdfghjklzxcvbnm\"? That's QWERTY... Actually mapping we have: a->q, b->w, c->e, d->r? Wait we have d unknown but maybe d->r (makes sense as key \"qwertyuiopasdfghjklzxcvbnm\" is QWERTYUIOPASDFGHJKLZXCVBNM. That mapping would be: a->q, b->w, c->e, d->r, e->t, f->y, g->u, h->i, i->o, j->p, k->a, l->s, m->d, n->f, o->g, p->h, q->j, r->k, s->l, t->z, u->x, v->c, w->v, x->b, y->n, z->m. Let's compare with known mappings:\n\nOur known mapping matches many: a->q (yes), b->w (yes), c->e (yes), e->t (yes), f->y (yes), g->u (yes), h->i (yes), i->o (yes), k->a (yes), l->s (yes), m->d (yes), n->f (yes), o->g (yes), p->h (yes), r->k (yes), s->l (yes), t->z (yes), u->x (yes), v->c (yes), y->n (yes). Perfect! So the cipher is the QWERTY keyboard order mapping! Indeed the key string \"qwertyuiopasdfghjklzxcvbnm\" is the QWERTY layout. So mapping is: plaintext alphabet a-z maps to cipher alphabet \"qwertyuiopasdfghjklzxcvbnm\". That matches all known pairs. Let's verify unknown letters: d should map to r (since after c->e, d->r). j should map to p. q should map to j. w should map to v. x should map to b. z should map to m. That fills missing outputs: b, j, m, p, r, v, ? Wait we predicted d->r (output r), j->p (output p), q->j (output j), w->v (output v), x->b (output b), z->m (output m). That uses missing output letters: r, p, j, v, b, m. That's 6, but we had 7 missing letters earlier; we also missing maybe something else: we have mapping for all 26 now.\n\nLet's list full mapping:\n\na q\nb w\nc e\nd r\ne t\nf y\ng u\nh i\ni o\nj p\nk a\nl s\nm d\nn f\no g\np h\nq j\nr k\ns l\nt z\nu x\nv c\nw v\nx b\ny n\nz m\n\nCheck that output letters set now includes all 26 distinct letters. Yes.\n\nThus function is simple substitution using that mapping.\n\nImplement fn(x): for each char lower case, map using dict, else keep unchanged (maybe). Return string.\n\nLet's produce code.\n\nassistantfinal<reasoning>\nThe given pairs all have the same length, and each letter of the input is always transformed to the same output letter in every example.  \nCollecting the correspondences we obtain:\n\n```\na\u2192q  b\u2192w  c\u2192e  d\u2192r  e\u2192t  f\u2192y  g\u2192u  h\u2192i  i\u2192o  j\u2192p\nk\u2192a  l\u2192s  m\u2192d  n\u2192f  o\u2192g  p\u2192h  q\u2192j  r\u2192k  s\u2192l  t\u2192z\nu\u2192x  v\u2192c  w\u2192v  x\u2192b  y\u2192n  z\u2192m\n```\n\nThese are exactly the letters of the QWERTY keyboard written in order:\n\n```\nplain : abcdefghijklmnopqrstuvwxyz\ncipher: qwertyuiopasdfghjklzxcvbnm\n```\n\nSo the rule is a mono\u2011alphabetic substitution where each alphabetic character is replaced by the character at the same position in the string `\"qwertyuiopasdfghjklzxcvbnm\"`.\n\nThe Python function below implements this mapping (leaving any non\u2011alphabetic characters unchanged).\n\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    # substitution based on QWERTY keyboard order\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyz\",\n        \"qwertyuiopasdfghjklzxcvbnm\"\n    )\n    return x.translate(trans)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    # substitution based on QWERTY keyboard order\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyz\",\n        \"qwertyuiopasdfghjklzxcvbnm\"\n    )\n    return x.translate(trans)",
+                        "Reasoning": "The given pairs all have the same length, and each letter of the input is always transformed to the same output letter in every example.  \nCollecting the correspondences we obtain:\n\n```\na\u2192q  b\u2192w  c\u2192e  d\u2192r  e\u2192t  f\u2192y  g\u2192u  h\u2192i  i\u2192o  j\u2192p\nk\u2192a  l\u2192s  m\u2192d  n\u2192f  o\u2192g  p\u2192h  q\u2192j  r\u2192k  s\u2192l  t\u2192z\nu\u2192x  v\u2192c  w\u2192v  x\u2192b  y\u2192n  z\u2192m\n```\n\nThese are exactly the letters of the QWERTY keyboard written in order:\n\n```\nplain : abcdefghijklmnopqrstuvwxyz\ncipher: qwertyuiopasdfghjklzxcvbnm\n```\n\nSo the rule is a mono\u2011alphabetic substitution where each alphabetic character is replaced by the character at the same position in the string `\"qwertyuiopasdfghjklzxcvbnm\"`.\n\nThe Python function below implements this mapping (leaving any non\u2011alphabetic characters unchanged).",
+                        "TokenUsage": {
+                            "InputTokens": 289,
+                            "OutputTokens": 3922,
+                            "TotalTokens": 4211,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Equivalent": false,
+                        "scoreTrainSet": 1.0,
+                        "scoreEvalSet": 0.8,
+                        "CandidateValid": true,
+                        "OracleStatus": "rejected",
+                        "OracleCounterexamples": [
+                            [
+                                "Z",
+                                "M"
+                            ],
+                            [
+                                "Y",
+                                "N"
+                            ],
+                            [
+                                "X",
+                                "B"
+                            ],
+                            [
+                                "W",
+                                "V"
+                            ],
+                            [
+                                "V",
+                                "C"
+                            ],
+                            [
+                                "U",
+                                "X"
+                            ],
+                            [
+                                "T",
+                                "Z"
+                            ],
+                            [
+                                "S",
+                                "L"
+                            ]
+                        ],
+                        "OracleDetails": {
+                            "policy": "bounded_symbolic_python_crypto_v1",
+                            "backend": "cvc5_python_api",
+                            "guarantee": "equivalent_on_bounded_domain_only",
+                            "domain": {
+                                "alphabet": "ASCII A-Z/a-z",
+                                "min_length": 0,
+                                "max_length": 10
+                            },
+                            "timeout_ms_per_check": 10000,
+                            "queries": 9,
+                            "lengths_proved": [
+                                0
+                            ],
+                            "lengths_searched": [
+                                0,
+                                1
+                            ],
+                            "fallback": null,
+                            "status": "counterexample"
+                        },
+                        "RepairExamples": [],
+                        "EvaluationDetails": {
+                            "test_examples": 10,
+                            "correct": 8,
+                            "sample_accuracy": 0.8,
+                            "all_test_correct": false
+                        }
+                    }
+                ],
+                "InputTokens": 289,
+                "OutputTokens": 3922,
+                "Counterexamples": [
+                    [
+                        "schooner",
+                        "leiggftk"
+                    ],
+                    [
+                        "colors",
+                        "egsgkl"
+                    ],
+                    [
+                        "pock",
+                        "hgea"
+                    ],
+                    [
+                        "photalgia",
+                        "higzqsuoq"
+                    ],
+                    [
+                        "bonnyvis",
+                        "wgffncol"
+                    ],
+                    [
+                        "envapour",
+                        "tfcqhgxk"
+                    ],
+                    [
+                        "tautly",
+                        "zqxzsn"
+                    ],
+                    [
+                        "makeshifty",
+                        "dqatlioyzn"
+                    ],
+                    [
+                        "aglitter",
+                        "qusozztk"
+                    ],
+                    [
+                        "outspeaker",
+                        "gxzlhtqatk"
+                    ]
+                ],
+                "TrainingExampleSource": "initial",
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to find rule mapping input strings to output strings. Let's analyze.\n\nWe have pairs:\n\nschooner -> leiggftk\ncolors -> egsgkl\npock -> hgea\nphotalgia -> higzqsuoq\nbonnyvis -> wgffncol\nenvapour -> tfcqhgxk\ntautly -> zqxzsn\nmakeshifty -> dqatlioyzn\naglitter -> qusozztk\noutspeaker -> gxzlhtqatk\n\nWe need to find transformation. Likely some substitution cipher maybe using a key derived from something like shifting letters based on position, maybe using a Vigenere with a key? Let's compare lengths:\n\nschooner (8) -> leiggftk (8) same length.\ncolors (6) -> egsgkl (6)\npock (4) -> hgea (4)\nphotalgia (9) -> higzqsuoq (9)\nbonnyvis (8) -> wgffncol (8)\nenvapour (8) -> tfcqhgxk (8)\ntautly (6) -> zqxzsn (6)\nmakeshifty (10) -> dqatlioyzn (10)\naglitter (8) -> qusozztk (8)\noutspeaker (10) -> gxzlhtqatk (10)\n\nSo same length.\n\nLet's compute letter differences (maybe Caesar shift varying). Let's map letters to positions (a=0). Compute for first pair:\n\ns (18) -> l (11): diff -7 (or +19 mod26)\nc (2) -> e (4): +2\nh (7) -> i (8): +1\no (14) -> g (6): -8 (+18)\no (14) -> g (6): -8\nn (13) -> f (5): -8\ne (4) -> t (19): +15\nr (17) -> k (10): -7\n\nPattern? maybe using key \"something\"? Differences: [-7,+2,+1,-8,-8,-8,+15,-7]. Not consistent.\n\nMaybe it's a substitution based on reversed alphabet? Let's see: a->z, b->y etc. For s (19) reversed is h (7). Output is l (11). Not match.\n\nMaybe it's a Caesar shift based on previous letter? Or maybe using a keyed Caesar with a keyword derived from something like \"cryptic\"? Let's compute for colors:\n\nc (2) -> e (4): +2\no (14) -> g (6): -8\nl (11) -> s (18): +7\no (14) -> g (6): -8\nr (17) -> k (10): -7\ns (18) -> l (11): -7\n\nInteresting: many -8, -7, +2, +7.\n\npock:\np (15) -> h (7): -8\no (14) -> g (6): -8\nc (2) -> e (4): +2\nk (10) -> a (0): -10? Actually -10 mod26 = 16? Wait k->a diff -10.\n\nphotalgia:\np->h (-8)\nh->i (+1)\no->g (-8)\nt->z (+6) (t=19, z=25 diff +6)\na->q (+16)\nl->s (+7)\ng->u (+14)\ni->o (+6)\na->q (+16)\n\nNot consistent.\n\nMaybe it's using a substitution cipher where each letter maps to another fixed letter (like a simple substitution). Let's test mapping across pairs: For letter 's' appears in schooner (first char) maps to 'l'. Also appears in colors (last char) maps to 'l' as well. So s->l consistent. Good.\n\nCheck 'c' appears in schooner (second char) maps to 'e'. Also appears in colors (first char) maps to 'e'. Also appears in pock (third char) maps to 'e'. Also appears in makeshifty (maybe not). So c->e consistent.\n\n'h' appears in schooner third char maps to 'i'. Also appears in photalgia second char maps to 'i'. Also appears in makeshifty maybe? makeshifty letters: m a k e s h i f t y. Output d q a t l i o y z n. Let's map: m->d, a->q, k->a, e->t, s->l, h->i, i->o, f->y, t->z, y->n. So h->i consistent.\n\n'o' appears many times: schooner third char 'o' maps to 'g'. colors second char 'o' maps to 'g'. pock second char 'o' maps to 'g'. photalgia third char 'o' maps to 'g'. envapour second char 'v'? Wait envapour letters: e n v a p o u r. Output tfcqhgxk. Let's map: e->t, n->f, v->c, a->q, p->h, o->g, u->x, r->k. So o->g consistent.\n\n'n' appears in schooner 6th char maps to 'f'. Also in envapour second char 'n' maps to 'f'. Also in bonnyvis first n? Actually bonnyvis letters: b o n n y v i s. Output wgffncol. Map: b->w, o->g, n->f, n->f, y->n, v->c, i->o, s->l. So n->f consistent.\n\n'e' appears in schooner 7th char maps to 't'. Also in makeshifty 4th char e->t. Also in envapour first char e->t. So e->t consistent.\n\n'r' appears in schooner last char maps to 'k'. Also in envapour last char r->k. Also in outspeaker maybe? outspeaker letters: o u t s p e a k e r. Output gxzlhtqatk. Map: o->g, u->x, t->z, s->l, p->h, e->t, a->q, k->a, e->t, r->k. So r->k consistent.\n\nThus appears to be a simple substitution cipher (monoalphabetic). Let's derive mapping from all pairs.\n\nCollect mapping:\n\na -> q (from makeshifty, also from aglitter? Let's see aglitter: a g l i t t e r -> output qusozztk. Map: a->q, g->u, l->s, i->o, t->z, t->z, e->t, r->k. So consistent a->q.)\n\nb -> w (bonnyvis)\n\nc -> e (as above)\n\nd -> ? Not seen yet.\n\ne -> t\n\nf -> y (makeshifty f->y)\n\ng -> u (photalgia? Actually g in photalgia maps to u, also in aglitter g->u, also in makeshifty? No.)\n\nh -> i\n\ni -> o\n\nj -> ?\n\nk -> a (makeshifty k->a, also outspeaker k->a)\n\nl -> s (schooner l? Wait l appears in schooner? Actually schooner has l? No. colors has l->s, aglitter l->s, makeshifty? no.)\n\nm -> d (makeshifty m->d)\n\nn -> f\n\no -> g\n\np -> h (envapour p->h, outspeaker p->h)\n\nq -> ? Not seen.\n\nr -> k\n\ns -> l\n\nt -> z (tautly t->z, makeshifty t->z, aglitter t->z)\n\nu -> x (outspeaker u->x, envapour u->x)\n\nv -> c (envapour v->c, bonnyvis v->c)\n\nw -> ? Not seen.\n\nx -> ? Not seen.\n\ny -> n (bonnyvis y->n, makeshifty y->n)\n\nz -> ? Not seen.\n\nCheck also letters in outputs that map back: output letters include: l e i g g f t k etc. So mapping seems consistent.\n\nThus we can implement function that uses this substitution mapping. Need to handle any input string (lowercase). For letters not in mapping, maybe we can infer they map to themselves? But likely all letters appear in test set. Let's derive full mapping for all 26 letters using known pairs; maybe we can deduce missing ones by ensuring it's a permutation (bijection). Let's list mapping we have:\n\na->q\nb->w\nc->e\nd->? (unknown)\ne->t\nf->y\ng->u\nh->i\ni->o\nj->? \nk->a\nl->s\nm->d\nn->f\no->g\np->h\nq->? \nr->k\ns->l\nt->z\nu->x\nv->c\nw->? \nx->? \ny->n\nz->? \n\nWe have 26 letters, 9 unknown: d, j, q, w, x, z, maybe others.\n\nBut maybe mapping is simply Caesar shift with some pattern? Let's see mapping order: a->q (shift +16), b->w (+21), c->e (+2), d->? maybe +?; e->t (+15), f->y (+19), g->u (+14), h->i (+1), i->o (+6), j->?; k->a (+? -10), l->s (+7), m->d (+? -9), n->f (+? -8), o->g (+? -8), p->h (+? -8), q->?; r->k (+? -7), s->l (+? -7), t->z (+? +6), u->x (+? +3), v->c (+? -19), w->?; x->?; y->n (+? -10), z->?.\n\nNot simple.\n\nMaybe mapping is derived from a keyword cipher using a key phrase. For example, key \"something\" then alphabet mapping. Let's try to see if output alphabet (cipher) is a permutation: list outputs for a-z in order of input a-z mapping we have:\n\na q\nb w\nc e\nd ?\ne t\nf y\ng u\nh i\ni o\nj ?\nk a\nl s\nm d\nn f\no g\np h\nq ?\nr k\ns l\nt z\nu x\nv c\nw ?\nx ?\ny n\nz ?\n\nNow, maybe the missing letters map to remaining unused letters: Let's list used output letters: q,w,e,t,y,u,i,o,a,s,d,f,g,h,k,l,z,x,c,n. That's 19 letters. Missing output letters: b, j, m, p, r, v, ? maybe? Let's compute: full alphabet: a b c d e f g h i j k l m n o p q r s t u v w x y z. Used: a,c,d,e,f,g,h,i,k,l,n,q,s,t,u,w,x,y,z. That's 19. Missing: b, j, m, o? Wait o is used as output for i->o, yes. p, r, v. Also maybe? Let's list systematically.\n\nUsed set = {q,w,e,t,y,u,i,o,a,s,d,f,g,h,k,l,z,x,c,n}. Count 19.\n\nMissing letters = {b, j, m, p, r, v, ? maybe? also? let's compute all letters not in set: a present, b missing, c present, d present, e present, f present, g present, h present, i present, j missing, k present, l present, m missing, n present, o present, p missing, q present, r missing, s present, t present, u present, v missing, w present, x present, y present, z present. That's 7 missing letters: b, j, m, p, r, v, ? Wait we have 7 missing: b, j, m, p, r, v, ? Actually we counted 7 but there are 26-19=7. Good.\n\nThus unknown input letters likely map to these missing output letters in some order.\n\nWe can try to deduce mapping by assuming it's a simple substitution derived from a keyword. For example, maybe the cipher alphabet is \"QWETYUIOASDFGHJKLZXCVBNMPR\"? Not sure.\n\nLet's attempt to see pattern: The mapping seems to follow alphabetical order of output maybe based on some shift of 2? Not.\n\nMaybe it's a ROT13 of reversed alphabet? Let's compute for a: reversed is z, ROT? Not.\n\nCould be a simple substitution where each letter maps to the letter 2 positions ahead in the alphabet of the previous mapping? Not.\n\nGiven we only need to implement function that works for given inputs? The problem likely expects to deduce the substitution mapping fully. Could be that mapping is derived from a known cipher like \"Atbash\" then Caesar? Let's test Atbash (a->z, b->y, c->x...). For a we get z, but output is q. Not.\n\nMaybe it's a keyed Caesar using key \"cryptogram\"? Let's attempt to generate cipher alphabet by writing key then remaining letters. Suppose key = \"qwertyuiopasdfghjklzxcvbnm\"? That's QWERTY... Actually mapping we have: a->q, b->w, c->e, d->r? Wait we have d unknown but maybe d->r (makes sense as key \"qwertyuiopasdfghjklzxcvbnm\" is QWERTYUIOPASDFGHJKLZXCVBNM. That mapping would be: a->q, b->w, c->e, d->r, e->t, f->y, g->u, h->i, i->o, j->p, k->a, l->s, m->d, n->f, o->g, p->h, q->j, r->k, s->l, t->z, u->x, v->c, w->v, x->b, y->n, z->m. Let's compare with known mappings:\n\nOur known mapping matches many: a->q (yes), b->w (yes), c->e (yes), e->t (yes), f->y (yes), g->u (yes), h->i (yes), i->o (yes), k->a (yes), l->s (yes), m->d (yes), n->f (yes), o->g (yes), p->h (yes), r->k (yes), s->l (yes), t->z (yes), u->x (yes), v->c (yes), y->n (yes). Perfect! So the cipher is the QWERTY keyboard order mapping! Indeed the key string \"qwertyuiopasdfghjklzxcvbnm\" is the QWERTY layout. So mapping is: plaintext alphabet a-z maps to cipher alphabet \"qwertyuiopasdfghjklzxcvbnm\". That matches all known pairs. Let's verify unknown letters: d should map to r (since after c->e, d->r). j should map to p. q should map to j. w should map to v. x should map to b. z should map to m. That fills missing outputs: b, j, m, p, r, v, ? Wait we predicted d->r (output r), j->p (output p), q->j (output j), w->v (output v), x->b (output b), z->m (output m). That uses missing output letters: r, p, j, v, b, m. That's 6, but we had 7 missing letters earlier; we also missing maybe something else: we have mapping for all 26 now.\n\nLet's list full mapping:\n\na q\nb w\nc e\nd r\ne t\nf y\ng u\nh i\ni o\nj p\nk a\nl s\nm d\nn f\no g\np h\nq j\nr k\ns l\nt z\nu x\nv c\nw v\nx b\ny n\nz m\n\nCheck that output letters set now includes all 26 distinct letters. Yes.\n\nThus function is simple substitution using that mapping.\n\nImplement fn(x): for each char lower case, map using dict, else keep unchanged (maybe). Return string.\n\nLet's produce code.\n\nassistantfinal<reasoning>\nThe given pairs all have the same length, and each letter of the input is always transformed to the same output letter in every example.  \nCollecting the correspondences we obtain:\n\n```\na\u2192q  b\u2192w  c\u2192e  d\u2192r  e\u2192t  f\u2192y  g\u2192u  h\u2192i  i\u2192o  j\u2192p\nk\u2192a  l\u2192s  m\u2192d  n\u2192f  o\u2192g  p\u2192h  q\u2192j  r\u2192k  s\u2192l  t\u2192z\nu\u2192x  v\u2192c  w\u2192v  x\u2192b  y\u2192n  z\u2192m\n```\n\nThese are exactly the letters of the QWERTY keyboard written in order:\n\n```\nplain : abcdefghijklmnopqrstuvwxyz\ncipher: qwertyuiopasdfghjklzxcvbnm\n```\n\nSo the rule is a mono\u2011alphabetic substitution where each alphabetic character is replaced by the character at the same position in the string `\"qwertyuiopasdfghjklzxcvbnm\"`.\n\nThe Python function below implements this mapping (leaving any non\u2011alphabetic characters unchanged).\n\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    # substitution based on QWERTY keyboard order\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyz\",\n        \"qwertyuiopasdfghjklzxcvbnm\"\n    )\n    return x.translate(trans)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    # substitution based on QWERTY keyboard order\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyz\",\n        \"qwertyuiopasdfghjklzxcvbnm\"\n    )\n    return x.translate(trans)",
+                        "Reasoning": "The given pairs all have the same length, and each letter of the input is always transformed to the same output letter in every example.  \nCollecting the correspondences we obtain:\n\n```\na\u2192q  b\u2192w  c\u2192e  d\u2192r  e\u2192t  f\u2192y  g\u2192u  h\u2192i  i\u2192o  j\u2192p\nk\u2192a  l\u2192s  m\u2192d  n\u2192f  o\u2192g  p\u2192h  q\u2192j  r\u2192k  s\u2192l  t\u2192z\nu\u2192x  v\u2192c  w\u2192v  x\u2192b  y\u2192n  z\u2192m\n```\n\nThese are exactly the letters of the QWERTY keyboard written in order:\n\n```\nplain : abcdefghijklmnopqrstuvwxyz\ncipher: qwertyuiopasdfghjklzxcvbnm\n```\n\nSo the rule is a mono\u2011alphabetic substitution where each alphabetic character is replaced by the character at the same position in the string `\"qwertyuiopasdfghjklzxcvbnm\"`.\n\nThe Python function below implements this mapping (leaving any non\u2011alphabetic characters unchanged).",
+                        "TokenUsage": {
+                            "InputTokens": 289,
+                            "OutputTokens": 3922,
+                            "TotalTokens": 4211,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Error": null
+                    }
+                ]
+            },
+            {
+                "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: schooner\nOutput: leiggftk\nInput: colors\nOutput: egsgkl\nInput: pock\nOutput: hgea\nInput: photalgia\nOutput: higzqsuoq\nInput: bonnyvis\nOutput: wgffncol\nInput: envapour\nOutput: tfcqhgxk\nInput: tautly\nOutput: zqxzsn\nInput: makeshifty\nOutput: dqatlioyzn\nInput: aglitter\nOutput: qusozztk\nInput: outspeaker\nOutput: gxzlhtqatk\nInput: Z\nOutput: M\nInput: Y\nOutput: N\nInput: X\nOutput: B\nInput: W\nOutput: V\nInput: V\nOutput: C\nInput: U\nOutput: X\nInput: T\nOutput: Z\nInput: S\nOutput: L\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\nPrevious reasoning:\nThe given pairs all have the same length, and each letter of the input is always transformed to the same output letter in every example.  \nCollecting the correspondences we obtain:\n\n```\na\u2192q  b\u2192w  c\u2192e  d\u2192r  e\u2192t  f\u2192y  g\u2192u  h\u2192i  i\u2192o  j\u2192p\nk\u2192a  l\u2192s  m\u2192d  n\u2192f  o\u2192g  p\u2192h  q\u2192j  r\u2192k  s\u2192l  t\u2192z\nu\u2192x  v\u2192c  w\u2192v  x\u2192b  y\u2192n  z\u2192m\n```\n\nThese are exactly the letters of the QWERTY keyboard written in order:\n\n```\nplain : abcdefghijklmnopqrstuvwxyz\ncipher: qwertyuiopasdfghjklzxcvbnm\n```\n\nSo the rule is a mono\u2011alphabetic substitution where each alphabetic character is replaced by the character at the same position in the string `\"qwertyuiopasdfghjklzxcvbnm\"`.\n\nThe Python function below implements this mapping (leaving any non\u2011alphabetic characters unchanged).\nPrevious hypothesis: def fn(x):\n    # substitution based on QWERTY keyboard order\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyz\",\n        \"qwertyuiopasdfghjklzxcvbnm\"\n    )\n    return x.translate(trans)\nNew counterexamples:\nInput: Z\nOutput: M\nInput: Y\nOutput: N\nInput: X\nOutput: B\nInput: W\nOutput: V\nInput: V\nOutput: C\nInput: U\nOutput: X\nInput: T\nOutput: Z\nInput: S\nOutput: L\nRevise the hypothesis using these examples.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                "Response": "analysisWe need to incorporate uppercase letters mapping. The earlier mapping for lowercase is QWERTY order. For uppercase letters, we have examples: Z->M, Y->N, X->B, W->V, V->C, U->X, T->Z, S->L.\n\nLet's see if uppercase mapping follows same substitution but uppercase output. Let's map uppercase plain letters to uppercase cipher letters using same mapping but uppercase.\n\nPlain uppercase alphabet: ABCDEFGHIJKLMNOPQRSTUVWXYZ. Cipher uppercase would be QWERTYUIOPASDFGHJKLZXCVBNM (uppercase). Let's test: Plain Z -> cipher? In mapping, plain 'z' maps to 'm'. Uppercase Z should map to 'M'. Indeed matches. Y->? plain 'y' maps to 'n', uppercase Y -> N matches. X->? plain 'x' maps to 'b', uppercase X -> B matches. W->? plain 'w' maps to 'v', uppercase W -> V matches. V->? plain 'v' maps to 'c', uppercase V -> C matches. U->? plain 'u' maps to 'x', uppercase U -> X matches. T->? plain 't' maps to 'z', uppercase T -> Z matches. S->? plain 's' maps to 'l', uppercase S -> L matches. So uppercase mapping is same substitution but preserving case.\n\nThus function should handle both lower and upper case.\n\nImplementation: create translation table for both.\n\ntrans = str.maketrans(\n    \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n    \"qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM\"\n)\n\nReturn x.translate(trans)\n\nEdge: non-alpha unchanged.\n\nThus final answer.assistantfinal<ans>\ndef fn(x):\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n        \"qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM\"\n    )\n    return x.translate(trans)\n</ans>",
+                "Prediction": "def fn(x):\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n        \"qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM\"\n    )\n    return x.translate(trans)",
+                "Reasoning": null,
+                "TokenUsage": {
+                    "InputTokens": 740,
+                    "OutputTokens": 441,
+                    "TotalTokens": 1181,
+                    "ModelCalls": 1,
+                    "UsageComplete": true,
+                    "KnownInputTokens": 740,
+                    "KnownOutputTokens": 441,
+                    "Calls": [
+                        {
+                            "InputTokens": 740,
+                            "OutputTokens": 441,
+                            "TotalTokens": 1181,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids",
+                            "Model": "gpt-oss"
+                        }
+                    ]
+                },
+                "Equivalent": true,
+                "scoreTrainSet": 1.0,
+                "scoreEvalSet": 1.0,
+                "CandidateValid": true,
+                "OracleStatus": "accepted",
+                "OracleCounterexamples": [],
+                "OracleDetails": {
+                    "policy": "bounded_symbolic_python_crypto_v1",
+                    "backend": "cvc5_python_api",
+                    "guarantee": "equivalent_on_bounded_domain_only",
+                    "domain": {
+                        "alphabet": "ASCII A-Z/a-z",
+                        "min_length": 0,
+                        "max_length": 10
+                    },
+                    "timeout_ms_per_check": 10000,
+                    "queries": 11,
+                    "lengths_proved": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "lengths_searched": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "fallback": null,
+                    "status": "bounded_unsat"
+                },
+                "RepairExamples": [],
+                "EvaluationDetails": {
+                    "test_examples": 10,
+                    "correct": 10,
+                    "sample_accuracy": 1.0,
+                    "all_test_correct": true
+                },
+                "epoch": 1,
+                "NumTrainingSamples": 18,
+                "CurrentGuess": "def fn(x):\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n        \"qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM\"\n    )\n    return x.translate(trans)",
+                "CurrentGuessReasoning": null,
+                "Accuracy": 1,
+                "Logs": [
+                    {
+                        "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: schooner\nOutput: leiggftk\nInput: colors\nOutput: egsgkl\nInput: pock\nOutput: hgea\nInput: photalgia\nOutput: higzqsuoq\nInput: bonnyvis\nOutput: wgffncol\nInput: envapour\nOutput: tfcqhgxk\nInput: tautly\nOutput: zqxzsn\nInput: makeshifty\nOutput: dqatlioyzn\nInput: aglitter\nOutput: qusozztk\nInput: outspeaker\nOutput: gxzlhtqatk\nInput: Z\nOutput: M\nInput: Y\nOutput: N\nInput: X\nOutput: B\nInput: W\nOutput: V\nInput: V\nOutput: C\nInput: U\nOutput: X\nInput: T\nOutput: Z\nInput: S\nOutput: L\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\nPrevious reasoning:\nThe given pairs all have the same length, and each letter of the input is always transformed to the same output letter in every example.  \nCollecting the correspondences we obtain:\n\n```\na\u2192q  b\u2192w  c\u2192e  d\u2192r  e\u2192t  f\u2192y  g\u2192u  h\u2192i  i\u2192o  j\u2192p\nk\u2192a  l\u2192s  m\u2192d  n\u2192f  o\u2192g  p\u2192h  q\u2192j  r\u2192k  s\u2192l  t\u2192z\nu\u2192x  v\u2192c  w\u2192v  x\u2192b  y\u2192n  z\u2192m\n```\n\nThese are exactly the letters of the QWERTY keyboard written in order:\n\n```\nplain : abcdefghijklmnopqrstuvwxyz\ncipher: qwertyuiopasdfghjklzxcvbnm\n```\n\nSo the rule is a mono\u2011alphabetic substitution where each alphabetic character is replaced by the character at the same position in the string `\"qwertyuiopasdfghjklzxcvbnm\"`.\n\nThe Python function below implements this mapping (leaving any non\u2011alphabetic characters unchanged).\nPrevious hypothesis: def fn(x):\n    # substitution based on QWERTY keyboard order\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyz\",\n        \"qwertyuiopasdfghjklzxcvbnm\"\n    )\n    return x.translate(trans)\nNew counterexamples:\nInput: Z\nOutput: M\nInput: Y\nOutput: N\nInput: X\nOutput: B\nInput: W\nOutput: V\nInput: V\nOutput: C\nInput: U\nOutput: X\nInput: T\nOutput: Z\nInput: S\nOutput: L\nRevise the hypothesis using these examples.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                        "Response": "analysisWe need to incorporate uppercase letters mapping. The earlier mapping for lowercase is QWERTY order. For uppercase letters, we have examples: Z->M, Y->N, X->B, W->V, V->C, U->X, T->Z, S->L.\n\nLet's see if uppercase mapping follows same substitution but uppercase output. Let's map uppercase plain letters to uppercase cipher letters using same mapping but uppercase.\n\nPlain uppercase alphabet: ABCDEFGHIJKLMNOPQRSTUVWXYZ. Cipher uppercase would be QWERTYUIOPASDFGHJKLZXCVBNM (uppercase). Let's test: Plain Z -> cipher? In mapping, plain 'z' maps to 'm'. Uppercase Z should map to 'M'. Indeed matches. Y->? plain 'y' maps to 'n', uppercase Y -> N matches. X->? plain 'x' maps to 'b', uppercase X -> B matches. W->? plain 'w' maps to 'v', uppercase W -> V matches. V->? plain 'v' maps to 'c', uppercase V -> C matches. U->? plain 'u' maps to 'x', uppercase U -> X matches. T->? plain 't' maps to 'z', uppercase T -> Z matches. S->? plain 's' maps to 'l', uppercase S -> L matches. So uppercase mapping is same substitution but preserving case.\n\nThus function should handle both lower and upper case.\n\nImplementation: create translation table for both.\n\ntrans = str.maketrans(\n    \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n    \"qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM\"\n)\n\nReturn x.translate(trans)\n\nEdge: non-alpha unchanged.\n\nThus final answer.assistantfinal<ans>\ndef fn(x):\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n        \"qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM\"\n    )\n    return x.translate(trans)\n</ans>",
+                        "Prediction": "def fn(x):\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n        \"qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM\"\n    )\n    return x.translate(trans)",
+                        "Reasoning": null,
+                        "TokenUsage": {
+                            "InputTokens": 740,
+                            "OutputTokens": 441,
+                            "TotalTokens": 1181,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Equivalent": true,
+                        "scoreTrainSet": 1.0,
+                        "scoreEvalSet": 1.0,
+                        "CandidateValid": true,
+                        "OracleStatus": "accepted",
+                        "OracleCounterexamples": [],
+                        "OracleDetails": {
+                            "policy": "bounded_symbolic_python_crypto_v1",
+                            "backend": "cvc5_python_api",
+                            "guarantee": "equivalent_on_bounded_domain_only",
+                            "domain": {
+                                "alphabet": "ASCII A-Z/a-z",
+                                "min_length": 0,
+                                "max_length": 10
+                            },
+                            "timeout_ms_per_check": 10000,
+                            "queries": 11,
+                            "lengths_proved": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "lengths_searched": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "fallback": null,
+                            "status": "bounded_unsat"
+                        },
+                        "RepairExamples": [],
+                        "EvaluationDetails": {
+                            "test_examples": 10,
+                            "correct": 10,
+                            "sample_accuracy": 1.0,
+                            "all_test_correct": true
+                        }
+                    }
+                ],
+                "InputTokens": 740,
+                "OutputTokens": 441,
+                "Counterexamples": [
+                    [
+                        "Z",
+                        "M"
+                    ],
+                    [
+                        "Y",
+                        "N"
+                    ],
+                    [
+                        "X",
+                        "B"
+                    ],
+                    [
+                        "W",
+                        "V"
+                    ],
+                    [
+                        "V",
+                        "C"
+                    ],
+                    [
+                        "U",
+                        "X"
+                    ],
+                    [
+                        "T",
+                        "Z"
+                    ],
+                    [
+                        "S",
+                        "L"
+                    ]
+                ],
+                "TrainingExampleSource": "counterexample",
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to incorporate uppercase letters mapping. The earlier mapping for lowercase is QWERTY order. For uppercase letters, we have examples: Z->M, Y->N, X->B, W->V, V->C, U->X, T->Z, S->L.\n\nLet's see if uppercase mapping follows same substitution but uppercase output. Let's map uppercase plain letters to uppercase cipher letters using same mapping but uppercase.\n\nPlain uppercase alphabet: ABCDEFGHIJKLMNOPQRSTUVWXYZ. Cipher uppercase would be QWERTYUIOPASDFGHJKLZXCVBNM (uppercase). Let's test: Plain Z -> cipher? In mapping, plain 'z' maps to 'm'. Uppercase Z should map to 'M'. Indeed matches. Y->? plain 'y' maps to 'n', uppercase Y -> N matches. X->? plain 'x' maps to 'b', uppercase X -> B matches. W->? plain 'w' maps to 'v', uppercase W -> V matches. V->? plain 'v' maps to 'c', uppercase V -> C matches. U->? plain 'u' maps to 'x', uppercase U -> X matches. T->? plain 't' maps to 'z', uppercase T -> Z matches. S->? plain 's' maps to 'l', uppercase S -> L matches. So uppercase mapping is same substitution but preserving case.\n\nThus function should handle both lower and upper case.\n\nImplementation: create translation table for both.\n\ntrans = str.maketrans(\n    \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n    \"qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM\"\n)\n\nReturn x.translate(trans)\n\nEdge: non-alpha unchanged.\n\nThus final answer.assistantfinal<ans>\ndef fn(x):\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n        \"qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM\"\n    )\n    return x.translate(trans)\n</ans>",
+                        "Prediction": "def fn(x):\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n        \"qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM\"\n    )\n    return x.translate(trans)",
+                        "Reasoning": null,
+                        "TokenUsage": {
+                            "InputTokens": 740,
+                            "OutputTokens": 441,
+                            "TotalTokens": 1181,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Error": null
+                    }
+                ],
+                "StopReason": "oracle_accepted"
+            }
+        ]
+    ],
+    "oracle": "cvc5_bounded_symbolic_Python",
+    "TaskSettings": {
+        "crypto_setting": "paper",
+        "n_train": 10,
+        "n_test": 10,
+        "noise_ratio": 0.0,
+        "ood_ratio": 0.0,
+        "hypothesis": "Python_fn_x",
+        "paper_task_protocol": true,
+        "method": "shared_CE_pipeline_not_paper_SRR",
+        "regularization_applied": false,
+        "prompt_variant": "base_with_reasoning_and_ans",
+        "oracle_policy": "bounded_symbolic_python_crypto_v1",
+        "oracle_domain": {
+            "alphabet": "ASCII A-Z/a-z",
+            "min_length": 0,
+            "max_length": 10
+        },
+        "Difficulty": {
+            "catalog_version": "benchmark_difficulty_v2",
+            "id": "keyboard:24",
+            "tier": "L2",
+            "level": 2,
+            "levels": 3,
+            "axis": "training_information_coverage",
+            "proxy": true,
+            "features": {
+                "missing_lowercase_letters": 6,
+                "missing_case_sensitive_letters": 32,
+                "family": "keyboard",
+                "training_entries": 10,
+                "within_family_rank": 53
+            },
+            "basis_config_matches": true
+        },
+        "TrainingPoolSize": 10,
+        "ScheduledTrainingBudget": 10,
+        "EvaluationPoolSize": 10,
+        "RoundBudget": 10,
+        "StandardSampleSchedule": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+        ]
+    }
+}

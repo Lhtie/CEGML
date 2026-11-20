@@ -4,6 +4,7 @@ Task/prompt reference: HKUST-KnowComp/Robust-Rule-Induction,
   prompts/crypto_prompt.py and tasks/base.py (n_train=10, n_test=10).
 The CE method and bounded oracle are this project's extensions.
 """
+from modeling.response import all_tags
 import ast
 import builtins
 from functools import lru_cache
@@ -41,7 +42,7 @@ def paper_examples(item, ood_ratio=0.):
 def extract_program(response):
     """Accept the author's fenced/bare fn(x) output, or our explicit ans wrapper."""
     response = response or ''
-    answers = re.findall(r'<ans>\s*(.*?)\s*</ans>', response, re.S)
+    answers = all_tags(response, 'ans')
     choices = answers[-1:] or re.findall(r'```(?:python)?\s*\n(.*?)```', response, re.S)
     if not choices:
         # vLLM may include a separate analysis channel before the final code.

@@ -1,4 +1,5 @@
 """Author List Functions task interface; CE search remains a project extension."""
+from modeling.response import all_tags
 import ast
 from functools import lru_cache
 import re
@@ -20,7 +21,7 @@ Include the complete function definition, without a function call, inside the re
 
 def extract_program(response):
     response = response or ''
-    sources = re.findall(r'<ans>\s*(.*?)\s*</ans>', response, re.S)
+    sources = all_tags(response, 'ans')
     sources = sources or [response.split('assistantfinal')[-1].strip()]
     for source in reversed(sources):
         fences = re.findall(r'```(?:python)?\s*\n(.*?)```', source, re.S)

@@ -1,0 +1,232 @@
+{
+    "task_type": "cryptography",
+    "benchmark_id": "caesar:75",
+    "pipeline": "regex_run_episode",
+    "runs": [
+        [
+            {
+                "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: scalloper\nOutput: xhfqqtujw\nInput: pouce\nOutput: utzhj\nInput: song\nOutput: xtsl\nInput: dawnlike\nOutput: ifbsqnpj\nInput: angularize\nOutput: fslzqfwnej\nInput: behap\nOutput: gjmfu\nInput: conacre\nOutput: htsfhwj\nInput: bouse\nOutput: gtzxj\nInput: Longobard\nOutput: Qtsltgfwi\nInput: sextipolar\nOutput: xjcynutqfw\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                "Response": "analysisWe need to find rule mapping input strings to output strings. Let's examine.\n\nWe have pairs:\n\nscalloper -> xhfqqtujw\npouce -> utzhj\nsong -> xtsl\ndawnlike -> ifbsqnpj\nangularize -> fslzqfwnej\nbehap -> gjmfu\nconacre -> htsfhwj\nbouse -> gtzxj\nLongobard -> Qtsltgfwi\nsextipolar -> xjcynutqfw\n\nWe need to deduce transformation. Likely some substitution cipher maybe Caesar shift per character? Let's compare lengths: Input lengths vs output lengths.\n\nscalloper (9) -> xhfqqtujw (9) same length.\npouce (5) -> utzhj (5)\nsong (4) -> xtsl (4)\ndawnlike (8) -> ifbsqnpj (8)\nangularize (10) -> fslzqfwnej (10)\nbehav? actually behap (5) -> gjmfu (5)\nconacre (7) -> htsfhwj (7)\nbouse (5) -> gtzxj (5)\nLongobard (9) -> Qtsltgfwi (9) note case: input capital L, output capital Q first letter, rest lower.\nsextipolar (10) -> xjcynutqfw (10)\n\nSo same length, likely per-character substitution maybe based on position or something like Vigenere with key? Let's compute shift differences (alphabet positions). Use a=0.\n\nTake \"scalloper\" -> \"xhfqqtujw\". Compute shift for each char.\n\ns (18) -> x (23) shift +5\nc (2) -> h (7) +5\na (0) -> f (5) +5\nl (11) -> q (16) +5\nl -> q +5\no (14) -> t (19) +5\np (15) -> u (20) +5\ne (4) -> j (9) +5\nr (17) -> w (22) +5\n\nAll +5! So simple Caesar shift +5.\n\nCheck \"pouce\" -> \"utzhj\": p(15)+5=20->u correct. o(14)+5=19->t correct. u(20)+5=25->z correct. c(2)+5=7->h correct. e(4)+5=9->j correct. Works.\n\n\"song\": s+5=x, o+5=t, n+5=s, g+5=l => xtsl correct.\n\n\"dawnlike\": d+5=i, a+5=f, w+5=b (wrap: w=22+5=27->1->b) correct, n+5=s, l+5=q, i+5=n, k+5=p, e+5=j => ifbsqnpj correct.\n\n\"angularize\": a+5=f, n+5=s, g+5=l, u+5=z, l+5=q, a+5=f, r+5=w, i+5=n, z+5=e (wrap: 25+5=30->4->e), e+5=j => fslzqfwnej correct.\n\n\"behap\": b+5=g, e+5=j, h+5=m, a+5=f, p+5=u => gjmfu correct.\n\n\"conacre\": c+5=h, o+5=t, n+5=s, a+5=f, c+5=h, r+5=w, e+5=j => htsfhwj correct.\n\n\"bouse\": b+5=g, o+5=t, u+5=z, s+5=x, e+5=j => gtzxj correct.\n\n\"Longobard\": L capital? L (11) +5 = Q (16) capital. o+5=t, n+5=s, g+5=l, o+5=t, b+5=g, a+5=f, r+5=w, d+5=i => Qtsltgfwi correct.\n\n\"sextipolar\": s+5=x, e+5=j, x+5=c (wrap: 23+5=28->2->c), t+5=y, i+5=n, p+5=u, o+5=t, l+5=q, a+5=f, r+5=w => xjcynutqfw correct.\n\nThus rule: Caesar cipher shift +5 preserving case (uppercase stays uppercase). So function: shift each alphabetic character by 5 positions, wrapping around, preserving case. Non-letters? Not present but we can handle.\n\nImplement fn(x): iterate characters, if 'a' <= c <= 'z', shift using ord('a'), etc. If uppercase, shift using ord('A'). Return new string.\n\nEdge: maybe only letters. Provide function.\n\nNow produce answer with reasoning and ans tags.\n\nassistantfinal<reasoning>\nAll given examples keep the same length and each character is transformed by the same offset in the alphabet: every letter is shifted forward by 5 positions, wrapping around from \u2018z\u2019 to \u2018a\u2019. The case of the original letter is preserved (e.g., \u2018L\u2019 \u2192 \u2018Q\u2019). Therefore the required rule is a Caesar cipher with a shift of\u202f+5.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # shift lowercase letters\n            res.append(chr((ord(ch) - ord('a') + 5) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            # shift uppercase letters\n            res.append(chr((ord(ch) - ord('A') + 5) % 26 + ord('A')))\n        else:\n            # leave any non\u2011alphabetic character unchanged\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # shift lowercase letters\n            res.append(chr((ord(ch) - ord('a') + 5) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            # shift uppercase letters\n            res.append(chr((ord(ch) - ord('A') + 5) % 26 + ord('A')))\n        else:\n            # leave any non\u2011alphabetic character unchanged\n            res.append(ch)\n    return ''.join(res)",
+                "Reasoning": "All given examples keep the same length and each character is transformed by the same offset in the alphabet: every letter is shifted forward by 5 positions, wrapping around from \u2018z\u2019 to \u2018a\u2019. The case of the original letter is preserved (e.g., \u2018L\u2019 \u2192 \u2018Q\u2019). Therefore the required rule is a Caesar cipher with a shift of\u202f+5.",
+                "TokenUsage": {
+                    "InputTokens": 288,
+                    "OutputTokens": 1290,
+                    "TotalTokens": 1578,
+                    "ModelCalls": 1,
+                    "UsageComplete": true,
+                    "KnownInputTokens": 288,
+                    "KnownOutputTokens": 1290,
+                    "Calls": [
+                        {
+                            "InputTokens": 288,
+                            "OutputTokens": 1290,
+                            "TotalTokens": 1578,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids",
+                            "Model": "gpt-oss"
+                        }
+                    ]
+                },
+                "Equivalent": true,
+                "scoreTrainSet": 1.0,
+                "scoreEvalSet": 1.0,
+                "CandidateValid": true,
+                "OracleStatus": "accepted",
+                "OracleCounterexamples": [],
+                "OracleDetails": {
+                    "policy": "bounded_symbolic_python_crypto_v1",
+                    "backend": "cvc5_python_api",
+                    "guarantee": "equivalent_on_bounded_domain_only",
+                    "domain": {
+                        "alphabet": "ASCII A-Z/a-z",
+                        "min_length": 0,
+                        "max_length": 10
+                    },
+                    "timeout_ms_per_check": 10000,
+                    "queries": 11,
+                    "lengths_proved": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "lengths_searched": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "fallback": null,
+                    "status": "bounded_unsat"
+                },
+                "RepairExamples": [],
+                "EvaluationDetails": {
+                    "test_examples": 10,
+                    "correct": 10,
+                    "sample_accuracy": 1.0,
+                    "all_test_correct": true
+                },
+                "epoch": 0,
+                "NumTrainingSamples": 10,
+                "CurrentGuess": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # shift lowercase letters\n            res.append(chr((ord(ch) - ord('a') + 5) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            # shift uppercase letters\n            res.append(chr((ord(ch) - ord('A') + 5) % 26 + ord('A')))\n        else:\n            # leave any non\u2011alphabetic character unchanged\n            res.append(ch)\n    return ''.join(res)",
+                "CurrentGuessReasoning": "All given examples keep the same length and each character is transformed by the same offset in the alphabet: every letter is shifted forward by 5 positions, wrapping around from \u2018z\u2019 to \u2018a\u2019. The case of the original letter is preserved (e.g., \u2018L\u2019 \u2192 \u2018Q\u2019). Therefore the required rule is a Caesar cipher with a shift of\u202f+5.",
+                "Accuracy": 1,
+                "Logs": [
+                    {
+                        "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: scalloper\nOutput: xhfqqtujw\nInput: pouce\nOutput: utzhj\nInput: song\nOutput: xtsl\nInput: dawnlike\nOutput: ifbsqnpj\nInput: angularize\nOutput: fslzqfwnej\nInput: behap\nOutput: gjmfu\nInput: conacre\nOutput: htsfhwj\nInput: bouse\nOutput: gtzxj\nInput: Longobard\nOutput: Qtsltgfwi\nInput: sextipolar\nOutput: xjcynutqfw\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                        "Response": "analysisWe need to find rule mapping input strings to output strings. Let's examine.\n\nWe have pairs:\n\nscalloper -> xhfqqtujw\npouce -> utzhj\nsong -> xtsl\ndawnlike -> ifbsqnpj\nangularize -> fslzqfwnej\nbehap -> gjmfu\nconacre -> htsfhwj\nbouse -> gtzxj\nLongobard -> Qtsltgfwi\nsextipolar -> xjcynutqfw\n\nWe need to deduce transformation. Likely some substitution cipher maybe Caesar shift per character? Let's compare lengths: Input lengths vs output lengths.\n\nscalloper (9) -> xhfqqtujw (9) same length.\npouce (5) -> utzhj (5)\nsong (4) -> xtsl (4)\ndawnlike (8) -> ifbsqnpj (8)\nangularize (10) -> fslzqfwnej (10)\nbehav? actually behap (5) -> gjmfu (5)\nconacre (7) -> htsfhwj (7)\nbouse (5) -> gtzxj (5)\nLongobard (9) -> Qtsltgfwi (9) note case: input capital L, output capital Q first letter, rest lower.\nsextipolar (10) -> xjcynutqfw (10)\n\nSo same length, likely per-character substitution maybe based on position or something like Vigenere with key? Let's compute shift differences (alphabet positions). Use a=0.\n\nTake \"scalloper\" -> \"xhfqqtujw\". Compute shift for each char.\n\ns (18) -> x (23) shift +5\nc (2) -> h (7) +5\na (0) -> f (5) +5\nl (11) -> q (16) +5\nl -> q +5\no (14) -> t (19) +5\np (15) -> u (20) +5\ne (4) -> j (9) +5\nr (17) -> w (22) +5\n\nAll +5! So simple Caesar shift +5.\n\nCheck \"pouce\" -> \"utzhj\": p(15)+5=20->u correct. o(14)+5=19->t correct. u(20)+5=25->z correct. c(2)+5=7->h correct. e(4)+5=9->j correct. Works.\n\n\"song\": s+5=x, o+5=t, n+5=s, g+5=l => xtsl correct.\n\n\"dawnlike\": d+5=i, a+5=f, w+5=b (wrap: w=22+5=27->1->b) correct, n+5=s, l+5=q, i+5=n, k+5=p, e+5=j => ifbsqnpj correct.\n\n\"angularize\": a+5=f, n+5=s, g+5=l, u+5=z, l+5=q, a+5=f, r+5=w, i+5=n, z+5=e (wrap: 25+5=30->4->e), e+5=j => fslzqfwnej correct.\n\n\"behap\": b+5=g, e+5=j, h+5=m, a+5=f, p+5=u => gjmfu correct.\n\n\"conacre\": c+5=h, o+5=t, n+5=s, a+5=f, c+5=h, r+5=w, e+5=j => htsfhwj correct.\n\n\"bouse\": b+5=g, o+5=t, u+5=z, s+5=x, e+5=j => gtzxj correct.\n\n\"Longobard\": L capital? L (11) +5 = Q (16) capital. o+5=t, n+5=s, g+5=l, o+5=t, b+5=g, a+5=f, r+5=w, d+5=i => Qtsltgfwi correct.\n\n\"sextipolar\": s+5=x, e+5=j, x+5=c (wrap: 23+5=28->2->c), t+5=y, i+5=n, p+5=u, o+5=t, l+5=q, a+5=f, r+5=w => xjcynutqfw correct.\n\nThus rule: Caesar cipher shift +5 preserving case (uppercase stays uppercase). So function: shift each alphabetic character by 5 positions, wrapping around, preserving case. Non-letters? Not present but we can handle.\n\nImplement fn(x): iterate characters, if 'a' <= c <= 'z', shift using ord('a'), etc. If uppercase, shift using ord('A'). Return new string.\n\nEdge: maybe only letters. Provide function.\n\nNow produce answer with reasoning and ans tags.\n\nassistantfinal<reasoning>\nAll given examples keep the same length and each character is transformed by the same offset in the alphabet: every letter is shifted forward by 5 positions, wrapping around from \u2018z\u2019 to \u2018a\u2019. The case of the original letter is preserved (e.g., \u2018L\u2019 \u2192 \u2018Q\u2019). Therefore the required rule is a Caesar cipher with a shift of\u202f+5.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # shift lowercase letters\n            res.append(chr((ord(ch) - ord('a') + 5) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            # shift uppercase letters\n            res.append(chr((ord(ch) - ord('A') + 5) % 26 + ord('A')))\n        else:\n            # leave any non\u2011alphabetic character unchanged\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # shift lowercase letters\n            res.append(chr((ord(ch) - ord('a') + 5) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            # shift uppercase letters\n            res.append(chr((ord(ch) - ord('A') + 5) % 26 + ord('A')))\n        else:\n            # leave any non\u2011alphabetic character unchanged\n            res.append(ch)\n    return ''.join(res)",
+                        "Reasoning": "All given examples keep the same length and each character is transformed by the same offset in the alphabet: every letter is shifted forward by 5 positions, wrapping around from \u2018z\u2019 to \u2018a\u2019. The case of the original letter is preserved (e.g., \u2018L\u2019 \u2192 \u2018Q\u2019). Therefore the required rule is a Caesar cipher with a shift of\u202f+5.",
+                        "TokenUsage": {
+                            "InputTokens": 288,
+                            "OutputTokens": 1290,
+                            "TotalTokens": 1578,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Equivalent": true,
+                        "scoreTrainSet": 1.0,
+                        "scoreEvalSet": 1.0,
+                        "CandidateValid": true,
+                        "OracleStatus": "accepted",
+                        "OracleCounterexamples": [],
+                        "OracleDetails": {
+                            "policy": "bounded_symbolic_python_crypto_v1",
+                            "backend": "cvc5_python_api",
+                            "guarantee": "equivalent_on_bounded_domain_only",
+                            "domain": {
+                                "alphabet": "ASCII A-Z/a-z",
+                                "min_length": 0,
+                                "max_length": 10
+                            },
+                            "timeout_ms_per_check": 10000,
+                            "queries": 11,
+                            "lengths_proved": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "lengths_searched": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "fallback": null,
+                            "status": "bounded_unsat"
+                        },
+                        "RepairExamples": [],
+                        "EvaluationDetails": {
+                            "test_examples": 10,
+                            "correct": 10,
+                            "sample_accuracy": 1.0,
+                            "all_test_correct": true
+                        }
+                    }
+                ],
+                "InputTokens": 288,
+                "OutputTokens": 1290,
+                "Counterexamples": [],
+                "TrainingExampleSource": "scheduled",
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to find rule mapping input strings to output strings. Let's examine.\n\nWe have pairs:\n\nscalloper -> xhfqqtujw\npouce -> utzhj\nsong -> xtsl\ndawnlike -> ifbsqnpj\nangularize -> fslzqfwnej\nbehap -> gjmfu\nconacre -> htsfhwj\nbouse -> gtzxj\nLongobard -> Qtsltgfwi\nsextipolar -> xjcynutqfw\n\nWe need to deduce transformation. Likely some substitution cipher maybe Caesar shift per character? Let's compare lengths: Input lengths vs output lengths.\n\nscalloper (9) -> xhfqqtujw (9) same length.\npouce (5) -> utzhj (5)\nsong (4) -> xtsl (4)\ndawnlike (8) -> ifbsqnpj (8)\nangularize (10) -> fslzqfwnej (10)\nbehav? actually behap (5) -> gjmfu (5)\nconacre (7) -> htsfhwj (7)\nbouse (5) -> gtzxj (5)\nLongobard (9) -> Qtsltgfwi (9) note case: input capital L, output capital Q first letter, rest lower.\nsextipolar (10) -> xjcynutqfw (10)\n\nSo same length, likely per-character substitution maybe based on position or something like Vigenere with key? Let's compute shift differences (alphabet positions). Use a=0.\n\nTake \"scalloper\" -> \"xhfqqtujw\". Compute shift for each char.\n\ns (18) -> x (23) shift +5\nc (2) -> h (7) +5\na (0) -> f (5) +5\nl (11) -> q (16) +5\nl -> q +5\no (14) -> t (19) +5\np (15) -> u (20) +5\ne (4) -> j (9) +5\nr (17) -> w (22) +5\n\nAll +5! So simple Caesar shift +5.\n\nCheck \"pouce\" -> \"utzhj\": p(15)+5=20->u correct. o(14)+5=19->t correct. u(20)+5=25->z correct. c(2)+5=7->h correct. e(4)+5=9->j correct. Works.\n\n\"song\": s+5=x, o+5=t, n+5=s, g+5=l => xtsl correct.\n\n\"dawnlike\": d+5=i, a+5=f, w+5=b (wrap: w=22+5=27->1->b) correct, n+5=s, l+5=q, i+5=n, k+5=p, e+5=j => ifbsqnpj correct.\n\n\"angularize\": a+5=f, n+5=s, g+5=l, u+5=z, l+5=q, a+5=f, r+5=w, i+5=n, z+5=e (wrap: 25+5=30->4->e), e+5=j => fslzqfwnej correct.\n\n\"behap\": b+5=g, e+5=j, h+5=m, a+5=f, p+5=u => gjmfu correct.\n\n\"conacre\": c+5=h, o+5=t, n+5=s, a+5=f, c+5=h, r+5=w, e+5=j => htsfhwj correct.\n\n\"bouse\": b+5=g, o+5=t, u+5=z, s+5=x, e+5=j => gtzxj correct.\n\n\"Longobard\": L capital? L (11) +5 = Q (16) capital. o+5=t, n+5=s, g+5=l, o+5=t, b+5=g, a+5=f, r+5=w, d+5=i => Qtsltgfwi correct.\n\n\"sextipolar\": s+5=x, e+5=j, x+5=c (wrap: 23+5=28->2->c), t+5=y, i+5=n, p+5=u, o+5=t, l+5=q, a+5=f, r+5=w => xjcynutqfw correct.\n\nThus rule: Caesar cipher shift +5 preserving case (uppercase stays uppercase). So function: shift each alphabetic character by 5 positions, wrapping around, preserving case. Non-letters? Not present but we can handle.\n\nImplement fn(x): iterate characters, if 'a' <= c <= 'z', shift using ord('a'), etc. If uppercase, shift using ord('A'). Return new string.\n\nEdge: maybe only letters. Provide function.\n\nNow produce answer with reasoning and ans tags.\n\nassistantfinal<reasoning>\nAll given examples keep the same length and each character is transformed by the same offset in the alphabet: every letter is shifted forward by 5 positions, wrapping around from \u2018z\u2019 to \u2018a\u2019. The case of the original letter is preserved (e.g., \u2018L\u2019 \u2192 \u2018Q\u2019). Therefore the required rule is a Caesar cipher with a shift of\u202f+5.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # shift lowercase letters\n            res.append(chr((ord(ch) - ord('a') + 5) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            # shift uppercase letters\n            res.append(chr((ord(ch) - ord('A') + 5) % 26 + ord('A')))\n        else:\n            # leave any non\u2011alphabetic character unchanged\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # shift lowercase letters\n            res.append(chr((ord(ch) - ord('a') + 5) % 26 + ord('a')))\n        elif 'A' <= ch <= 'Z':\n            # shift uppercase letters\n            res.append(chr((ord(ch) - ord('A') + 5) % 26 + ord('A')))\n        else:\n            # leave any non\u2011alphabetic character unchanged\n            res.append(ch)\n    return ''.join(res)",
+                        "Reasoning": "All given examples keep the same length and each character is transformed by the same offset in the alphabet: every letter is shifted forward by 5 positions, wrapping around from \u2018z\u2019 to \u2018a\u2019. The case of the original letter is preserved (e.g., \u2018L\u2019 \u2192 \u2018Q\u2019). Therefore the required rule is a Caesar cipher with a shift of\u202f+5.",
+                        "TokenUsage": {
+                            "InputTokens": 288,
+                            "OutputTokens": 1290,
+                            "TotalTokens": 1578,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Error": null
+                    }
+                ],
+                "StopReason": "oracle_accepted"
+            }
+        ]
+    ],
+    "oracle": "cvc5_bounded_symbolic_Python",
+    "TaskSettings": {
+        "crypto_setting": "paper",
+        "n_train": 10,
+        "n_test": 10,
+        "noise_ratio": 0.0,
+        "ood_ratio": 0.0,
+        "hypothesis": "Python_fn_x",
+        "paper_task_protocol": true,
+        "method": "shared_CE_pipeline_not_paper_SRR",
+        "regularization_applied": false,
+        "prompt_variant": "base_with_reasoning_and_ans",
+        "oracle_policy": "bounded_symbolic_python_crypto_v1",
+        "oracle_domain": {
+            "alphabet": "ASCII A-Z/a-z",
+            "min_length": 0,
+            "max_length": 10
+        },
+        "Difficulty": {
+            "catalog_version": "benchmark_difficulty_v2",
+            "id": "caesar:75",
+            "tier": "L2",
+            "level": 2,
+            "levels": 3,
+            "axis": "training_information_coverage",
+            "proxy": true,
+            "features": {
+                "missing_lowercase_letters": 6,
+                "missing_case_sensitive_letters": 31,
+                "family": "caesar",
+                "training_entries": 10,
+                "within_family_rank": 49
+            },
+            "basis_config_matches": true
+        },
+        "TrainingPoolSize": 10,
+        "ScheduledTrainingBudget": 10,
+        "EvaluationPoolSize": 10,
+        "RoundBudget": 10,
+        "StandardSampleSchedule": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+        ]
+    }
+}

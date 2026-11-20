@@ -1,0 +1,273 @@
+{
+    "task_type": "cryptography",
+    "benchmark_id": "atbash:74",
+    "pipeline": "regex_run_episode",
+    "runs": [
+        [
+            {
+                "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: presystole\nOutput: kivhbhglov\nInput: swallo\nOutput: hdzool\nInput: chardock\nOutput: xsziwlxp\nInput: acholous\nOutput: zxslolfh\nInput: onewhere\nOutput: lmvdsviv\nInput: Ateba\nOutput: Zgvyz\nInput: discussant\nOutput: wrhxfhhzmg\nInput: disabled\nOutput: wrhzyovw\nInput: keacorn\nOutput: pvzxlim\nInput: otorrhea\nOutput: lgliisvz\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\npresystole -> kivhbhglov\nswallo -> hdzool\nchardock -> xsziwlxp\nacholous -> zxslolfh\nonewhere -> lmvdsviv\nAteba -> Zgvyz\ndiscussant -> wrhxfhhzmg\ndisabled -> wrhzyovw\nkeacorn -> pvzxlim\notorrhea -> lgliisvz\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift per character? Let's compare lengths: presystole (10) -> kivhbhglov (10). swallo (6) -> hdzool (6). chardock (8) -> xsziwlxp (8). acholous (8) -> zxslolfh (8). onewhere (8) -> lmvdsviv (8). Ateba (5) -> Zgvyz (5). discussant (10) -> wrhxfhhzmg (10). disabled (8) -> wrhzyovw (8). keacorn (7) -> pvzxlim (7). otorrhea (8) -> lgliisvz (8). So same length.\n\nMaybe each letter is shifted by some amount based on position? Let's compute differences (using alphabet positions a=0). We'll write quick mental.\n\nDefine function diff = (output - input) mod 26.\n\nTake presystole -> kivhbhglov.\n\np (15) -> k (10): diff -5 (or 21). r (17) -> i (8): -9 (17). e (4) -> v (21): +17. s (18) -> h (7): -11 (15). y (24) -> b (1): -23 (3). s (18) -> h (7): -11 (15). t (19) -> g (6): -13 (13). o (14) -> l (11): -3 (23). l (11) -> o (14): +3. e (4) -> v (21): +17.\n\nPattern? Not constant. Maybe using Vigenere with a key? Let's see differences sequence: -5, -9, +17, -11, -23, -11, -13, -3, +3, +17. Not obvious.\n\nMaybe they reversed string then shift? Reverse input: elotsysrep. Output: kivhbhglov. Not match.\n\nMaybe they apply some substitution based on keyboard? Not.\n\nCheck swallo -> hdzool.\n\ns (18) -> h (7): -11. w (22) -> d (3): -19 (or +7). a (0) -> z (25): -1. l (11) -> o (14): +3. l (11) -> o (14): +3. o (14) -> l (11): -3.\n\nPattern maybe symmetrical: first half negative shift, second half positive? Not.\n\nCheck chardock -> xsziwlxp.\n\nc (2) -> x (23): -5 (21). h (7) -> s (18): +11. a (0) -> z (25): -1. r (17) -> i (8): -9. d (3) -> w (22): +19. o (14) -> l (11): -3. c (2) -> x (23): -5. k (10) -> p (15): +5.\n\nInteresting: many shifts correspond to same as earlier? For presystole first char p->k diff -5 same as c->x diff -5. So maybe shift depends on position not letter. Let's compute position-based shift (0-index). For each position i, compute diff.\n\nLet's list for each pair.\n\nWe'll compute for each example.\n\nI'll create table.\n\nWord: presystole (len10)\ni:0 p->k diff -5 (21)\n1 r->i diff -9 (17)\n2 e->v diff +17 (17)\n3 s->h diff -11 (15)\n4 y->b diff -23 (3)\n5 s->h diff -11 (15)\n6 t->g diff -13 (13)\n7 o->l diff -3 (23)\n8 l->o diff +3 (3)\n9 e->v diff +17 (17)\n\nNow swallo (len6)\n0 s->h diff -11 (15)\n1 w->d diff -19 (7) actually w(22) to d(3) diff -19 mod26 =7? Wait -19 mod26 =7. So diff +7.\n2 a->z diff -1 (25)\n3 l->o diff +3\n4 l->o diff +3\n5 o->l diff -3 (23)\n\nNow chardock (len8)\n0 c->x diff -5 (21)\n1 h->s diff +11 (11)\n2 a->z diff -1 (25)\n3 r->i diff -9 (17)\n4 d->w diff +19 (19)\n5 o->l diff -3 (23)\n6 c->x diff -5 (21)\n7 k->p diff +5 (5)\n\nNow acholous (len8)\na->z diff -1 (25)\nc->x diff -5 (21)\nh->s diff +11 (11)\no->l diff -3 (23)\nl->o diff +3 (3)\no->f diff -9? Wait o(14) to f(5) diff -9 (17)\nu->h diff -13? u(20) to h(7) diff -13 (13)\ns->h diff -11 (15)\n\nNow onewhere (len8)\no->l diff -3 (23)\nn->m diff -1 (25)\ne->v diff +17 (17)\nw->d diff -19 (7)\nh->s diff +11 (11)\ne->v diff +17 (17)\nr->i diff -9 (17)\ne->v diff +17 (17)\n\nNow Ateba (len5) note case: Input \"Ateba\" output \"Zgvyz\". Let's treat uppercase? A->Z diff -1 (25). t->g diff -13 (13). e->v diff +17 (17). b->y diff -3 (23). a->z diff -1 (25). So pattern matches earlier diffs: -1, -13, +17, -3, -1.\n\nNow discussant (len10)\nd->w diff +19? d(3) to w(22) diff +19 (19)\ni->r diff +9? i(8) to r(17) diff +9 (9)\ns->h diff -11 (15)\nc->x diff -5 (21)\nu->f diff -15? u(20) to f(5) diff -15 (11) Wait -15 mod26 =11. So diff +11? Actually 20->5 diff = -15 mod26 =11. So diff +11.\ns->h diff -11 (15)\ns->h diff -11 (15)\na->z diff -1 (25)\nn->m diff -1 (25)\nt->g diff -13 (13)\n\nNow disabled (len8)\nd->w diff +19 (19)\ni->r diff +9 (9)\ns->h diff -11 (15)\na->z diff -1 (25)\nb->y diff -3 (23)\nl->o diff +3 (3)\ne->v diff +17 (17)\nd->w diff +19 (19)\n\nNow keacorn (len7)\nk->p diff +5 (5)\ne->v diff +17 (17)\na->z diff -1 (25)\nc->x diff -5 (21)\no->l diff -3 (23)\nr->i diff -9 (17)\nn->m diff -1 (25)\n\nNow otorrhea (len8)\no->l diff -3 (23)\nt->g diff -13 (13)\no->l diff -3 (23)\nr->i diff -9 (17)\nr->i diff -9 (17)\nh->s diff +11 (11)\ne->v diff +17 (17)\na->z diff -1 (25)\n\nObservations: The diffs seem to follow a repeating pattern maybe based on position modulo something. Let's list diffs per position across words.\n\nCreate position index 0.. maybe pattern length 5? Let's collect.\n\nFrom many words, we have:\n\nPos0 diffs: -5 (presystole), -11 (swallo), -5 (chardock), -1 (acholous), -3 (onewhere), -1 (Ateba), +19 (discussant), +19 (disabled), +5 (keacorn), -3 (otorrhea). Not consistent.\n\nBut maybe they are using a key phrase \"something\"? Could be Vigenere with key \"cryptic\"? Let's test: For each position, diff maybe corresponds to letters of key repeated. Let's see if diffs correspond to letters of key \"cryptic\"? c=2, r=17, y=24, p=15, t=19, i=8, c=2. Not match.\n\nMaybe they are using a substitution cipher that maps each letter to another fixed mapping (like a simple substitution). Let's test: Input a -> output? We have many examples: a maps to z (acholous first char a->z, onewhere? no a there, disabled? a->z, discussant? a->z, keacorn? a->z, Ateba? a->z). So a->z consistently. Good.\n\nb -> y (from disabled b->y, Ateba b->y). So b->y.\n\nc -> x (chardock c->x, keacorn c->x, acholous c->x). So c->x.\n\nd -> w (discussant d->w, disabled d->w). So d->w.\n\ne -> v (presystole e->v, onewhere e->v, disabled e->v, keacorn e->v, etc). So e->v.\n\nf? Not present.\n\ng? Not present.\n\nh -> s (presystole? no h input, but chardock? h->s, discussant? h appears? not, onewhere h->s, otorrhea h->s). So h->s.\n\ni -> r (discussant i->r, disabled i->r). So i->r.\n\nj? none.\n\nk -> p (presystole? k not input, keacorn k->p, otorrhea? no, etc). So k->p.\n\nl -> o (swallo l->o, keacorn? l not input, etc). So l->o.\n\nm? none.\n\nn -> m (onewhere n->m, discussant n->m, keacorn n->m). So n->m.\n\no -> l (presystole o->l, chardock o->l, otorrhea o->l). So o->l.\n\np -> k (presystole p->k). So p->k.\n\nq? none.\n\nr -> i (presystole r->i, chardock r->i, otorrhea r->i). So r->i.\n\ns -> h (presystole s->h, swallo s->h, disabled s->h, discussant s->h). So s->h.\n\nt -> g (presystole t->g, Ateba t->g, otorrhea t->g). So t->g.\n\nu -> h? Wait u appears in acholous u->h. So u->h.\n\nv? none.\n\nw -> d (swallo w->d, onewhere w->d). So w->d.\n\nx? none.\n\ny -> b (presystole y->b). So y->b.\n\nz? none.\n\nSeems like a simple substitution cipher: each letter maps to another letter, maybe a reversed alphabet with shift? Let's see mapping: a->z, b->y, c->x, d->w, e->v, f->u?, g->t?, h->s, i->r, j->q, k->p, l->o, m->n, n->m, o->l, p->k, q->j, r->i, s->h, t->g, u->f?, v->e?, w->d, x->c?, y->b, z->a? This is classic Atbash cipher (reverse alphabet). Indeed Atbash maps a<->z, b<->y, c<->x, d<->w, e<->v, f<->u, g<->t, h<->s, i<->r, j<->q, k<->p, l<->o, m<->n, n<->m, o<->l, p<->k, q<->j, r->i, s->h, t->g, u->f, v->e, w->d, x->c, y->b, z->a.\n\nOur observed mapping matches Atbash for many letters. Check u->h? Atbash would map u (20) to f (5). But we observed u->h (7). Wait maybe we misread: In acholous, u->h? Let's verify: acholous -> zxslolfh. Input letters: a c h o l o u s. Output: z x s l o l f h. So mapping: a->z (ok), c->x (ok), h->s (ok), o->l (ok), l->o (ok), o->l (ok), u->f? Wait output for u is f? The seventh output char is f (since output string: z x s l o l f h). Yes seventh char is f, not h. Actually the last char h corresponds to s input? Wait last input s maps to h, correct. So u->f, which matches Atbash (u->f). Good.\n\nThus mapping is Atbash cipher (reverse alphabet). Also case: Input \"Ateba\" output \"Zgvyz\". Atbash for uppercase A -> Z, t->g, e->v, b->y, a->z. Yes matches.\n\nThus rule: Atbash cipher preserving case.\n\nSo function: for each character, if alphabetic, map to opposite letter preserving case. Non-alpha unchanged (none present). Implementation.\n\nProvide explanation and function.\n\nEdge: Should handle both uppercase and lowercase.\n\nImplementation:\n\ndef fn(x):\n    result = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            result.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            result.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            result.append(ch)\n    return ''.join(result)\n\nReturn string.\n\nNow produce answer with reasoning and ans tags.assistantfinal<reasoning>\nAll given input\u2011output pairs follow the **Atbash cipher**: each letter is replaced by the letter symmetric to it in the alphabet (a\u2194z, b\u2194y, \u2026, A\u2194Z, \u2026). The case of the original character is preserved, and non\u2011alphabetic characters would be left unchanged (none appear in the examples). Implementing this rule yields the required mapping.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # map a->z, b->y, ..., z->a\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            # map A->Z, B->Y, ..., Z->A\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            # leave any other character unchanged\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # map a->z, b->y, ..., z->a\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            # map A->Z, B->Y, ..., Z->A\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            # leave any other character unchanged\n            res.append(ch)\n    return ''.join(res)",
+                "Reasoning": "All given input\u2011output pairs follow the **Atbash cipher**: each letter is replaced by the letter symmetric to it in the alphabet (a\u2194z, b\u2194y, \u2026, A\u2194Z, \u2026). The case of the original character is preserved, and non\u2011alphabetic characters would be left unchanged (none appear in the examples). Implementing this rule yields the required mapping.",
+                "TokenUsage": {
+                    "InputTokens": 291,
+                    "OutputTokens": 3501,
+                    "TotalTokens": 3792,
+                    "ModelCalls": 1,
+                    "UsageComplete": true,
+                    "KnownInputTokens": 291,
+                    "KnownOutputTokens": 3501,
+                    "Calls": [
+                        {
+                            "InputTokens": 291,
+                            "OutputTokens": 3501,
+                            "TotalTokens": 3792,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids",
+                            "Model": "gpt-oss"
+                        }
+                    ]
+                },
+                "Equivalent": true,
+                "scoreTrainSet": 1.0,
+                "scoreEvalSet": 1.0,
+                "CandidateValid": true,
+                "OracleStatus": "accepted",
+                "OracleCounterexamples": [],
+                "OracleDetails": {
+                    "policy": "bounded_symbolic_python_crypto_v1",
+                    "backend": "cvc5_python_api",
+                    "guarantee": "equivalent_on_bounded_domain_only",
+                    "domain": {
+                        "alphabet": "ASCII A-Z/a-z",
+                        "min_length": 0,
+                        "max_length": 10
+                    },
+                    "timeout_ms_per_check": 10000,
+                    "queries": 11,
+                    "lengths_proved": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "lengths_searched": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "fallback": null,
+                    "status": "bounded_unsat"
+                },
+                "RepairExamples": [],
+                "EvaluationDetails": {
+                    "test_examples": 10,
+                    "correct": 10,
+                    "sample_accuracy": 1.0,
+                    "all_test_correct": true
+                },
+                "epoch": 0,
+                "NumTrainingSamples": 10,
+                "CurrentGuess": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # map a->z, b->y, ..., z->a\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            # map A->Z, B->Y, ..., Z->A\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            # leave any other character unchanged\n            res.append(ch)\n    return ''.join(res)",
+                "CurrentGuessReasoning": "All given input\u2011output pairs follow the **Atbash cipher**: each letter is replaced by the letter symmetric to it in the alphabet (a\u2194z, b\u2194y, \u2026, A\u2194Z, \u2026). The case of the original character is preserved, and non\u2011alphabetic characters would be left unchanged (none appear in the examples). Implementing this rule yields the required mapping.",
+                "Accuracy": 1,
+                "Logs": [
+                    {
+                        "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: presystole\nOutput: kivhbhglov\nInput: swallo\nOutput: hdzool\nInput: chardock\nOutput: xsziwlxp\nInput: acholous\nOutput: zxslolfh\nInput: onewhere\nOutput: lmvdsviv\nInput: Ateba\nOutput: Zgvyz\nInput: discussant\nOutput: wrhxfhhzmg\nInput: disabled\nOutput: wrhzyovw\nInput: keacorn\nOutput: pvzxlim\nInput: otorrhea\nOutput: lgliisvz\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                        "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\npresystole -> kivhbhglov\nswallo -> hdzool\nchardock -> xsziwlxp\nacholous -> zxslolfh\nonewhere -> lmvdsviv\nAteba -> Zgvyz\ndiscussant -> wrhxfhhzmg\ndisabled -> wrhzyovw\nkeacorn -> pvzxlim\notorrhea -> lgliisvz\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift per character? Let's compare lengths: presystole (10) -> kivhbhglov (10). swallo (6) -> hdzool (6). chardock (8) -> xsziwlxp (8). acholous (8) -> zxslolfh (8). onewhere (8) -> lmvdsviv (8). Ateba (5) -> Zgvyz (5). discussant (10) -> wrhxfhhzmg (10). disabled (8) -> wrhzyovw (8). keacorn (7) -> pvzxlim (7). otorrhea (8) -> lgliisvz (8). So same length.\n\nMaybe each letter is shifted by some amount based on position? Let's compute differences (using alphabet positions a=0). We'll write quick mental.\n\nDefine function diff = (output - input) mod 26.\n\nTake presystole -> kivhbhglov.\n\np (15) -> k (10): diff -5 (or 21). r (17) -> i (8): -9 (17). e (4) -> v (21): +17. s (18) -> h (7): -11 (15). y (24) -> b (1): -23 (3). s (18) -> h (7): -11 (15). t (19) -> g (6): -13 (13). o (14) -> l (11): -3 (23). l (11) -> o (14): +3. e (4) -> v (21): +17.\n\nPattern? Not constant. Maybe using Vigenere with a key? Let's see differences sequence: -5, -9, +17, -11, -23, -11, -13, -3, +3, +17. Not obvious.\n\nMaybe they reversed string then shift? Reverse input: elotsysrep. Output: kivhbhglov. Not match.\n\nMaybe they apply some substitution based on keyboard? Not.\n\nCheck swallo -> hdzool.\n\ns (18) -> h (7): -11. w (22) -> d (3): -19 (or +7). a (0) -> z (25): -1. l (11) -> o (14): +3. l (11) -> o (14): +3. o (14) -> l (11): -3.\n\nPattern maybe symmetrical: first half negative shift, second half positive? Not.\n\nCheck chardock -> xsziwlxp.\n\nc (2) -> x (23): -5 (21). h (7) -> s (18): +11. a (0) -> z (25): -1. r (17) -> i (8): -9. d (3) -> w (22): +19. o (14) -> l (11): -3. c (2) -> x (23): -5. k (10) -> p (15): +5.\n\nInteresting: many shifts correspond to same as earlier? For presystole first char p->k diff -5 same as c->x diff -5. So maybe shift depends on position not letter. Let's compute position-based shift (0-index). For each position i, compute diff.\n\nLet's list for each pair.\n\nWe'll compute for each example.\n\nI'll create table.\n\nWord: presystole (len10)\ni:0 p->k diff -5 (21)\n1 r->i diff -9 (17)\n2 e->v diff +17 (17)\n3 s->h diff -11 (15)\n4 y->b diff -23 (3)\n5 s->h diff -11 (15)\n6 t->g diff -13 (13)\n7 o->l diff -3 (23)\n8 l->o diff +3 (3)\n9 e->v diff +17 (17)\n\nNow swallo (len6)\n0 s->h diff -11 (15)\n1 w->d diff -19 (7) actually w(22) to d(3) diff -19 mod26 =7? Wait -19 mod26 =7. So diff +7.\n2 a->z diff -1 (25)\n3 l->o diff +3\n4 l->o diff +3\n5 o->l diff -3 (23)\n\nNow chardock (len8)\n0 c->x diff -5 (21)\n1 h->s diff +11 (11)\n2 a->z diff -1 (25)\n3 r->i diff -9 (17)\n4 d->w diff +19 (19)\n5 o->l diff -3 (23)\n6 c->x diff -5 (21)\n7 k->p diff +5 (5)\n\nNow acholous (len8)\na->z diff -1 (25)\nc->x diff -5 (21)\nh->s diff +11 (11)\no->l diff -3 (23)\nl->o diff +3 (3)\no->f diff -9? Wait o(14) to f(5) diff -9 (17)\nu->h diff -13? u(20) to h(7) diff -13 (13)\ns->h diff -11 (15)\n\nNow onewhere (len8)\no->l diff -3 (23)\nn->m diff -1 (25)\ne->v diff +17 (17)\nw->d diff -19 (7)\nh->s diff +11 (11)\ne->v diff +17 (17)\nr->i diff -9 (17)\ne->v diff +17 (17)\n\nNow Ateba (len5) note case: Input \"Ateba\" output \"Zgvyz\". Let's treat uppercase? A->Z diff -1 (25). t->g diff -13 (13). e->v diff +17 (17). b->y diff -3 (23). a->z diff -1 (25). So pattern matches earlier diffs: -1, -13, +17, -3, -1.\n\nNow discussant (len10)\nd->w diff +19? d(3) to w(22) diff +19 (19)\ni->r diff +9? i(8) to r(17) diff +9 (9)\ns->h diff -11 (15)\nc->x diff -5 (21)\nu->f diff -15? u(20) to f(5) diff -15 (11) Wait -15 mod26 =11. So diff +11? Actually 20->5 diff = -15 mod26 =11. So diff +11.\ns->h diff -11 (15)\ns->h diff -11 (15)\na->z diff -1 (25)\nn->m diff -1 (25)\nt->g diff -13 (13)\n\nNow disabled (len8)\nd->w diff +19 (19)\ni->r diff +9 (9)\ns->h diff -11 (15)\na->z diff -1 (25)\nb->y diff -3 (23)\nl->o diff +3 (3)\ne->v diff +17 (17)\nd->w diff +19 (19)\n\nNow keacorn (len7)\nk->p diff +5 (5)\ne->v diff +17 (17)\na->z diff -1 (25)\nc->x diff -5 (21)\no->l diff -3 (23)\nr->i diff -9 (17)\nn->m diff -1 (25)\n\nNow otorrhea (len8)\no->l diff -3 (23)\nt->g diff -13 (13)\no->l diff -3 (23)\nr->i diff -9 (17)\nr->i diff -9 (17)\nh->s diff +11 (11)\ne->v diff +17 (17)\na->z diff -1 (25)\n\nObservations: The diffs seem to follow a repeating pattern maybe based on position modulo something. Let's list diffs per position across words.\n\nCreate position index 0.. maybe pattern length 5? Let's collect.\n\nFrom many words, we have:\n\nPos0 diffs: -5 (presystole), -11 (swallo), -5 (chardock), -1 (acholous), -3 (onewhere), -1 (Ateba), +19 (discussant), +19 (disabled), +5 (keacorn), -3 (otorrhea). Not consistent.\n\nBut maybe they are using a key phrase \"something\"? Could be Vigenere with key \"cryptic\"? Let's test: For each position, diff maybe corresponds to letters of key repeated. Let's see if diffs correspond to letters of key \"cryptic\"? c=2, r=17, y=24, p=15, t=19, i=8, c=2. Not match.\n\nMaybe they are using a substitution cipher that maps each letter to another fixed mapping (like a simple substitution). Let's test: Input a -> output? We have many examples: a maps to z (acholous first char a->z, onewhere? no a there, disabled? a->z, discussant? a->z, keacorn? a->z, Ateba? a->z). So a->z consistently. Good.\n\nb -> y (from disabled b->y, Ateba b->y). So b->y.\n\nc -> x (chardock c->x, keacorn c->x, acholous c->x). So c->x.\n\nd -> w (discussant d->w, disabled d->w). So d->w.\n\ne -> v (presystole e->v, onewhere e->v, disabled e->v, keacorn e->v, etc). So e->v.\n\nf? Not present.\n\ng? Not present.\n\nh -> s (presystole? no h input, but chardock? h->s, discussant? h appears? not, onewhere h->s, otorrhea h->s). So h->s.\n\ni -> r (discussant i->r, disabled i->r). So i->r.\n\nj? none.\n\nk -> p (presystole? k not input, keacorn k->p, otorrhea? no, etc). So k->p.\n\nl -> o (swallo l->o, keacorn? l not input, etc). So l->o.\n\nm? none.\n\nn -> m (onewhere n->m, discussant n->m, keacorn n->m). So n->m.\n\no -> l (presystole o->l, chardock o->l, otorrhea o->l). So o->l.\n\np -> k (presystole p->k). So p->k.\n\nq? none.\n\nr -> i (presystole r->i, chardock r->i, otorrhea r->i). So r->i.\n\ns -> h (presystole s->h, swallo s->h, disabled s->h, discussant s->h). So s->h.\n\nt -> g (presystole t->g, Ateba t->g, otorrhea t->g). So t->g.\n\nu -> h? Wait u appears in acholous u->h. So u->h.\n\nv? none.\n\nw -> d (swallo w->d, onewhere w->d). So w->d.\n\nx? none.\n\ny -> b (presystole y->b). So y->b.\n\nz? none.\n\nSeems like a simple substitution cipher: each letter maps to another letter, maybe a reversed alphabet with shift? Let's see mapping: a->z, b->y, c->x, d->w, e->v, f->u?, g->t?, h->s, i->r, j->q, k->p, l->o, m->n, n->m, o->l, p->k, q->j, r->i, s->h, t->g, u->f?, v->e?, w->d, x->c?, y->b, z->a? This is classic Atbash cipher (reverse alphabet). Indeed Atbash maps a<->z, b<->y, c<->x, d<->w, e<->v, f<->u, g<->t, h<->s, i<->r, j<->q, k<->p, l<->o, m<->n, n<->m, o<->l, p<->k, q<->j, r->i, s->h, t->g, u->f, v->e, w->d, x->c, y->b, z->a.\n\nOur observed mapping matches Atbash for many letters. Check u->h? Atbash would map u (20) to f (5). But we observed u->h (7). Wait maybe we misread: In acholous, u->h? Let's verify: acholous -> zxslolfh. Input letters: a c h o l o u s. Output: z x s l o l f h. So mapping: a->z (ok), c->x (ok), h->s (ok), o->l (ok), l->o (ok), o->l (ok), u->f? Wait output for u is f? The seventh output char is f (since output string: z x s l o l f h). Yes seventh char is f, not h. Actually the last char h corresponds to s input? Wait last input s maps to h, correct. So u->f, which matches Atbash (u->f). Good.\n\nThus mapping is Atbash cipher (reverse alphabet). Also case: Input \"Ateba\" output \"Zgvyz\". Atbash for uppercase A -> Z, t->g, e->v, b->y, a->z. Yes matches.\n\nThus rule: Atbash cipher preserving case.\n\nSo function: for each character, if alphabetic, map to opposite letter preserving case. Non-alpha unchanged (none present). Implementation.\n\nProvide explanation and function.\n\nEdge: Should handle both uppercase and lowercase.\n\nImplementation:\n\ndef fn(x):\n    result = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            result.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            result.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            result.append(ch)\n    return ''.join(result)\n\nReturn string.\n\nNow produce answer with reasoning and ans tags.assistantfinal<reasoning>\nAll given input\u2011output pairs follow the **Atbash cipher**: each letter is replaced by the letter symmetric to it in the alphabet (a\u2194z, b\u2194y, \u2026, A\u2194Z, \u2026). The case of the original character is preserved, and non\u2011alphabetic characters would be left unchanged (none appear in the examples). Implementing this rule yields the required mapping.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # map a->z, b->y, ..., z->a\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            # map A->Z, B->Y, ..., Z->A\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            # leave any other character unchanged\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # map a->z, b->y, ..., z->a\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            # map A->Z, B->Y, ..., Z->A\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            # leave any other character unchanged\n            res.append(ch)\n    return ''.join(res)",
+                        "Reasoning": "All given input\u2011output pairs follow the **Atbash cipher**: each letter is replaced by the letter symmetric to it in the alphabet (a\u2194z, b\u2194y, \u2026, A\u2194Z, \u2026). The case of the original character is preserved, and non\u2011alphabetic characters would be left unchanged (none appear in the examples). Implementing this rule yields the required mapping.",
+                        "TokenUsage": {
+                            "InputTokens": 291,
+                            "OutputTokens": 3501,
+                            "TotalTokens": 3792,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Equivalent": true,
+                        "scoreTrainSet": 1.0,
+                        "scoreEvalSet": 1.0,
+                        "CandidateValid": true,
+                        "OracleStatus": "accepted",
+                        "OracleCounterexamples": [],
+                        "OracleDetails": {
+                            "policy": "bounded_symbolic_python_crypto_v1",
+                            "backend": "cvc5_python_api",
+                            "guarantee": "equivalent_on_bounded_domain_only",
+                            "domain": {
+                                "alphabet": "ASCII A-Z/a-z",
+                                "min_length": 0,
+                                "max_length": 10
+                            },
+                            "timeout_ms_per_check": 10000,
+                            "queries": 11,
+                            "lengths_proved": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "lengths_searched": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "fallback": null,
+                            "status": "bounded_unsat"
+                        },
+                        "RepairExamples": [],
+                        "EvaluationDetails": {
+                            "test_examples": 10,
+                            "correct": 10,
+                            "sample_accuracy": 1.0,
+                            "all_test_correct": true
+                        }
+                    }
+                ],
+                "InputTokens": 291,
+                "OutputTokens": 3501,
+                "Counterexamples": [
+                    [
+                        "presystole",
+                        "kivhbhglov"
+                    ],
+                    [
+                        "swallo",
+                        "hdzool"
+                    ],
+                    [
+                        "chardock",
+                        "xsziwlxp"
+                    ],
+                    [
+                        "acholous",
+                        "zxslolfh"
+                    ],
+                    [
+                        "onewhere",
+                        "lmvdsviv"
+                    ],
+                    [
+                        "Ateba",
+                        "Zgvyz"
+                    ],
+                    [
+                        "discussant",
+                        "wrhxfhhzmg"
+                    ],
+                    [
+                        "disabled",
+                        "wrhzyovw"
+                    ],
+                    [
+                        "keacorn",
+                        "pvzxlim"
+                    ],
+                    [
+                        "otorrhea",
+                        "lgliisvz"
+                    ]
+                ],
+                "TrainingExampleSource": "initial",
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\npresystole -> kivhbhglov\nswallo -> hdzool\nchardock -> xsziwlxp\nacholous -> zxslolfh\nonewhere -> lmvdsviv\nAteba -> Zgvyz\ndiscussant -> wrhxfhhzmg\ndisabled -> wrhzyovw\nkeacorn -> pvzxlim\notorrhea -> lgliisvz\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift per character? Let's compare lengths: presystole (10) -> kivhbhglov (10). swallo (6) -> hdzool (6). chardock (8) -> xsziwlxp (8). acholous (8) -> zxslolfh (8). onewhere (8) -> lmvdsviv (8). Ateba (5) -> Zgvyz (5). discussant (10) -> wrhxfhhzmg (10). disabled (8) -> wrhzyovw (8). keacorn (7) -> pvzxlim (7). otorrhea (8) -> lgliisvz (8). So same length.\n\nMaybe each letter is shifted by some amount based on position? Let's compute differences (using alphabet positions a=0). We'll write quick mental.\n\nDefine function diff = (output - input) mod 26.\n\nTake presystole -> kivhbhglov.\n\np (15) -> k (10): diff -5 (or 21). r (17) -> i (8): -9 (17). e (4) -> v (21): +17. s (18) -> h (7): -11 (15). y (24) -> b (1): -23 (3). s (18) -> h (7): -11 (15). t (19) -> g (6): -13 (13). o (14) -> l (11): -3 (23). l (11) -> o (14): +3. e (4) -> v (21): +17.\n\nPattern? Not constant. Maybe using Vigenere with a key? Let's see differences sequence: -5, -9, +17, -11, -23, -11, -13, -3, +3, +17. Not obvious.\n\nMaybe they reversed string then shift? Reverse input: elotsysrep. Output: kivhbhglov. Not match.\n\nMaybe they apply some substitution based on keyboard? Not.\n\nCheck swallo -> hdzool.\n\ns (18) -> h (7): -11. w (22) -> d (3): -19 (or +7). a (0) -> z (25): -1. l (11) -> o (14): +3. l (11) -> o (14): +3. o (14) -> l (11): -3.\n\nPattern maybe symmetrical: first half negative shift, second half positive? Not.\n\nCheck chardock -> xsziwlxp.\n\nc (2) -> x (23): -5 (21). h (7) -> s (18): +11. a (0) -> z (25): -1. r (17) -> i (8): -9. d (3) -> w (22): +19. o (14) -> l (11): -3. c (2) -> x (23): -5. k (10) -> p (15): +5.\n\nInteresting: many shifts correspond to same as earlier? For presystole first char p->k diff -5 same as c->x diff -5. So maybe shift depends on position not letter. Let's compute position-based shift (0-index). For each position i, compute diff.\n\nLet's list for each pair.\n\nWe'll compute for each example.\n\nI'll create table.\n\nWord: presystole (len10)\ni:0 p->k diff -5 (21)\n1 r->i diff -9 (17)\n2 e->v diff +17 (17)\n3 s->h diff -11 (15)\n4 y->b diff -23 (3)\n5 s->h diff -11 (15)\n6 t->g diff -13 (13)\n7 o->l diff -3 (23)\n8 l->o diff +3 (3)\n9 e->v diff +17 (17)\n\nNow swallo (len6)\n0 s->h diff -11 (15)\n1 w->d diff -19 (7) actually w(22) to d(3) diff -19 mod26 =7? Wait -19 mod26 =7. So diff +7.\n2 a->z diff -1 (25)\n3 l->o diff +3\n4 l->o diff +3\n5 o->l diff -3 (23)\n\nNow chardock (len8)\n0 c->x diff -5 (21)\n1 h->s diff +11 (11)\n2 a->z diff -1 (25)\n3 r->i diff -9 (17)\n4 d->w diff +19 (19)\n5 o->l diff -3 (23)\n6 c->x diff -5 (21)\n7 k->p diff +5 (5)\n\nNow acholous (len8)\na->z diff -1 (25)\nc->x diff -5 (21)\nh->s diff +11 (11)\no->l diff -3 (23)\nl->o diff +3 (3)\no->f diff -9? Wait o(14) to f(5) diff -9 (17)\nu->h diff -13? u(20) to h(7) diff -13 (13)\ns->h diff -11 (15)\n\nNow onewhere (len8)\no->l diff -3 (23)\nn->m diff -1 (25)\ne->v diff +17 (17)\nw->d diff -19 (7)\nh->s diff +11 (11)\ne->v diff +17 (17)\nr->i diff -9 (17)\ne->v diff +17 (17)\n\nNow Ateba (len5) note case: Input \"Ateba\" output \"Zgvyz\". Let's treat uppercase? A->Z diff -1 (25). t->g diff -13 (13). e->v diff +17 (17). b->y diff -3 (23). a->z diff -1 (25). So pattern matches earlier diffs: -1, -13, +17, -3, -1.\n\nNow discussant (len10)\nd->w diff +19? d(3) to w(22) diff +19 (19)\ni->r diff +9? i(8) to r(17) diff +9 (9)\ns->h diff -11 (15)\nc->x diff -5 (21)\nu->f diff -15? u(20) to f(5) diff -15 (11) Wait -15 mod26 =11. So diff +11? Actually 20->5 diff = -15 mod26 =11. So diff +11.\ns->h diff -11 (15)\ns->h diff -11 (15)\na->z diff -1 (25)\nn->m diff -1 (25)\nt->g diff -13 (13)\n\nNow disabled (len8)\nd->w diff +19 (19)\ni->r diff +9 (9)\ns->h diff -11 (15)\na->z diff -1 (25)\nb->y diff -3 (23)\nl->o diff +3 (3)\ne->v diff +17 (17)\nd->w diff +19 (19)\n\nNow keacorn (len7)\nk->p diff +5 (5)\ne->v diff +17 (17)\na->z diff -1 (25)\nc->x diff -5 (21)\no->l diff -3 (23)\nr->i diff -9 (17)\nn->m diff -1 (25)\n\nNow otorrhea (len8)\no->l diff -3 (23)\nt->g diff -13 (13)\no->l diff -3 (23)\nr->i diff -9 (17)\nr->i diff -9 (17)\nh->s diff +11 (11)\ne->v diff +17 (17)\na->z diff -1 (25)\n\nObservations: The diffs seem to follow a repeating pattern maybe based on position modulo something. Let's list diffs per position across words.\n\nCreate position index 0.. maybe pattern length 5? Let's collect.\n\nFrom many words, we have:\n\nPos0 diffs: -5 (presystole), -11 (swallo), -5 (chardock), -1 (acholous), -3 (onewhere), -1 (Ateba), +19 (discussant), +19 (disabled), +5 (keacorn), -3 (otorrhea). Not consistent.\n\nBut maybe they are using a key phrase \"something\"? Could be Vigenere with key \"cryptic\"? Let's test: For each position, diff maybe corresponds to letters of key repeated. Let's see if diffs correspond to letters of key \"cryptic\"? c=2, r=17, y=24, p=15, t=19, i=8, c=2. Not match.\n\nMaybe they are using a substitution cipher that maps each letter to another fixed mapping (like a simple substitution). Let's test: Input a -> output? We have many examples: a maps to z (acholous first char a->z, onewhere? no a there, disabled? a->z, discussant? a->z, keacorn? a->z, Ateba? a->z). So a->z consistently. Good.\n\nb -> y (from disabled b->y, Ateba b->y). So b->y.\n\nc -> x (chardock c->x, keacorn c->x, acholous c->x). So c->x.\n\nd -> w (discussant d->w, disabled d->w). So d->w.\n\ne -> v (presystole e->v, onewhere e->v, disabled e->v, keacorn e->v, etc). So e->v.\n\nf? Not present.\n\ng? Not present.\n\nh -> s (presystole? no h input, but chardock? h->s, discussant? h appears? not, onewhere h->s, otorrhea h->s). So h->s.\n\ni -> r (discussant i->r, disabled i->r). So i->r.\n\nj? none.\n\nk -> p (presystole? k not input, keacorn k->p, otorrhea? no, etc). So k->p.\n\nl -> o (swallo l->o, keacorn? l not input, etc). So l->o.\n\nm? none.\n\nn -> m (onewhere n->m, discussant n->m, keacorn n->m). So n->m.\n\no -> l (presystole o->l, chardock o->l, otorrhea o->l). So o->l.\n\np -> k (presystole p->k). So p->k.\n\nq? none.\n\nr -> i (presystole r->i, chardock r->i, otorrhea r->i). So r->i.\n\ns -> h (presystole s->h, swallo s->h, disabled s->h, discussant s->h). So s->h.\n\nt -> g (presystole t->g, Ateba t->g, otorrhea t->g). So t->g.\n\nu -> h? Wait u appears in acholous u->h. So u->h.\n\nv? none.\n\nw -> d (swallo w->d, onewhere w->d). So w->d.\n\nx? none.\n\ny -> b (presystole y->b). So y->b.\n\nz? none.\n\nSeems like a simple substitution cipher: each letter maps to another letter, maybe a reversed alphabet with shift? Let's see mapping: a->z, b->y, c->x, d->w, e->v, f->u?, g->t?, h->s, i->r, j->q, k->p, l->o, m->n, n->m, o->l, p->k, q->j, r->i, s->h, t->g, u->f?, v->e?, w->d, x->c?, y->b, z->a? This is classic Atbash cipher (reverse alphabet). Indeed Atbash maps a<->z, b<->y, c<->x, d<->w, e<->v, f<->u, g<->t, h<->s, i<->r, j<->q, k<->p, l<->o, m<->n, n<->m, o<->l, p<->k, q<->j, r->i, s->h, t->g, u->f, v->e, w->d, x->c, y->b, z->a.\n\nOur observed mapping matches Atbash for many letters. Check u->h? Atbash would map u (20) to f (5). But we observed u->h (7). Wait maybe we misread: In acholous, u->h? Let's verify: acholous -> zxslolfh. Input letters: a c h o l o u s. Output: z x s l o l f h. So mapping: a->z (ok), c->x (ok), h->s (ok), o->l (ok), l->o (ok), o->l (ok), u->f? Wait output for u is f? The seventh output char is f (since output string: z x s l o l f h). Yes seventh char is f, not h. Actually the last char h corresponds to s input? Wait last input s maps to h, correct. So u->f, which matches Atbash (u->f). Good.\n\nThus mapping is Atbash cipher (reverse alphabet). Also case: Input \"Ateba\" output \"Zgvyz\". Atbash for uppercase A -> Z, t->g, e->v, b->y, a->z. Yes matches.\n\nThus rule: Atbash cipher preserving case.\n\nSo function: for each character, if alphabetic, map to opposite letter preserving case. Non-alpha unchanged (none present). Implementation.\n\nProvide explanation and function.\n\nEdge: Should handle both uppercase and lowercase.\n\nImplementation:\n\ndef fn(x):\n    result = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            result.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            result.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            result.append(ch)\n    return ''.join(result)\n\nReturn string.\n\nNow produce answer with reasoning and ans tags.assistantfinal<reasoning>\nAll given input\u2011output pairs follow the **Atbash cipher**: each letter is replaced by the letter symmetric to it in the alphabet (a\u2194z, b\u2194y, \u2026, A\u2194Z, \u2026). The case of the original character is preserved, and non\u2011alphabetic characters would be left unchanged (none appear in the examples). Implementing this rule yields the required mapping.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # map a->z, b->y, ..., z->a\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            # map A->Z, B->Y, ..., Z->A\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            # leave any other character unchanged\n            res.append(ch)\n    return ''.join(res)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    res = []\n    for ch in x:\n        if 'a' <= ch <= 'z':\n            # map a->z, b->y, ..., z->a\n            res.append(chr(ord('z') - (ord(ch) - ord('a'))))\n        elif 'A' <= ch <= 'Z':\n            # map A->Z, B->Y, ..., Z->A\n            res.append(chr(ord('Z') - (ord(ch) - ord('A'))))\n        else:\n            # leave any other character unchanged\n            res.append(ch)\n    return ''.join(res)",
+                        "Reasoning": "All given input\u2011output pairs follow the **Atbash cipher**: each letter is replaced by the letter symmetric to it in the alphabet (a\u2194z, b\u2194y, \u2026, A\u2194Z, \u2026). The case of the original character is preserved, and non\u2011alphabetic characters would be left unchanged (none appear in the examples). Implementing this rule yields the required mapping.",
+                        "TokenUsage": {
+                            "InputTokens": 291,
+                            "OutputTokens": 3501,
+                            "TotalTokens": 3792,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Error": null
+                    }
+                ],
+                "StopReason": "oracle_accepted"
+            }
+        ]
+    ],
+    "oracle": "cvc5_bounded_symbolic_Python",
+    "TaskSettings": {
+        "crypto_setting": "paper",
+        "n_train": 10,
+        "n_test": 10,
+        "noise_ratio": 0.0,
+        "ood_ratio": 0.0,
+        "hypothesis": "Python_fn_x",
+        "paper_task_protocol": true,
+        "method": "shared_CE_pipeline_not_paper_SRR",
+        "regularization_applied": false,
+        "prompt_variant": "base_with_reasoning_and_ans",
+        "oracle_policy": "bounded_symbolic_python_crypto_v1",
+        "oracle_domain": {
+            "alphabet": "ASCII A-Z/a-z",
+            "min_length": 0,
+            "max_length": 10
+        },
+        "Difficulty": {
+            "catalog_version": "benchmark_difficulty_v2",
+            "id": "atbash:74",
+            "tier": "L3",
+            "level": 3,
+            "levels": 3,
+            "axis": "training_information_coverage",
+            "proxy": true,
+            "features": {
+                "missing_lowercase_letters": 8,
+                "missing_case_sensitive_letters": 33,
+                "family": "atbash",
+                "training_entries": 10,
+                "within_family_rank": 91
+            },
+            "basis_config_matches": true
+        },
+        "TrainingPoolSize": 10,
+        "ScheduledTrainingBudget": 10,
+        "EvaluationPoolSize": 10,
+        "RoundBudget": 10,
+        "StandardSampleSchedule": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+        ]
+    }
+}

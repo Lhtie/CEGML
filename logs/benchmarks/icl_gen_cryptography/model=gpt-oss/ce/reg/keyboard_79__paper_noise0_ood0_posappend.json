@@ -1,0 +1,273 @@
+{
+    "task_type": "cryptography",
+    "benchmark_id": "keyboard:79",
+    "pipeline": "regex_run_episode",
+    "runs": [
+        [
+            {
+                "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: cosmetiste\nOutput: egldtzolzt\nInput: blind\nOutput: wsofr\nInput: pleader\nOutput: hstqrtk\nInput: ribwork\nOutput: kowvgka\nInput: Batidaceae\nOutput: Wqzorqetqt\nInput: quinology\nOutput: jxofgsgun\nInput: Birgus\nOutput: Wokuxl\nInput: unwhining\nOutput: xfviofofu\nInput: capitular\nOutput: eqhozxsqk\nInput: carbazine\nOutput: eqkwqmoft\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                "Response": "analysisWe need to find rule mapping input strings to output strings. Let's analyze.\n\nWe have pairs:\n\ncosmetiste -> egldtzolzt\nblind -> wsofr\npleader -> hstqrtk\nribwork -> kowvgka\nBatidaceae -> Wqzorqetqt\nquinology -> jxofgsgun\nBirgus -> Wokuxl\nunwhining -> xfviofofu\ncapitular -> eqhozxsqk\ncarbazine -> eqkwqmoft\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift per character? Let's compare lengths: \"cosmetiste\" length 10, output \"egldtzolzt\" length 10. So same length. \"blind\" length5 -> \"wsofr\" length5. So per character mapping.\n\nCheck mapping for lowercase vs uppercase: Input \"Batidaceae\" (capital B) output \"Wqzorqetqt\" (capital W). So case preserved? Input capital B -> output capital W. So maybe shift with wrap preserving case.\n\nLet's compute shift for each character.\n\nTake \"blind\" -> \"wsofr\". Let's map letters positions (a=0). b->w: b=1, w=22 => shift +21 (or -5). l->s: l=11, s=18 => +7. i->o: i=8, o=14 => +6. n->f: n=13, f=5 => -8 (or +18). d->r: d=3, r=17 => +14.\n\nShifts vary.\n\nMaybe it's a Vigenere cipher with a key? Let's see if same key applied to all strings. Compute shift differences for each position across examples.\n\nLet's write down first few letters.\n\nWord: cosmetiste\nc->e: c=2, e=4 => +2\no->g: o=14, g=6 => -8 (or +18)\ns->l: s=18, l=11 => -7 (+19)\nm->d: m=12, d=3 => -9 (+17)\ne->t: e=4, t=19 => +15\nt->z: t=19, z=25 => +6\ni->o: i=8, o=14 => +6\ns->l: s=18, l=11 => -7\nt->z: +6\ne->t: +15\n\nPattern maybe repeating? Let's list shifts: +2, -8, -7, -9, +15, +6, +6, -7, +6, +15.\n\nNow \"blind\": b->w (+21 or -5), l->s (+7), i->o (+6), n->f (-8), d->r (+14). Shifts: -5, +7, +6, -8, +14.\n\nCompare with cosmetiste: we see -8 appears at position2 (o->g) and position4 (n->f). +6 appears many times. -7 appears at positions3 and8. +15 appears at positions5 and10. +2 appears only first.\n\nMaybe key is \"??\" length maybe 5? Let's see if shifts repeat every 5? For cosmetiste (10 letters) maybe key length 5 repeated: first 5 shifts: +2, -8, -7, -9, +15. Next 5: +6, +6, -7, +6, +15. Not same.\n\nMaybe it's some algorithm like reverse alphabet (Atbash) then shift? Let's test Atbash: a<->z, b<->y etc. For \"b\" Atbash gives \"y\". Output is \"w\". That's close (y->w shift -2). For \"l\" Atbash gives \"o\". Output \"s\". o->s +4. Not consistent.\n\nMaybe it's ROT13 then something? b rot13 = o, output w (o->w +8). Not.\n\nMaybe it's Caesar cipher with varying shift based on position (like progressive shift). Could be each character shifted by its index (starting 1) maybe? Let's test: For \"blind\": index1 shift? b->w is -5 (or +21). Index1 maybe -5? Not 1. Index2: l->s +7 maybe +2? Not.\n\nMaybe shift equals alphabetical position of previous character? Let's test: For \"blind\": b (first) maybe shift based on something else? Not.\n\nMaybe it's using a keyword \"secret\"? Let's compute shift for each position across words to see if consistent.\n\nTake second word \"pleader\" -> \"hstqrtk\". Compute shifts:\n\np(15)->h(7): -8 (+18)\nl(11)->s(18): +7\ne(4)->t(19): +15\na(0)->q(16): +16\nd(3)->r(17): +14\ne(4)->t(19): +15\nr(17)->k(10): -7 (+19)\n\nShifts: -8, +7, +15, +16, +14, +15, -7.\n\nNow compare with earlier patterns: we saw -8 appears often, +7 appears, +15 appears, -7 appears. +14 appears in blind at last char. +16 appears new.\n\nMaybe key is derived from word itself? Could be each letter shifted by position of same letter in alphabet of word \"something\"? Not.\n\nLet's compute shift for \"ribwork\" -> \"kowvgka\". r(17)->k(10): -7 (+19). i(8)->o(14): +6. b(1)->w(22): +21 (-5). w(22)->v(21): -1. o(14)->g(6): -8 (+18). r(17)->k(10): -7. k(10)->a(0): -10 (+16). Shifts: -7, +6, +21, -1, -8, -7, -10.\n\nInteresting.\n\nMaybe it's using a substitution cipher (like a fixed mapping of each letter to another). Let's see mapping across examples: b maps to w (from blind), also b maps to w in ribwork (b->w). Good. So b->w consistent. c->e (cosmetiste). d->r (blind d->r). d also appears in pleader (d->r). So d->r consistent. e maps to t (cosmetiste e->t, pleader e->t, carbazine? let's check). In carbazine, input \"c a r b a z i n e\". Output \"e q k w q m o f t\". Let's map: c->e (consistent), a->q (consistent with pleader a->q), r->k (pleader r->k, also ribwork r->k). b->w (consistent). a->q again. z->m (new). i->o (consistent with ribwork i->o, quinology i->g? Wait quinology: q u i n o l o g y -> output j x o f g s g u n. Let's map: i->o (consistent). n->f (consistent with blind n->f, cosmetiste n? not present). o->g (cosmetiste? not). l->s (consistent with blind l->s, pleader l->s). g->u (ribwork? not). y->n (new). So mapping seems consistent across letters! Let's verify more.\n\nCheck mapping for \"quinology\": q->j, u->x, i->o, n->f, o->g, l->s, o->g again, g->u, y->n. So mapping appears consistent with earlier: n->f (yes), o->g (cosmetiste? there is o->g yes), l->s (yes), g->u (from ribwork? we have g not in ribwork output; but we have output for g? In \"Birgus\" input B i r g u s -> output W o k u x l? Wait output \"Wokuxl\". Let's map: B->W (capital mapping), i->o (consistent), r->k (consistent), g->u (consistent), u->x (consistent), s->l (consistent). Great! So mapping is a simple substitution cipher (monoalphabetic) preserving case.\n\nThus we need to derive full mapping from given pairs. Let's compile mapping for lowercase letters:\n\na -> q\nb -> w\nc -> e\nd -> r\ne -> t\nf -> ? not seen\ng -> u\nh -> ? not seen\ni -> o\nj -> ? not seen\nk -> ? not seen\nl -> s\nm -> ? not seen\nn -> f\no -> g\np -> h? Wait p appears in \"pleader\": p->h (yes)\nq -> j (from quinology)\nr -> k\ns -> l\nt -> z (cosmetiste t->z)\nu -> x (from quinology u->x, Birgus)\nv -> ? not seen\nw -> v? Wait ribwork w->v (yes)\nx -> ? not seen\ny -> n (quinology y->n)\nz -> m (carbazine z->m)\n\nAlso capital letters mapping: B->W, etc. So mapping likely same but uppercase.\n\nWe need to fill missing letters maybe using pattern: maybe it's Caesar shift of +? Let's see mapping pattern: a->q (shift +16), b->w (+21), c->e (+2), d->r (+13), e->t (+15), f->? unknown, g->u (+14), h->? unknown, i->o (+6), j->? unknown, k->? unknown, l->s (+7), m->? unknown, n->f (+? n=13 f=5 => -8 or +18), o->g (+? 14->6 -8), p->h (+? 15->7 -8), q->j (+? 16->9 -7), r->k (+? 17->10 -7), s->l (+? 18->11 -7), t->z (+? 19->25 +6), u->x (+? 20->23 +3), v->? unknown, w->v (+? 22->21 -1), x->? unknown, y->n (+? 24->13 -11), z->m (+? 25->12 -13).\n\nNot simple shift.\n\nBut we have enough mapping for letters present. For missing letters, we could perhaps infer they map to themselves? But need function that works for any input? Probably only need to handle given inputs? But better to create mapping dictionary from observed pairs, and for any other letters maybe leave unchanged or raise error. The problem likely expects to deduce substitution cipher mapping from given examples and implement function that uses that mapping.\n\nWe can attempt to infer full mapping: maybe it's a simple reversed alphabet with offset? Let's see mapping pairs sorted:\n\na->q\nb->w\nc->e\nd->r\ne->t\nf->? maybe y? Let's see pattern: maybe mapping is based on keyboard? Not.\n\nLet's try to see if mapping is ROT? Not.\n\nMaybe it's a substitution derived from a keyword? For example, key \"qwertyuiopasdfghjklzxcvbnm\"? Let's see: If we write alphabet and map to output alphabet: a->q, b->w, c->e, d->r, e->t, f->y, g->u, h->i, i->o, j->p, k->a, l->s, m->d, n->f, o->g, p->h, q->j, r->k, s->l, t->z, u->x, v->c, w->v, x->b, y->n, z->m. This looks like the QWERTY keyboard row mapping! Indeed the top row of QWERTY: q w e r t y u i o p, then next row: a s d f g h j k l, then bottom row: z x c v b n m. The mapping we observed matches: a->q (first letter of top row), b->w (second), c->e (third), d->r (fourth), e->t (fifth), f->y (sixth) (not observed but likely), g->u (seventh), h->i (eighth), i->o (ninth), j->p (tenth). Then k->a (start of second row), l->s, m->d, n->f, o->g, p->h, q->j, r->k, s->l, t->z (start of third row), u->x, v->c, w->v, x->b, y->n, z->m. Yes! This matches all observed mappings. Great.\n\nThus rule: map each letter to the letter that is directly above it on a QWERTY keyboard (or to the key above in the same column). Actually mapping is: each letter is replaced by the key directly above it on a QWERTY keyboard (wrapping rows). For letters in top row, they map to the next key to the right? Wait a->q (a is below q). So mapping is \"letter above on keyboard\". For b->w (b is below w). c->e (c below e). d->r (d below r). e->t (e below t). f->y (f below y). g->u (g below u). h->i (h below i). i->o (i below o). j->p (j below p). k->a (k is below a? Actually a is left of s row; but k is below i? Wait keyboard layout: top row: q w e r t y u i o p; middle row: a s d f g h j k l ; bottom row: z x c v b n m. So mapping is each key replaced by the key directly above it (same column). For middle row letters a s d f g h j k l map to q w e r t y u i o p respectively. Indeed a->q, s->w? Wait we have s->l not w. Hmm s->? Actually s is middle row, above is w? No, column: q w e r t y u i o p; below q is a, below w is s, below e is d, below r is f, below t is g, below y is h, below u is j, below i is k, below o is l, below p is ; (semicolon). But mapping we have a->q (good), s->? we have s->l (not w). So not column mapping.\n\nInstead mapping appears to be each key replaced by the key to its left on the same row? Let's test: a->q (left-up diagonal). Actually a is leftmost of middle row, above-left is q. s->w? Not observed. s not in examples. l->s (l is rightmost of middle row, above-left is s). Indeed l maps to s. So mapping is \"key above and to the left\"? Let's examine: For middle row letters, mapping to top row letters offset left by one column. For example, d (middle) maps to r (top) which is two left? Actually d is under e, but mapping d->r (two left). Hmm.\n\nBetter view: The mapping we derived matches the QWERTY keyboard linear order: a->q, b->w, c->e, d->r, e->t, f->y, g->u, h->i, i->o, j->p, k->a, l->s, m->d, n->f, o->g, p->h, q->j, r->k, s->l, t->z, u->x, v->c, w->v, x->b, y->n, z->m. This is essentially a substitution where the alphabet is rearranged to \"qwertyuiopasdfghjklzxcvbnm\". So mapping is: take the standard alphabet a-z, map to the QWERTY order string.\n\nThus function: define mapping string = \"qwertyuiopasdfghjklzxcvbnm\". For each character, if lowercase, find its index in alphabet and replace with char at same index in mapping. For uppercase, same but uppercase.\n\nLet's test: Input \"cosmetiste\": letters: c-> mapping[2] = 'e' correct. o-> mapping[14] =? alphabet index 14 (0-based) corresponds to 'o' (a=0). mapping[14] = mapping string char at position 14: let's list mapping: positions 0-25: 0 q,1 w,2 e,3 r,4 t,5 y,6 u,7 i,8 o,9 p,10 a,11 s,12 d,13 f,14 g,15 h,16 j,17 k,18 l,19 z,20 x,21 c,22 v,23 b,24 n,25 m. So index 14 -> 'g' matches output (cosmetiste o->g). s index 18 -> mapping[18] = 'l' matches. m index 12 -> mapping[12] = 'd' matches. e index 4 -> mapping[4] = 't' matches. t index 19 -> mapping[19] = 'z' matches. i index 8 -> mapping[8] = 'o' matches. s again l, t z, e t. Perfect.\n\nThus rule is substitution using QWERTY order.\n\nImplement function:\n\ndef fn(x):\n    mapping = \"qwertyuiopasdfghjklzxcvbnm\"\n    lower = \"abcdefghijklmnopqrstuvwxyz\"\n    trans = str.maketrans({c: mapping[i] for i,c in enumerate(lower)})\n    # also uppercase\n    trans.update({c.upper(): mapping[i].upper() for i,c in enumerate(lower)})\n    return x.translate(trans)\n\nBut need to include both lower and upper in maketrans. Use str.maketrans with two strings.\n\nlower_src = \"abcdefghijklmnopqrstuvwxyz\"\nlower_dst = \"qwertyuiopasdfghjklzxcvbnm\"\nupper_src = lower_src.upper()\nupper_dst = lower_dst.upper()\ntrans = str.maketrans(lower_src + upper_src, lower_dst + upper_dst)\nreturn x.translate(trans)\n\nThat's it.\n\nNow produce answer with reasoning and ans tags.assistantfinal<reasoning>\nThe transformation is a mono\u2011alphabetic substitution.  \nEach letter is replaced by the letter that occupies the same position in the\nQWERTY keyboard layout:\n\n```\nalphabet : abcdefghijklmnopqrstuvwxyz\nqwerty  : qwertyuiopasdfghjklzxcvbnm\n```\n\nSo **a \u2192 q**, **b \u2192 w**, **c \u2192 e**, \u2026, **z \u2192 m**.  \nUpper\u2011case letters are mapped in the same way preserving case.\n\nThe function builds a translation table from the two strings above and\napplies it with `str.translate`, which works for any input string.\n\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    # QWERTY order of the alphabet\n    src_lower = \"abcdefghijklmnopqrstuvwxyz\"\n    dst_lower = \"qwertyuiopasdfghjklzxcvbnm\"\n    # Preserve case\n    src = src_lower + src_lower.upper()\n    dst = dst_lower + dst_lower.upper()\n    trans = str.maketrans(src, dst)\n    return x.translate(trans)\n```\n</ans>",
+                "Prediction": "def fn(x):\n    # QWERTY order of the alphabet\n    src_lower = \"abcdefghijklmnopqrstuvwxyz\"\n    dst_lower = \"qwertyuiopasdfghjklzxcvbnm\"\n    # Preserve case\n    src = src_lower + src_lower.upper()\n    dst = dst_lower + dst_lower.upper()\n    trans = str.maketrans(src, dst)\n    return x.translate(trans)",
+                "Reasoning": "The transformation is a mono\u2011alphabetic substitution.  \nEach letter is replaced by the letter that occupies the same position in the\nQWERTY keyboard layout:\n\n```\nalphabet : abcdefghijklmnopqrstuvwxyz\nqwerty  : qwertyuiopasdfghjklzxcvbnm\n```\n\nSo **a \u2192 q**, **b \u2192 w**, **c \u2192 e**, \u2026, **z \u2192 m**.  \nUpper\u2011case letters are mapped in the same way preserving case.\n\nThe function builds a translation table from the two strings above and\napplies it with `str.translate`, which works for any input string.",
+                "TokenUsage": {
+                    "InputTokens": 290,
+                    "OutputTokens": 4238,
+                    "TotalTokens": 4528,
+                    "ModelCalls": 1,
+                    "UsageComplete": true,
+                    "KnownInputTokens": 290,
+                    "KnownOutputTokens": 4238,
+                    "Calls": [
+                        {
+                            "InputTokens": 290,
+                            "OutputTokens": 4238,
+                            "TotalTokens": 4528,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids",
+                            "Model": "gpt-oss"
+                        }
+                    ]
+                },
+                "Equivalent": true,
+                "scoreTrainSet": 1.0,
+                "scoreEvalSet": 1.0,
+                "CandidateValid": true,
+                "OracleStatus": "accepted",
+                "OracleCounterexamples": [],
+                "OracleDetails": {
+                    "policy": "bounded_symbolic_python_crypto_v1",
+                    "backend": "cvc5_python_api",
+                    "guarantee": "equivalent_on_bounded_domain_only",
+                    "domain": {
+                        "alphabet": "ASCII A-Z/a-z",
+                        "min_length": 0,
+                        "max_length": 10
+                    },
+                    "timeout_ms_per_check": 10000,
+                    "queries": 11,
+                    "lengths_proved": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "lengths_searched": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "fallback": null,
+                    "status": "bounded_unsat"
+                },
+                "RepairExamples": [],
+                "EvaluationDetails": {
+                    "test_examples": 10,
+                    "correct": 10,
+                    "sample_accuracy": 1.0,
+                    "all_test_correct": true
+                },
+                "epoch": 0,
+                "NumTrainingSamples": 10,
+                "CurrentGuess": "def fn(x):\n    # QWERTY order of the alphabet\n    src_lower = \"abcdefghijklmnopqrstuvwxyz\"\n    dst_lower = \"qwertyuiopasdfghjklzxcvbnm\"\n    # Preserve case\n    src = src_lower + src_lower.upper()\n    dst = dst_lower + dst_lower.upper()\n    trans = str.maketrans(src, dst)\n    return x.translate(trans)",
+                "CurrentGuessReasoning": "The transformation is a mono\u2011alphabetic substitution.  \nEach letter is replaced by the letter that occupies the same position in the\nQWERTY keyboard layout:\n\n```\nalphabet : abcdefghijklmnopqrstuvwxyz\nqwerty  : qwertyuiopasdfghjklzxcvbnm\n```\n\nSo **a \u2192 q**, **b \u2192 w**, **c \u2192 e**, \u2026, **z \u2192 m**.  \nUpper\u2011case letters are mapped in the same way preserving case.\n\nThe function builds a translation table from the two strings above and\napplies it with `str.translate`, which works for any input string.",
+                "Accuracy": 1,
+                "Logs": [
+                    {
+                        "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: cosmetiste\nOutput: egldtzolzt\nInput: blind\nOutput: wsofr\nInput: pleader\nOutput: hstqrtk\nInput: ribwork\nOutput: kowvgka\nInput: Batidaceae\nOutput: Wqzorqetqt\nInput: quinology\nOutput: jxofgsgun\nInput: Birgus\nOutput: Wokuxl\nInput: unwhining\nOutput: xfviofofu\nInput: capitular\nOutput: eqhozxsqk\nInput: carbazine\nOutput: eqkwqmoft\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                        "Response": "analysisWe need to find rule mapping input strings to output strings. Let's analyze.\n\nWe have pairs:\n\ncosmetiste -> egldtzolzt\nblind -> wsofr\npleader -> hstqrtk\nribwork -> kowvgka\nBatidaceae -> Wqzorqetqt\nquinology -> jxofgsgun\nBirgus -> Wokuxl\nunwhining -> xfviofofu\ncapitular -> eqhozxsqk\ncarbazine -> eqkwqmoft\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift per character? Let's compare lengths: \"cosmetiste\" length 10, output \"egldtzolzt\" length 10. So same length. \"blind\" length5 -> \"wsofr\" length5. So per character mapping.\n\nCheck mapping for lowercase vs uppercase: Input \"Batidaceae\" (capital B) output \"Wqzorqetqt\" (capital W). So case preserved? Input capital B -> output capital W. So maybe shift with wrap preserving case.\n\nLet's compute shift for each character.\n\nTake \"blind\" -> \"wsofr\". Let's map letters positions (a=0). b->w: b=1, w=22 => shift +21 (or -5). l->s: l=11, s=18 => +7. i->o: i=8, o=14 => +6. n->f: n=13, f=5 => -8 (or +18). d->r: d=3, r=17 => +14.\n\nShifts vary.\n\nMaybe it's a Vigenere cipher with a key? Let's see if same key applied to all strings. Compute shift differences for each position across examples.\n\nLet's write down first few letters.\n\nWord: cosmetiste\nc->e: c=2, e=4 => +2\no->g: o=14, g=6 => -8 (or +18)\ns->l: s=18, l=11 => -7 (+19)\nm->d: m=12, d=3 => -9 (+17)\ne->t: e=4, t=19 => +15\nt->z: t=19, z=25 => +6\ni->o: i=8, o=14 => +6\ns->l: s=18, l=11 => -7\nt->z: +6\ne->t: +15\n\nPattern maybe repeating? Let's list shifts: +2, -8, -7, -9, +15, +6, +6, -7, +6, +15.\n\nNow \"blind\": b->w (+21 or -5), l->s (+7), i->o (+6), n->f (-8), d->r (+14). Shifts: -5, +7, +6, -8, +14.\n\nCompare with cosmetiste: we see -8 appears at position2 (o->g) and position4 (n->f). +6 appears many times. -7 appears at positions3 and8. +15 appears at positions5 and10. +2 appears only first.\n\nMaybe key is \"??\" length maybe 5? Let's see if shifts repeat every 5? For cosmetiste (10 letters) maybe key length 5 repeated: first 5 shifts: +2, -8, -7, -9, +15. Next 5: +6, +6, -7, +6, +15. Not same.\n\nMaybe it's some algorithm like reverse alphabet (Atbash) then shift? Let's test Atbash: a<->z, b<->y etc. For \"b\" Atbash gives \"y\". Output is \"w\". That's close (y->w shift -2). For \"l\" Atbash gives \"o\". Output \"s\". o->s +4. Not consistent.\n\nMaybe it's ROT13 then something? b rot13 = o, output w (o->w +8). Not.\n\nMaybe it's Caesar cipher with varying shift based on position (like progressive shift). Could be each character shifted by its index (starting 1) maybe? Let's test: For \"blind\": index1 shift? b->w is -5 (or +21). Index1 maybe -5? Not 1. Index2: l->s +7 maybe +2? Not.\n\nMaybe shift equals alphabetical position of previous character? Let's test: For \"blind\": b (first) maybe shift based on something else? Not.\n\nMaybe it's using a keyword \"secret\"? Let's compute shift for each position across words to see if consistent.\n\nTake second word \"pleader\" -> \"hstqrtk\". Compute shifts:\n\np(15)->h(7): -8 (+18)\nl(11)->s(18): +7\ne(4)->t(19): +15\na(0)->q(16): +16\nd(3)->r(17): +14\ne(4)->t(19): +15\nr(17)->k(10): -7 (+19)\n\nShifts: -8, +7, +15, +16, +14, +15, -7.\n\nNow compare with earlier patterns: we saw -8 appears often, +7 appears, +15 appears, -7 appears. +14 appears in blind at last char. +16 appears new.\n\nMaybe key is derived from word itself? Could be each letter shifted by position of same letter in alphabet of word \"something\"? Not.\n\nLet's compute shift for \"ribwork\" -> \"kowvgka\". r(17)->k(10): -7 (+19). i(8)->o(14): +6. b(1)->w(22): +21 (-5). w(22)->v(21): -1. o(14)->g(6): -8 (+18). r(17)->k(10): -7. k(10)->a(0): -10 (+16). Shifts: -7, +6, +21, -1, -8, -7, -10.\n\nInteresting.\n\nMaybe it's using a substitution cipher (like a fixed mapping of each letter to another). Let's see mapping across examples: b maps to w (from blind), also b maps to w in ribwork (b->w). Good. So b->w consistent. c->e (cosmetiste). d->r (blind d->r). d also appears in pleader (d->r). So d->r consistent. e maps to t (cosmetiste e->t, pleader e->t, carbazine? let's check). In carbazine, input \"c a r b a z i n e\". Output \"e q k w q m o f t\". Let's map: c->e (consistent), a->q (consistent with pleader a->q), r->k (pleader r->k, also ribwork r->k). b->w (consistent). a->q again. z->m (new). i->o (consistent with ribwork i->o, quinology i->g? Wait quinology: q u i n o l o g y -> output j x o f g s g u n. Let's map: i->o (consistent). n->f (consistent with blind n->f, cosmetiste n? not present). o->g (cosmetiste? not). l->s (consistent with blind l->s, pleader l->s). g->u (ribwork? not). y->n (new). So mapping seems consistent across letters! Let's verify more.\n\nCheck mapping for \"quinology\": q->j, u->x, i->o, n->f, o->g, l->s, o->g again, g->u, y->n. So mapping appears consistent with earlier: n->f (yes), o->g (cosmetiste? there is o->g yes), l->s (yes), g->u (from ribwork? we have g not in ribwork output; but we have output for g? In \"Birgus\" input B i r g u s -> output W o k u x l? Wait output \"Wokuxl\". Let's map: B->W (capital mapping), i->o (consistent), r->k (consistent), g->u (consistent), u->x (consistent), s->l (consistent). Great! So mapping is a simple substitution cipher (monoalphabetic) preserving case.\n\nThus we need to derive full mapping from given pairs. Let's compile mapping for lowercase letters:\n\na -> q\nb -> w\nc -> e\nd -> r\ne -> t\nf -> ? not seen\ng -> u\nh -> ? not seen\ni -> o\nj -> ? not seen\nk -> ? not seen\nl -> s\nm -> ? not seen\nn -> f\no -> g\np -> h? Wait p appears in \"pleader\": p->h (yes)\nq -> j (from quinology)\nr -> k\ns -> l\nt -> z (cosmetiste t->z)\nu -> x (from quinology u->x, Birgus)\nv -> ? not seen\nw -> v? Wait ribwork w->v (yes)\nx -> ? not seen\ny -> n (quinology y->n)\nz -> m (carbazine z->m)\n\nAlso capital letters mapping: B->W, etc. So mapping likely same but uppercase.\n\nWe need to fill missing letters maybe using pattern: maybe it's Caesar shift of +? Let's see mapping pattern: a->q (shift +16), b->w (+21), c->e (+2), d->r (+13), e->t (+15), f->? unknown, g->u (+14), h->? unknown, i->o (+6), j->? unknown, k->? unknown, l->s (+7), m->? unknown, n->f (+? n=13 f=5 => -8 or +18), o->g (+? 14->6 -8), p->h (+? 15->7 -8), q->j (+? 16->9 -7), r->k (+? 17->10 -7), s->l (+? 18->11 -7), t->z (+? 19->25 +6), u->x (+? 20->23 +3), v->? unknown, w->v (+? 22->21 -1), x->? unknown, y->n (+? 24->13 -11), z->m (+? 25->12 -13).\n\nNot simple shift.\n\nBut we have enough mapping for letters present. For missing letters, we could perhaps infer they map to themselves? But need function that works for any input? Probably only need to handle given inputs? But better to create mapping dictionary from observed pairs, and for any other letters maybe leave unchanged or raise error. The problem likely expects to deduce substitution cipher mapping from given examples and implement function that uses that mapping.\n\nWe can attempt to infer full mapping: maybe it's a simple reversed alphabet with offset? Let's see mapping pairs sorted:\n\na->q\nb->w\nc->e\nd->r\ne->t\nf->? maybe y? Let's see pattern: maybe mapping is based on keyboard? Not.\n\nLet's try to see if mapping is ROT? Not.\n\nMaybe it's a substitution derived from a keyword? For example, key \"qwertyuiopasdfghjklzxcvbnm\"? Let's see: If we write alphabet and map to output alphabet: a->q, b->w, c->e, d->r, e->t, f->y, g->u, h->i, i->o, j->p, k->a, l->s, m->d, n->f, o->g, p->h, q->j, r->k, s->l, t->z, u->x, v->c, w->v, x->b, y->n, z->m. This looks like the QWERTY keyboard row mapping! Indeed the top row of QWERTY: q w e r t y u i o p, then next row: a s d f g h j k l, then bottom row: z x c v b n m. The mapping we observed matches: a->q (first letter of top row), b->w (second), c->e (third), d->r (fourth), e->t (fifth), f->y (sixth) (not observed but likely), g->u (seventh), h->i (eighth), i->o (ninth), j->p (tenth). Then k->a (start of second row), l->s, m->d, n->f, o->g, p->h, q->j, r->k, s->l, t->z (start of third row), u->x, v->c, w->v, x->b, y->n, z->m. Yes! This matches all observed mappings. Great.\n\nThus rule: map each letter to the letter that is directly above it on a QWERTY keyboard (or to the key above in the same column). Actually mapping is: each letter is replaced by the key directly above it on a QWERTY keyboard (wrapping rows). For letters in top row, they map to the next key to the right? Wait a->q (a is below q). So mapping is \"letter above on keyboard\". For b->w (b is below w). c->e (c below e). d->r (d below r). e->t (e below t). f->y (f below y). g->u (g below u). h->i (h below i). i->o (i below o). j->p (j below p). k->a (k is below a? Actually a is left of s row; but k is below i? Wait keyboard layout: top row: q w e r t y u i o p; middle row: a s d f g h j k l ; bottom row: z x c v b n m. So mapping is each key replaced by the key directly above it (same column). For middle row letters a s d f g h j k l map to q w e r t y u i o p respectively. Indeed a->q, s->w? Wait we have s->l not w. Hmm s->? Actually s is middle row, above is w? No, column: q w e r t y u i o p; below q is a, below w is s, below e is d, below r is f, below t is g, below y is h, below u is j, below i is k, below o is l, below p is ; (semicolon). But mapping we have a->q (good), s->? we have s->l (not w). So not column mapping.\n\nInstead mapping appears to be each key replaced by the key to its left on the same row? Let's test: a->q (left-up diagonal). Actually a is leftmost of middle row, above-left is q. s->w? Not observed. s not in examples. l->s (l is rightmost of middle row, above-left is s). Indeed l maps to s. So mapping is \"key above and to the left\"? Let's examine: For middle row letters, mapping to top row letters offset left by one column. For example, d (middle) maps to r (top) which is two left? Actually d is under e, but mapping d->r (two left). Hmm.\n\nBetter view: The mapping we derived matches the QWERTY keyboard linear order: a->q, b->w, c->e, d->r, e->t, f->y, g->u, h->i, i->o, j->p, k->a, l->s, m->d, n->f, o->g, p->h, q->j, r->k, s->l, t->z, u->x, v->c, w->v, x->b, y->n, z->m. This is essentially a substitution where the alphabet is rearranged to \"qwertyuiopasdfghjklzxcvbnm\". So mapping is: take the standard alphabet a-z, map to the QWERTY order string.\n\nThus function: define mapping string = \"qwertyuiopasdfghjklzxcvbnm\". For each character, if lowercase, find its index in alphabet and replace with char at same index in mapping. For uppercase, same but uppercase.\n\nLet's test: Input \"cosmetiste\": letters: c-> mapping[2] = 'e' correct. o-> mapping[14] =? alphabet index 14 (0-based) corresponds to 'o' (a=0). mapping[14] = mapping string char at position 14: let's list mapping: positions 0-25: 0 q,1 w,2 e,3 r,4 t,5 y,6 u,7 i,8 o,9 p,10 a,11 s,12 d,13 f,14 g,15 h,16 j,17 k,18 l,19 z,20 x,21 c,22 v,23 b,24 n,25 m. So index 14 -> 'g' matches output (cosmetiste o->g). s index 18 -> mapping[18] = 'l' matches. m index 12 -> mapping[12] = 'd' matches. e index 4 -> mapping[4] = 't' matches. t index 19 -> mapping[19] = 'z' matches. i index 8 -> mapping[8] = 'o' matches. s again l, t z, e t. Perfect.\n\nThus rule is substitution using QWERTY order.\n\nImplement function:\n\ndef fn(x):\n    mapping = \"qwertyuiopasdfghjklzxcvbnm\"\n    lower = \"abcdefghijklmnopqrstuvwxyz\"\n    trans = str.maketrans({c: mapping[i] for i,c in enumerate(lower)})\n    # also uppercase\n    trans.update({c.upper(): mapping[i].upper() for i,c in enumerate(lower)})\n    return x.translate(trans)\n\nBut need to include both lower and upper in maketrans. Use str.maketrans with two strings.\n\nlower_src = \"abcdefghijklmnopqrstuvwxyz\"\nlower_dst = \"qwertyuiopasdfghjklzxcvbnm\"\nupper_src = lower_src.upper()\nupper_dst = lower_dst.upper()\ntrans = str.maketrans(lower_src + upper_src, lower_dst + upper_dst)\nreturn x.translate(trans)\n\nThat's it.\n\nNow produce answer with reasoning and ans tags.assistantfinal<reasoning>\nThe transformation is a mono\u2011alphabetic substitution.  \nEach letter is replaced by the letter that occupies the same position in the\nQWERTY keyboard layout:\n\n```\nalphabet : abcdefghijklmnopqrstuvwxyz\nqwerty  : qwertyuiopasdfghjklzxcvbnm\n```\n\nSo **a \u2192 q**, **b \u2192 w**, **c \u2192 e**, \u2026, **z \u2192 m**.  \nUpper\u2011case letters are mapped in the same way preserving case.\n\nThe function builds a translation table from the two strings above and\napplies it with `str.translate`, which works for any input string.\n\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    # QWERTY order of the alphabet\n    src_lower = \"abcdefghijklmnopqrstuvwxyz\"\n    dst_lower = \"qwertyuiopasdfghjklzxcvbnm\"\n    # Preserve case\n    src = src_lower + src_lower.upper()\n    dst = dst_lower + dst_lower.upper()\n    trans = str.maketrans(src, dst)\n    return x.translate(trans)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    # QWERTY order of the alphabet\n    src_lower = \"abcdefghijklmnopqrstuvwxyz\"\n    dst_lower = \"qwertyuiopasdfghjklzxcvbnm\"\n    # Preserve case\n    src = src_lower + src_lower.upper()\n    dst = dst_lower + dst_lower.upper()\n    trans = str.maketrans(src, dst)\n    return x.translate(trans)",
+                        "Reasoning": "The transformation is a mono\u2011alphabetic substitution.  \nEach letter is replaced by the letter that occupies the same position in the\nQWERTY keyboard layout:\n\n```\nalphabet : abcdefghijklmnopqrstuvwxyz\nqwerty  : qwertyuiopasdfghjklzxcvbnm\n```\n\nSo **a \u2192 q**, **b \u2192 w**, **c \u2192 e**, \u2026, **z \u2192 m**.  \nUpper\u2011case letters are mapped in the same way preserving case.\n\nThe function builds a translation table from the two strings above and\napplies it with `str.translate`, which works for any input string.",
+                        "TokenUsage": {
+                            "InputTokens": 290,
+                            "OutputTokens": 4238,
+                            "TotalTokens": 4528,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Equivalent": true,
+                        "scoreTrainSet": 1.0,
+                        "scoreEvalSet": 1.0,
+                        "CandidateValid": true,
+                        "OracleStatus": "accepted",
+                        "OracleCounterexamples": [],
+                        "OracleDetails": {
+                            "policy": "bounded_symbolic_python_crypto_v1",
+                            "backend": "cvc5_python_api",
+                            "guarantee": "equivalent_on_bounded_domain_only",
+                            "domain": {
+                                "alphabet": "ASCII A-Z/a-z",
+                                "min_length": 0,
+                                "max_length": 10
+                            },
+                            "timeout_ms_per_check": 10000,
+                            "queries": 11,
+                            "lengths_proved": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "lengths_searched": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "fallback": null,
+                            "status": "bounded_unsat"
+                        },
+                        "RepairExamples": [],
+                        "EvaluationDetails": {
+                            "test_examples": 10,
+                            "correct": 10,
+                            "sample_accuracy": 1.0,
+                            "all_test_correct": true
+                        }
+                    }
+                ],
+                "InputTokens": 290,
+                "OutputTokens": 4238,
+                "Counterexamples": [
+                    [
+                        "cosmetiste",
+                        "egldtzolzt"
+                    ],
+                    [
+                        "blind",
+                        "wsofr"
+                    ],
+                    [
+                        "pleader",
+                        "hstqrtk"
+                    ],
+                    [
+                        "ribwork",
+                        "kowvgka"
+                    ],
+                    [
+                        "Batidaceae",
+                        "Wqzorqetqt"
+                    ],
+                    [
+                        "quinology",
+                        "jxofgsgun"
+                    ],
+                    [
+                        "Birgus",
+                        "Wokuxl"
+                    ],
+                    [
+                        "unwhining",
+                        "xfviofofu"
+                    ],
+                    [
+                        "capitular",
+                        "eqhozxsqk"
+                    ],
+                    [
+                        "carbazine",
+                        "eqkwqmoft"
+                    ]
+                ],
+                "TrainingExampleSource": "initial",
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to find rule mapping input strings to output strings. Let's analyze.\n\nWe have pairs:\n\ncosmetiste -> egldtzolzt\nblind -> wsofr\npleader -> hstqrtk\nribwork -> kowvgka\nBatidaceae -> Wqzorqetqt\nquinology -> jxofgsgun\nBirgus -> Wokuxl\nunwhining -> xfviofofu\ncapitular -> eqhozxsqk\ncarbazine -> eqkwqmoft\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift per character? Let's compare lengths: \"cosmetiste\" length 10, output \"egldtzolzt\" length 10. So same length. \"blind\" length5 -> \"wsofr\" length5. So per character mapping.\n\nCheck mapping for lowercase vs uppercase: Input \"Batidaceae\" (capital B) output \"Wqzorqetqt\" (capital W). So case preserved? Input capital B -> output capital W. So maybe shift with wrap preserving case.\n\nLet's compute shift for each character.\n\nTake \"blind\" -> \"wsofr\". Let's map letters positions (a=0). b->w: b=1, w=22 => shift +21 (or -5). l->s: l=11, s=18 => +7. i->o: i=8, o=14 => +6. n->f: n=13, f=5 => -8 (or +18). d->r: d=3, r=17 => +14.\n\nShifts vary.\n\nMaybe it's a Vigenere cipher with a key? Let's see if same key applied to all strings. Compute shift differences for each position across examples.\n\nLet's write down first few letters.\n\nWord: cosmetiste\nc->e: c=2, e=4 => +2\no->g: o=14, g=6 => -8 (or +18)\ns->l: s=18, l=11 => -7 (+19)\nm->d: m=12, d=3 => -9 (+17)\ne->t: e=4, t=19 => +15\nt->z: t=19, z=25 => +6\ni->o: i=8, o=14 => +6\ns->l: s=18, l=11 => -7\nt->z: +6\ne->t: +15\n\nPattern maybe repeating? Let's list shifts: +2, -8, -7, -9, +15, +6, +6, -7, +6, +15.\n\nNow \"blind\": b->w (+21 or -5), l->s (+7), i->o (+6), n->f (-8), d->r (+14). Shifts: -5, +7, +6, -8, +14.\n\nCompare with cosmetiste: we see -8 appears at position2 (o->g) and position4 (n->f). +6 appears many times. -7 appears at positions3 and8. +15 appears at positions5 and10. +2 appears only first.\n\nMaybe key is \"??\" length maybe 5? Let's see if shifts repeat every 5? For cosmetiste (10 letters) maybe key length 5 repeated: first 5 shifts: +2, -8, -7, -9, +15. Next 5: +6, +6, -7, +6, +15. Not same.\n\nMaybe it's some algorithm like reverse alphabet (Atbash) then shift? Let's test Atbash: a<->z, b<->y etc. For \"b\" Atbash gives \"y\". Output is \"w\". That's close (y->w shift -2). For \"l\" Atbash gives \"o\". Output \"s\". o->s +4. Not consistent.\n\nMaybe it's ROT13 then something? b rot13 = o, output w (o->w +8). Not.\n\nMaybe it's Caesar cipher with varying shift based on position (like progressive shift). Could be each character shifted by its index (starting 1) maybe? Let's test: For \"blind\": index1 shift? b->w is -5 (or +21). Index1 maybe -5? Not 1. Index2: l->s +7 maybe +2? Not.\n\nMaybe shift equals alphabetical position of previous character? Let's test: For \"blind\": b (first) maybe shift based on something else? Not.\n\nMaybe it's using a keyword \"secret\"? Let's compute shift for each position across words to see if consistent.\n\nTake second word \"pleader\" -> \"hstqrtk\". Compute shifts:\n\np(15)->h(7): -8 (+18)\nl(11)->s(18): +7\ne(4)->t(19): +15\na(0)->q(16): +16\nd(3)->r(17): +14\ne(4)->t(19): +15\nr(17)->k(10): -7 (+19)\n\nShifts: -8, +7, +15, +16, +14, +15, -7.\n\nNow compare with earlier patterns: we saw -8 appears often, +7 appears, +15 appears, -7 appears. +14 appears in blind at last char. +16 appears new.\n\nMaybe key is derived from word itself? Could be each letter shifted by position of same letter in alphabet of word \"something\"? Not.\n\nLet's compute shift for \"ribwork\" -> \"kowvgka\". r(17)->k(10): -7 (+19). i(8)->o(14): +6. b(1)->w(22): +21 (-5). w(22)->v(21): -1. o(14)->g(6): -8 (+18). r(17)->k(10): -7. k(10)->a(0): -10 (+16). Shifts: -7, +6, +21, -1, -8, -7, -10.\n\nInteresting.\n\nMaybe it's using a substitution cipher (like a fixed mapping of each letter to another). Let's see mapping across examples: b maps to w (from blind), also b maps to w in ribwork (b->w). Good. So b->w consistent. c->e (cosmetiste). d->r (blind d->r). d also appears in pleader (d->r). So d->r consistent. e maps to t (cosmetiste e->t, pleader e->t, carbazine? let's check). In carbazine, input \"c a r b a z i n e\". Output \"e q k w q m o f t\". Let's map: c->e (consistent), a->q (consistent with pleader a->q), r->k (pleader r->k, also ribwork r->k). b->w (consistent). a->q again. z->m (new). i->o (consistent with ribwork i->o, quinology i->g? Wait quinology: q u i n o l o g y -> output j x o f g s g u n. Let's map: i->o (consistent). n->f (consistent with blind n->f, cosmetiste n? not present). o->g (cosmetiste? not). l->s (consistent with blind l->s, pleader l->s). g->u (ribwork? not). y->n (new). So mapping seems consistent across letters! Let's verify more.\n\nCheck mapping for \"quinology\": q->j, u->x, i->o, n->f, o->g, l->s, o->g again, g->u, y->n. So mapping appears consistent with earlier: n->f (yes), o->g (cosmetiste? there is o->g yes), l->s (yes), g->u (from ribwork? we have g not in ribwork output; but we have output for g? In \"Birgus\" input B i r g u s -> output W o k u x l? Wait output \"Wokuxl\". Let's map: B->W (capital mapping), i->o (consistent), r->k (consistent), g->u (consistent), u->x (consistent), s->l (consistent). Great! So mapping is a simple substitution cipher (monoalphabetic) preserving case.\n\nThus we need to derive full mapping from given pairs. Let's compile mapping for lowercase letters:\n\na -> q\nb -> w\nc -> e\nd -> r\ne -> t\nf -> ? not seen\ng -> u\nh -> ? not seen\ni -> o\nj -> ? not seen\nk -> ? not seen\nl -> s\nm -> ? not seen\nn -> f\no -> g\np -> h? Wait p appears in \"pleader\": p->h (yes)\nq -> j (from quinology)\nr -> k\ns -> l\nt -> z (cosmetiste t->z)\nu -> x (from quinology u->x, Birgus)\nv -> ? not seen\nw -> v? Wait ribwork w->v (yes)\nx -> ? not seen\ny -> n (quinology y->n)\nz -> m (carbazine z->m)\n\nAlso capital letters mapping: B->W, etc. So mapping likely same but uppercase.\n\nWe need to fill missing letters maybe using pattern: maybe it's Caesar shift of +? Let's see mapping pattern: a->q (shift +16), b->w (+21), c->e (+2), d->r (+13), e->t (+15), f->? unknown, g->u (+14), h->? unknown, i->o (+6), j->? unknown, k->? unknown, l->s (+7), m->? unknown, n->f (+? n=13 f=5 => -8 or +18), o->g (+? 14->6 -8), p->h (+? 15->7 -8), q->j (+? 16->9 -7), r->k (+? 17->10 -7), s->l (+? 18->11 -7), t->z (+? 19->25 +6), u->x (+? 20->23 +3), v->? unknown, w->v (+? 22->21 -1), x->? unknown, y->n (+? 24->13 -11), z->m (+? 25->12 -13).\n\nNot simple shift.\n\nBut we have enough mapping for letters present. For missing letters, we could perhaps infer they map to themselves? But need function that works for any input? Probably only need to handle given inputs? But better to create mapping dictionary from observed pairs, and for any other letters maybe leave unchanged or raise error. The problem likely expects to deduce substitution cipher mapping from given examples and implement function that uses that mapping.\n\nWe can attempt to infer full mapping: maybe it's a simple reversed alphabet with offset? Let's see mapping pairs sorted:\n\na->q\nb->w\nc->e\nd->r\ne->t\nf->? maybe y? Let's see pattern: maybe mapping is based on keyboard? Not.\n\nLet's try to see if mapping is ROT? Not.\n\nMaybe it's a substitution derived from a keyword? For example, key \"qwertyuiopasdfghjklzxcvbnm\"? Let's see: If we write alphabet and map to output alphabet: a->q, b->w, c->e, d->r, e->t, f->y, g->u, h->i, i->o, j->p, k->a, l->s, m->d, n->f, o->g, p->h, q->j, r->k, s->l, t->z, u->x, v->c, w->v, x->b, y->n, z->m. This looks like the QWERTY keyboard row mapping! Indeed the top row of QWERTY: q w e r t y u i o p, then next row: a s d f g h j k l, then bottom row: z x c v b n m. The mapping we observed matches: a->q (first letter of top row), b->w (second), c->e (third), d->r (fourth), e->t (fifth), f->y (sixth) (not observed but likely), g->u (seventh), h->i (eighth), i->o (ninth), j->p (tenth). Then k->a (start of second row), l->s, m->d, n->f, o->g, p->h, q->j, r->k, s->l, t->z (start of third row), u->x, v->c, w->v, x->b, y->n, z->m. Yes! This matches all observed mappings. Great.\n\nThus rule: map each letter to the letter that is directly above it on a QWERTY keyboard (or to the key above in the same column). Actually mapping is: each letter is replaced by the key directly above it on a QWERTY keyboard (wrapping rows). For letters in top row, they map to the next key to the right? Wait a->q (a is below q). So mapping is \"letter above on keyboard\". For b->w (b is below w). c->e (c below e). d->r (d below r). e->t (e below t). f->y (f below y). g->u (g below u). h->i (h below i). i->o (i below o). j->p (j below p). k->a (k is below a? Actually a is left of s row; but k is below i? Wait keyboard layout: top row: q w e r t y u i o p; middle row: a s d f g h j k l ; bottom row: z x c v b n m. So mapping is each key replaced by the key directly above it (same column). For middle row letters a s d f g h j k l map to q w e r t y u i o p respectively. Indeed a->q, s->w? Wait we have s->l not w. Hmm s->? Actually s is middle row, above is w? No, column: q w e r t y u i o p; below q is a, below w is s, below e is d, below r is f, below t is g, below y is h, below u is j, below i is k, below o is l, below p is ; (semicolon). But mapping we have a->q (good), s->? we have s->l (not w). So not column mapping.\n\nInstead mapping appears to be each key replaced by the key to its left on the same row? Let's test: a->q (left-up diagonal). Actually a is leftmost of middle row, above-left is q. s->w? Not observed. s not in examples. l->s (l is rightmost of middle row, above-left is s). Indeed l maps to s. So mapping is \"key above and to the left\"? Let's examine: For middle row letters, mapping to top row letters offset left by one column. For example, d (middle) maps to r (top) which is two left? Actually d is under e, but mapping d->r (two left). Hmm.\n\nBetter view: The mapping we derived matches the QWERTY keyboard linear order: a->q, b->w, c->e, d->r, e->t, f->y, g->u, h->i, i->o, j->p, k->a, l->s, m->d, n->f, o->g, p->h, q->j, r->k, s->l, t->z, u->x, v->c, w->v, x->b, y->n, z->m. This is essentially a substitution where the alphabet is rearranged to \"qwertyuiopasdfghjklzxcvbnm\". So mapping is: take the standard alphabet a-z, map to the QWERTY order string.\n\nThus function: define mapping string = \"qwertyuiopasdfghjklzxcvbnm\". For each character, if lowercase, find its index in alphabet and replace with char at same index in mapping. For uppercase, same but uppercase.\n\nLet's test: Input \"cosmetiste\": letters: c-> mapping[2] = 'e' correct. o-> mapping[14] =? alphabet index 14 (0-based) corresponds to 'o' (a=0). mapping[14] = mapping string char at position 14: let's list mapping: positions 0-25: 0 q,1 w,2 e,3 r,4 t,5 y,6 u,7 i,8 o,9 p,10 a,11 s,12 d,13 f,14 g,15 h,16 j,17 k,18 l,19 z,20 x,21 c,22 v,23 b,24 n,25 m. So index 14 -> 'g' matches output (cosmetiste o->g). s index 18 -> mapping[18] = 'l' matches. m index 12 -> mapping[12] = 'd' matches. e index 4 -> mapping[4] = 't' matches. t index 19 -> mapping[19] = 'z' matches. i index 8 -> mapping[8] = 'o' matches. s again l, t z, e t. Perfect.\n\nThus rule is substitution using QWERTY order.\n\nImplement function:\n\ndef fn(x):\n    mapping = \"qwertyuiopasdfghjklzxcvbnm\"\n    lower = \"abcdefghijklmnopqrstuvwxyz\"\n    trans = str.maketrans({c: mapping[i] for i,c in enumerate(lower)})\n    # also uppercase\n    trans.update({c.upper(): mapping[i].upper() for i,c in enumerate(lower)})\n    return x.translate(trans)\n\nBut need to include both lower and upper in maketrans. Use str.maketrans with two strings.\n\nlower_src = \"abcdefghijklmnopqrstuvwxyz\"\nlower_dst = \"qwertyuiopasdfghjklzxcvbnm\"\nupper_src = lower_src.upper()\nupper_dst = lower_dst.upper()\ntrans = str.maketrans(lower_src + upper_src, lower_dst + upper_dst)\nreturn x.translate(trans)\n\nThat's it.\n\nNow produce answer with reasoning and ans tags.assistantfinal<reasoning>\nThe transformation is a mono\u2011alphabetic substitution.  \nEach letter is replaced by the letter that occupies the same position in the\nQWERTY keyboard layout:\n\n```\nalphabet : abcdefghijklmnopqrstuvwxyz\nqwerty  : qwertyuiopasdfghjklzxcvbnm\n```\n\nSo **a \u2192 q**, **b \u2192 w**, **c \u2192 e**, \u2026, **z \u2192 m**.  \nUpper\u2011case letters are mapped in the same way preserving case.\n\nThe function builds a translation table from the two strings above and\napplies it with `str.translate`, which works for any input string.\n\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    # QWERTY order of the alphabet\n    src_lower = \"abcdefghijklmnopqrstuvwxyz\"\n    dst_lower = \"qwertyuiopasdfghjklzxcvbnm\"\n    # Preserve case\n    src = src_lower + src_lower.upper()\n    dst = dst_lower + dst_lower.upper()\n    trans = str.maketrans(src, dst)\n    return x.translate(trans)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    # QWERTY order of the alphabet\n    src_lower = \"abcdefghijklmnopqrstuvwxyz\"\n    dst_lower = \"qwertyuiopasdfghjklzxcvbnm\"\n    # Preserve case\n    src = src_lower + src_lower.upper()\n    dst = dst_lower + dst_lower.upper()\n    trans = str.maketrans(src, dst)\n    return x.translate(trans)",
+                        "Reasoning": "The transformation is a mono\u2011alphabetic substitution.  \nEach letter is replaced by the letter that occupies the same position in the\nQWERTY keyboard layout:\n\n```\nalphabet : abcdefghijklmnopqrstuvwxyz\nqwerty  : qwertyuiopasdfghjklzxcvbnm\n```\n\nSo **a \u2192 q**, **b \u2192 w**, **c \u2192 e**, \u2026, **z \u2192 m**.  \nUpper\u2011case letters are mapped in the same way preserving case.\n\nThe function builds a translation table from the two strings above and\napplies it with `str.translate`, which works for any input string.",
+                        "TokenUsage": {
+                            "InputTokens": 290,
+                            "OutputTokens": 4238,
+                            "TotalTokens": 4528,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Error": null
+                    }
+                ],
+                "StopReason": "oracle_accepted"
+            }
+        ]
+    ],
+    "oracle": "cvc5_bounded_symbolic_Python",
+    "TaskSettings": {
+        "crypto_setting": "paper",
+        "n_train": 10,
+        "n_test": 10,
+        "noise_ratio": 0.0,
+        "ood_ratio": 0.0,
+        "hypothesis": "Python_fn_x",
+        "paper_task_protocol": true,
+        "method": "shared_CE_pipeline_not_paper_SRR",
+        "regularization_applied": false,
+        "prompt_variant": "base_with_reasoning_and_ans",
+        "oracle_policy": "bounded_symbolic_python_crypto_v1",
+        "oracle_domain": {
+            "alphabet": "ASCII A-Z/a-z",
+            "min_length": 0,
+            "max_length": 10
+        },
+        "Difficulty": {
+            "catalog_version": "benchmark_difficulty_v2",
+            "id": "keyboard:79",
+            "tier": "L1",
+            "level": 1,
+            "levels": 3,
+            "axis": "training_information_coverage",
+            "proxy": true,
+            "features": {
+                "missing_lowercase_letters": 4,
+                "missing_case_sensitive_letters": 29,
+                "family": "keyboard",
+                "training_entries": 10,
+                "within_family_rank": 13
+            },
+            "basis_config_matches": true
+        },
+        "TrainingPoolSize": 10,
+        "ScheduledTrainingBudget": 10,
+        "EvaluationPoolSize": 10,
+        "RoundBudget": 10,
+        "StandardSampleSchedule": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+        ]
+    }
+}

@@ -1,0 +1,232 @@
+{
+    "task_type": "cryptography",
+    "benchmark_id": "keyboard:84",
+    "pipeline": "regex_run_episode",
+    "runs": [
+        [
+            {
+                "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: acronymize\nOutput: qekgfndomt\nInput: Manitoban\nOutput: Dqfozgwqf\nInput: silkiness\nOutput: losaoftll\nInput: hogmanay\nOutput: igudqfqn\nInput: cabrilla\nOutput: eqwkossq\nInput: badgerweed\nOutput: wqrutkvttr\nInput: sergeantcy\nOutput: ltkutqfzen\nInput: Itenean\nOutput: Oztftqf\nInput: truckler\nOutput: zkxeastk\nInput: financial\nOutput: yofqfeoqs\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\n1. \"acronymize\" -> \"qekgfndomt\"\n2. \"Manitoban\" -> \"Dqfozgwqf\"\n3. \"silkiness\" -> \"losaoftll\"\n4. \"hogmanay\" -> \"igudqfqn\"\n5. \"cabrilla\" -> \"eqwkossq\"\n6. \"badgerweed\" -> \"wqrutkvttr\"\n7. \"sergeantcy\" -> \"ltkutqfzen\"\n8. \"Itenean\" -> \"Oztftqf\"\n9. \"trucklin? Actually \"truckler\" -> \"zkxeastk\"\n10. \"financial\" -> \"yofqfeoqs\"\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift varying per position? Let's compare letters.\n\nTake first pair: \"acronymize\"\nInput letters: a c r o n y m i z e\nOutput: q e k g f n d o m t\n\nMap each position:\na->q (shift +16? a=0, q=16)\nc->e (+2)\nr->k (-7) or +? r=17, k=10 diff -7 (or +19 mod26)\no->g (-8) (14->6 diff -8)\nn->f (-8) (13->5)\ny->n (-11) (24->13)\nm->d (-9) (12->3)\ni->o (+6) (8->14)\nz->m (-13) (25->12)\ne->t (+15) (4->19)\n\nSeems not consistent.\n\nMaybe it's some algorithm like reverse alphabet (a->z, b->y) then shift? Let's compute reverse: a->z, but output q not z. Not.\n\nMaybe it's using a key phrase? Could be Vigenere with a key derived from something like \"something\". Let's test: For each position, compute shift = output - input (mod26). For \"acronymize\": compute numeric (a=0). Output q=16 => shift 16. c=2 -> e=4 shift 2. r=17 -> k=10 shift (10-17) mod26 = 19. o=14 -> g=6 shift (6-14)= -8 mod26=18. n=13 -> f=5 shift 18? Actually 5-13 = -8 mod26=18. y=24 -> n=13 shift 15? 13-24 = -11 mod26=15. m=12 -> d=3 shift 17? 3-12=-9 mod26=17. i=8 -> o=14 shift 6. z=25 -> m=12 shift 13? 12-25=-13 mod26=13. e=4 -> t=19 shift 15.\n\nShifts: [16,2,19,18,18,15,17,6,13,15]\n\nNow second pair: \"Manitoban\" (case? Input capital M). Output \"Dqfozgwqf\". Let's treat case-insensitive maybe preserve case? Input letters: M a n i t o b a n (9 letters). Output: D q f o z g w q f.\n\nCompute shifts ignoring case: M (12) -> D (3) shift = (3-12) mod26 = 17. a(0)->q(16) shift 16. n(13)->f(5) shift 18. i(8)->o(14) shift 6. t(19)->z(25) shift 6. o(14)->g(6) shift 18. b(1)->w(22) shift 21? Actually 22-1=21. a->q shift 16. n->f shift 18.\n\nShifts: [17,16,18,6,6,18,21,16,18]\n\nThird: \"silkiness\" -> \"losaoftll\"\nInput: s i l k i n e s s (9). Output: l o s a o f t l l.\n\nCompute shifts: s(18)->l(11) shift = (11-18)= -7 mod26=19. i(8)->o(14) shift 6. l(11)->s(18) shift 7. k(10)->a(0) shift 16? Actually 0-10=-10 mod26=16. i(8)->o(14) shift 6. n(13)->f(5) shift 18. e(4)->t(19) shift 15. s(18)->l(11) shift 19. s->l shift 19.\n\nShifts: [19,6,7,16,6,18,15,19,19]\n\nObservations: many shifts are 6, 15, 16, 18, 19, 21, 2, 7, etc. Could be derived from some repeating key pattern? Let's see if there is a key string that yields these shifts.\n\nTake first few shifts across examples maybe correspond to letters of a key phrase \"something\". For example shift 6 corresponds to 'g' (since a->g shift 6). shift 15 corresponds to 'p' (a->p). shift 16 -> 'q'. shift 18 -> 's'. shift 19 -> 't'. shift 21 -> 'v'. shift 2 -> 'c'. shift 7 -> 'h'.\n\nMaybe the key is \"g p q s t v c h\"? Not.\n\nMaybe the transformation is: For each character, replace with character 6 positions ahead for vowels? Not.\n\nLet's examine pattern of output relative to input reversed? For \"acronymize\" reversed is \"ezimynorca\". Output \"qekgfndomt\". Not.\n\nMaybe it's a substitution cipher based on keyboard adjacency? Not.\n\nCould be using a simple algorithm: For each character, take its position in alphabet, multiply by something, mod 26? Let's test: For a (0) -> q (16). Multiply by something? 0*? =0 not 16. So maybe add index? a (0) + index (0) =0 not 16. a + 16? index 0? Not.\n\nMaybe it's using a running sum of previous letters? Let's compute cumulative shift? Not.\n\nLet's try to see if output is input shifted by a value that depends on previous output char? Hard.\n\nMaybe it's a simple substitution cipher where each letter maps to another fixed letter (like a monoalphabetic substitution). Let's test mapping across many pairs.\n\nCollect mapping pairs (case-insensitive). We'll list input->output for each occurrence.\n\nFrom first pair:\na->q\nc->e\nr->k\no->g\nn->f\ny->n\nm->d\ni->o\nz->m\ne->t\n\nSecond pair:\nm->d (already m->d matches)\na->q (a->q matches)\nn->f (n->f matches)\ni->o (i->o matches)\nt->z (new: t->z)\no->g (o->g matches)\nb->w (b->w)\na->q (again)\nn->f\n\nThird pair:\ns->l (new)\ni->o (already)\nl->s (new)\nk->a (new)\ni->o (again)\nn->f (again)\ne->t (e->t matches)\ns->l (again)\ns->l\n\nFourth pair: \"hogmanay\" -> \"igudqfqn\"\nh->i (new)\no->g (already)\ng->u (new)\nm->d (already)\na->q (already)\nn->f (already)\na->q (again)\ny->n (already)\n\nFifth: \"cabrilla\" -> \"eqwkossq\"\nc->e (already)\na->q (already)\nb->w (already)\nr->k (already)\ni->o (already)\nl->s (already)\nl->s\na->q\n\nSixth: \"badgerweed\" -> \"wqrutkvttr\"\nb->w (already)\na->q (already)\nd->r (new)\ng->u (already)\ne->t (already)\nr->k (already)\nw->v (new)\ne->t\ne->t\nd->r\n\nSeventh: \"sergeantcy\" -> \"ltkutqfzen\"\ns->l (already)\ne->t (already)\nr->k (already)\ng->u (already)\ne->t\na->q\nn->f\nt->z (already)\nc->e (already)\ny->n (already)\n\nEighth: \"Itenean\" -> \"Oztftqf\"\nI->O (uppercase mapping? i->o earlier, but uppercase I->O maybe same shift 6)\nt->z (already)\ne->t (already)\nn->f (already)\ne->t\na->q\nn->f\n\nNinth: \"truckler\" -> \"zkxeastk\"\nt->z (already)\nr->k (already)\nu->x (new)\nc->e (already)\nk->a (already)\nl->s (already)\ne->t (already)\nr->k (already)\n\nTenth: \"financial\" -> \"yofqfeoqs\"\nf->y (new)\ni->o (already)\nn->f (already)\na->q (already)\nn->f\nc->e (already)\ni->o\na->q\nl->s\n\nNow we have mapping for many letters:\n\na->q\nb->w\nc->e\nd->r\ne->t\nf->y\ng->u\nh->i\ni->o\nj->? none\nk->a\nl->s\nm->d\nn->f\no->g\np->? none\nq->? none\nr->k\ns->l\nt->z\nu->x\nv->? none\nw->v\nx->? none\ny->n\nz->m\n\nThis looks like a simple substitution cipher: each letter maps to the next letter in some permutation. Let's see if this mapping is consistent with a Caesar shift? Not; it's a specific permutation.\n\nLet's check if mapping is maybe ROT? a->q (shift +16). b->w (+22). c->e (+2). d->r (+14). e->t (+15). f->y (+19). g->u (+14). h->i (+1). i->o (+6). j unknown. k->a (+? 0-10 = -10 mod26 =16). l->s (+7). m->d (+? 3-12 = -9 =17). n->f (+? 5-13 = -8 =18). o->g (+? 6-14 = -8 =18). p unknown. q unknown. r->k (+? 10-17 = -7 =19). s->l (+? 11-18 = -7 =19). t->z (+? 25-19 =6). u->x (+? 23-20 =3). v unknown. w->v (+? 21-22 = -1 =25). x unknown. y->n (+? 13-24 = -11 =15). z->m (+? 12-25 = -13 =13).\n\nSeems mapping is not a simple Caesar but appears to be a fixed substitution where each letter maps to another letter, maybe derived from a reversed alphabet with some offset? Let's write mapping in order:\n\na q\nb w\nc e\nd r\ne t\nf y\ng u\nh i\ni o\nj ?\nk a\nl s\nm d\nn f\no g\np ?\nq ?\nr k\ns l\nt z\nu x\nv ?\nw v\nx ?\ny n\nz m\n\nObserve pattern: maybe mapping is \"qwertyuiopasdfghjklzxcvbnm\"? Let's compare: Standard QWERTY keyboard order: q w e r t y u i o p a s d f g h j k l z x c v b n m. Indeed mapping we have:\n\na->q (first of QWERTY)\nb->w (second)\nc->e (third)\nd->r (fourth)\ne->t (fifth)\nf->y (sixth)\ng->u (seventh)\nh->i (eighth)\ni->o (ninth)\nj->p (should be p) unknown but likely j->p\nk->a (10th)\nl->s (11th)\nm->d (12th)\nn->f (13th)\no->g (14th)\np->h (15th) unknown\nq->j (16th) unknown\nr->k (17th) matches\ns->l (18th) matches\nt->z (19th) matches\nu->x (20th) matches\nv->c (21st) unknown\nw->v (22nd) matches\nx->b (23rd) unknown\ny->n (24th) matches\nz->m (25th) matches\n\nYes! The mapping corresponds exactly to the QWERTY keyboard layout string: \"qwertyuiopasdfghjklzxcvbnm\". So each letter of the alphabet (a-z) maps to the corresponding letter in the QWERTY order.\n\nThus the rule: replace each letter with the letter at same position in QWERTY string.\n\nSpecifically, define a mapping dict where alphabet = \"abcdefghijklmnopqrstuvwxyz\", qwerty = \"qwertyuiopasdfghjklzxcvbnm\". Then output = translate each character (preserving case? Input may have uppercase first letter; output seems uppercase for first letter when input uppercase: \"Manitoban\" -> \"Dqfozgwqf\": M->D (uppercase). So we need to preserve case: if input char is uppercase, output uppercase version of mapped letter.\n\nThus function:\n\ndef fn(x):\n    qwerty = \"qwertyuiopasdfghjklzxcvbnm\"\n    trans = str.maketrans(\"abcdefghijklmnopqrstuvwxyz\", qwerty)\n    # also uppercase mapping\n    trans_upper = str.maketrans(\"ABCDEFGHIJKLMNOPQRSTUVWXYZ\", qwerty.upper())\n    combined = {**dict(trans), **dict(trans_upper)}? Actually we can create translation table for both using str.maketrans with two strings.\n\nSimpler: use .translate with combined table.\n\ntrans = str.maketrans(\n    \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n    qwerty + qwerty.upper()\n)\nreturn x.translate(trans)\n\nEdge: characters not letters remain unchanged (maybe none). That's fine.\n\nLet's test quickly mentally: \"acronymize\": a->q, c->e, r->k, o->g, n->f, y->n, m->d, i->o, z->m, e->t => \"qekgfndomt\" matches.\n\n\"Manitoban\": M uppercase -> D (since M maps to d, uppercase D). a->q, n->f, i->o, t->z, o->g, b->w, a->q, n->f => \"Dqfozgwqf\". Good.\n\nThus solution.\n\nNow produce answer with reasoning and function inside <ans> tags.assistantfinal<reasoning>\nThe transformation is a simple substitution based on the QWERTY keyboard layout.  \nIf we write the alphabet in order and the letters as they appear on a QWERTY keyboard:\n\n```\nalphabet = abcdefghijklmnopqrstuvwxyz\nqwerty   = qwertyuiopasdfghjklzxcvbnm\n```\n\neach input letter is replaced by the letter occupying the same position in the QWERTY string.  \nThe case of the original character is preserved (uppercase letters become the uppercase version of the mapped letter). Non\u2011alphabetic characters are left unchanged.\n\nThe Python function builds a translation table for both lower\u2011 and upper\u2011case letters and applies it with `str.translate`.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    # QWERTY order corresponding to the alphabet\n    qwerty = \"qwertyuiopasdfghjklzxcvbnm\"\n    # Build translation table for both lower\u2011 and upper\u2011case letters\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n        qwerty + qwerty.upper()\n    )\n    return x.translate(trans)\n```\n</ans>",
+                "Prediction": "def fn(x):\n    # QWERTY order corresponding to the alphabet\n    qwerty = \"qwertyuiopasdfghjklzxcvbnm\"\n    # Build translation table for both lower\u2011 and upper\u2011case letters\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n        qwerty + qwerty.upper()\n    )\n    return x.translate(trans)",
+                "Reasoning": "The transformation is a simple substitution based on the QWERTY keyboard layout.  \nIf we write the alphabet in order and the letters as they appear on a QWERTY keyboard:\n\n```\nalphabet = abcdefghijklmnopqrstuvwxyz\nqwerty   = qwertyuiopasdfghjklzxcvbnm\n```\n\neach input letter is replaced by the letter occupying the same position in the QWERTY string.  \nThe case of the original character is preserved (uppercase letters become the uppercase version of the mapped letter). Non\u2011alphabetic characters are left unchanged.\n\nThe Python function builds a translation table for both lower\u2011 and upper\u2011case letters and applies it with `str.translate`.",
+                "TokenUsage": {
+                    "InputTokens": 299,
+                    "OutputTokens": 3592,
+                    "TotalTokens": 3891,
+                    "ModelCalls": 1,
+                    "UsageComplete": true,
+                    "KnownInputTokens": 299,
+                    "KnownOutputTokens": 3592,
+                    "Calls": [
+                        {
+                            "InputTokens": 299,
+                            "OutputTokens": 3592,
+                            "TotalTokens": 3891,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids",
+                            "Model": "gpt-oss"
+                        }
+                    ]
+                },
+                "Equivalent": true,
+                "scoreTrainSet": 1.0,
+                "scoreEvalSet": 1.0,
+                "CandidateValid": true,
+                "OracleStatus": "accepted",
+                "OracleCounterexamples": [],
+                "OracleDetails": {
+                    "policy": "bounded_symbolic_python_crypto_v1",
+                    "backend": "cvc5_python_api",
+                    "guarantee": "equivalent_on_bounded_domain_only",
+                    "domain": {
+                        "alphabet": "ASCII A-Z/a-z",
+                        "min_length": 0,
+                        "max_length": 10
+                    },
+                    "timeout_ms_per_check": 10000,
+                    "queries": 11,
+                    "lengths_proved": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "lengths_searched": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10
+                    ],
+                    "fallback": null,
+                    "status": "bounded_unsat"
+                },
+                "RepairExamples": [],
+                "EvaluationDetails": {
+                    "test_examples": 10,
+                    "correct": 10,
+                    "sample_accuracy": 1.0,
+                    "all_test_correct": true
+                },
+                "epoch": 0,
+                "NumTrainingSamples": 10,
+                "CurrentGuess": "def fn(x):\n    # QWERTY order corresponding to the alphabet\n    qwerty = \"qwertyuiopasdfghjklzxcvbnm\"\n    # Build translation table for both lower\u2011 and upper\u2011case letters\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n        qwerty + qwerty.upper()\n    )\n    return x.translate(trans)",
+                "CurrentGuessReasoning": "The transformation is a simple substitution based on the QWERTY keyboard layout.  \nIf we write the alphabet in order and the letters as they appear on a QWERTY keyboard:\n\n```\nalphabet = abcdefghijklmnopqrstuvwxyz\nqwerty   = qwertyuiopasdfghjklzxcvbnm\n```\n\neach input letter is replaced by the letter occupying the same position in the QWERTY string.  \nThe case of the original character is preserved (uppercase letters become the uppercase version of the mapped letter). Non\u2011alphabetic characters are left unchanged.\n\nThe Python function builds a translation table for both lower\u2011 and upper\u2011case letters and applies it with `str.translate`.",
+                "Accuracy": 1,
+                "Logs": [
+                    {
+                        "Prompt": "Please generate a rule that maps the following inputs to their corresponding outputs using a Python function. The input is a string. The output is a string.\n\nInput: acronymize\nOutput: qekgfndomt\nInput: Manitoban\nOutput: Dqfozgwqf\nInput: silkiness\nOutput: losaoftll\nInput: hogmanay\nOutput: igudqfqn\nInput: cabrilla\nOutput: eqwkossq\nInput: badgerweed\nOutput: wqrutkvttr\nInput: sergeantcy\nOutput: ltkutqfzen\nInput: Itenean\nOutput: Oztftqf\nInput: truckler\nOutput: zkxeastk\nInput: financial\nOutput: yofqfeoqs\n\nPlease format your Python function as follows:\n\n```python\ndef fn(x):\n    # Your code here\n```\n\nInclude the complete function definition, without a function call, inside the requested <ans> tags.\n\nFirst give a concise explanation in <reasoning>...</reasoning>, then the complete candidate in <ans>...</ans>.\n",
+                        "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\n1. \"acronymize\" -> \"qekgfndomt\"\n2. \"Manitoban\" -> \"Dqfozgwqf\"\n3. \"silkiness\" -> \"losaoftll\"\n4. \"hogmanay\" -> \"igudqfqn\"\n5. \"cabrilla\" -> \"eqwkossq\"\n6. \"badgerweed\" -> \"wqrutkvttr\"\n7. \"sergeantcy\" -> \"ltkutqfzen\"\n8. \"Itenean\" -> \"Oztftqf\"\n9. \"trucklin? Actually \"truckler\" -> \"zkxeastk\"\n10. \"financial\" -> \"yofqfeoqs\"\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift varying per position? Let's compare letters.\n\nTake first pair: \"acronymize\"\nInput letters: a c r o n y m i z e\nOutput: q e k g f n d o m t\n\nMap each position:\na->q (shift +16? a=0, q=16)\nc->e (+2)\nr->k (-7) or +? r=17, k=10 diff -7 (or +19 mod26)\no->g (-8) (14->6 diff -8)\nn->f (-8) (13->5)\ny->n (-11) (24->13)\nm->d (-9) (12->3)\ni->o (+6) (8->14)\nz->m (-13) (25->12)\ne->t (+15) (4->19)\n\nSeems not consistent.\n\nMaybe it's some algorithm like reverse alphabet (a->z, b->y) then shift? Let's compute reverse: a->z, but output q not z. Not.\n\nMaybe it's using a key phrase? Could be Vigenere with a key derived from something like \"something\". Let's test: For each position, compute shift = output - input (mod26). For \"acronymize\": compute numeric (a=0). Output q=16 => shift 16. c=2 -> e=4 shift 2. r=17 -> k=10 shift (10-17) mod26 = 19. o=14 -> g=6 shift (6-14)= -8 mod26=18. n=13 -> f=5 shift 18? Actually 5-13 = -8 mod26=18. y=24 -> n=13 shift 15? 13-24 = -11 mod26=15. m=12 -> d=3 shift 17? 3-12=-9 mod26=17. i=8 -> o=14 shift 6. z=25 -> m=12 shift 13? 12-25=-13 mod26=13. e=4 -> t=19 shift 15.\n\nShifts: [16,2,19,18,18,15,17,6,13,15]\n\nNow second pair: \"Manitoban\" (case? Input capital M). Output \"Dqfozgwqf\". Let's treat case-insensitive maybe preserve case? Input letters: M a n i t o b a n (9 letters). Output: D q f o z g w q f.\n\nCompute shifts ignoring case: M (12) -> D (3) shift = (3-12) mod26 = 17. a(0)->q(16) shift 16. n(13)->f(5) shift 18. i(8)->o(14) shift 6. t(19)->z(25) shift 6. o(14)->g(6) shift 18. b(1)->w(22) shift 21? Actually 22-1=21. a->q shift 16. n->f shift 18.\n\nShifts: [17,16,18,6,6,18,21,16,18]\n\nThird: \"silkiness\" -> \"losaoftll\"\nInput: s i l k i n e s s (9). Output: l o s a o f t l l.\n\nCompute shifts: s(18)->l(11) shift = (11-18)= -7 mod26=19. i(8)->o(14) shift 6. l(11)->s(18) shift 7. k(10)->a(0) shift 16? Actually 0-10=-10 mod26=16. i(8)->o(14) shift 6. n(13)->f(5) shift 18. e(4)->t(19) shift 15. s(18)->l(11) shift 19. s->l shift 19.\n\nShifts: [19,6,7,16,6,18,15,19,19]\n\nObservations: many shifts are 6, 15, 16, 18, 19, 21, 2, 7, etc. Could be derived from some repeating key pattern? Let's see if there is a key string that yields these shifts.\n\nTake first few shifts across examples maybe correspond to letters of a key phrase \"something\". For example shift 6 corresponds to 'g' (since a->g shift 6). shift 15 corresponds to 'p' (a->p). shift 16 -> 'q'. shift 18 -> 's'. shift 19 -> 't'. shift 21 -> 'v'. shift 2 -> 'c'. shift 7 -> 'h'.\n\nMaybe the key is \"g p q s t v c h\"? Not.\n\nMaybe the transformation is: For each character, replace with character 6 positions ahead for vowels? Not.\n\nLet's examine pattern of output relative to input reversed? For \"acronymize\" reversed is \"ezimynorca\". Output \"qekgfndomt\". Not.\n\nMaybe it's a substitution cipher based on keyboard adjacency? Not.\n\nCould be using a simple algorithm: For each character, take its position in alphabet, multiply by something, mod 26? Let's test: For a (0) -> q (16). Multiply by something? 0*? =0 not 16. So maybe add index? a (0) + index (0) =0 not 16. a + 16? index 0? Not.\n\nMaybe it's using a running sum of previous letters? Let's compute cumulative shift? Not.\n\nLet's try to see if output is input shifted by a value that depends on previous output char? Hard.\n\nMaybe it's a simple substitution cipher where each letter maps to another fixed letter (like a monoalphabetic substitution). Let's test mapping across many pairs.\n\nCollect mapping pairs (case-insensitive). We'll list input->output for each occurrence.\n\nFrom first pair:\na->q\nc->e\nr->k\no->g\nn->f\ny->n\nm->d\ni->o\nz->m\ne->t\n\nSecond pair:\nm->d (already m->d matches)\na->q (a->q matches)\nn->f (n->f matches)\ni->o (i->o matches)\nt->z (new: t->z)\no->g (o->g matches)\nb->w (b->w)\na->q (again)\nn->f\n\nThird pair:\ns->l (new)\ni->o (already)\nl->s (new)\nk->a (new)\ni->o (again)\nn->f (again)\ne->t (e->t matches)\ns->l (again)\ns->l\n\nFourth pair: \"hogmanay\" -> \"igudqfqn\"\nh->i (new)\no->g (already)\ng->u (new)\nm->d (already)\na->q (already)\nn->f (already)\na->q (again)\ny->n (already)\n\nFifth: \"cabrilla\" -> \"eqwkossq\"\nc->e (already)\na->q (already)\nb->w (already)\nr->k (already)\ni->o (already)\nl->s (already)\nl->s\na->q\n\nSixth: \"badgerweed\" -> \"wqrutkvttr\"\nb->w (already)\na->q (already)\nd->r (new)\ng->u (already)\ne->t (already)\nr->k (already)\nw->v (new)\ne->t\ne->t\nd->r\n\nSeventh: \"sergeantcy\" -> \"ltkutqfzen\"\ns->l (already)\ne->t (already)\nr->k (already)\ng->u (already)\ne->t\na->q\nn->f\nt->z (already)\nc->e (already)\ny->n (already)\n\nEighth: \"Itenean\" -> \"Oztftqf\"\nI->O (uppercase mapping? i->o earlier, but uppercase I->O maybe same shift 6)\nt->z (already)\ne->t (already)\nn->f (already)\ne->t\na->q\nn->f\n\nNinth: \"truckler\" -> \"zkxeastk\"\nt->z (already)\nr->k (already)\nu->x (new)\nc->e (already)\nk->a (already)\nl->s (already)\ne->t (already)\nr->k (already)\n\nTenth: \"financial\" -> \"yofqfeoqs\"\nf->y (new)\ni->o (already)\nn->f (already)\na->q (already)\nn->f\nc->e (already)\ni->o\na->q\nl->s\n\nNow we have mapping for many letters:\n\na->q\nb->w\nc->e\nd->r\ne->t\nf->y\ng->u\nh->i\ni->o\nj->? none\nk->a\nl->s\nm->d\nn->f\no->g\np->? none\nq->? none\nr->k\ns->l\nt->z\nu->x\nv->? none\nw->v\nx->? none\ny->n\nz->m\n\nThis looks like a simple substitution cipher: each letter maps to the next letter in some permutation. Let's see if this mapping is consistent with a Caesar shift? Not; it's a specific permutation.\n\nLet's check if mapping is maybe ROT? a->q (shift +16). b->w (+22). c->e (+2). d->r (+14). e->t (+15). f->y (+19). g->u (+14). h->i (+1). i->o (+6). j unknown. k->a (+? 0-10 = -10 mod26 =16). l->s (+7). m->d (+? 3-12 = -9 =17). n->f (+? 5-13 = -8 =18). o->g (+? 6-14 = -8 =18). p unknown. q unknown. r->k (+? 10-17 = -7 =19). s->l (+? 11-18 = -7 =19). t->z (+? 25-19 =6). u->x (+? 23-20 =3). v unknown. w->v (+? 21-22 = -1 =25). x unknown. y->n (+? 13-24 = -11 =15). z->m (+? 12-25 = -13 =13).\n\nSeems mapping is not a simple Caesar but appears to be a fixed substitution where each letter maps to another letter, maybe derived from a reversed alphabet with some offset? Let's write mapping in order:\n\na q\nb w\nc e\nd r\ne t\nf y\ng u\nh i\ni o\nj ?\nk a\nl s\nm d\nn f\no g\np ?\nq ?\nr k\ns l\nt z\nu x\nv ?\nw v\nx ?\ny n\nz m\n\nObserve pattern: maybe mapping is \"qwertyuiopasdfghjklzxcvbnm\"? Let's compare: Standard QWERTY keyboard order: q w e r t y u i o p a s d f g h j k l z x c v b n m. Indeed mapping we have:\n\na->q (first of QWERTY)\nb->w (second)\nc->e (third)\nd->r (fourth)\ne->t (fifth)\nf->y (sixth)\ng->u (seventh)\nh->i (eighth)\ni->o (ninth)\nj->p (should be p) unknown but likely j->p\nk->a (10th)\nl->s (11th)\nm->d (12th)\nn->f (13th)\no->g (14th)\np->h (15th) unknown\nq->j (16th) unknown\nr->k (17th) matches\ns->l (18th) matches\nt->z (19th) matches\nu->x (20th) matches\nv->c (21st) unknown\nw->v (22nd) matches\nx->b (23rd) unknown\ny->n (24th) matches\nz->m (25th) matches\n\nYes! The mapping corresponds exactly to the QWERTY keyboard layout string: \"qwertyuiopasdfghjklzxcvbnm\". So each letter of the alphabet (a-z) maps to the corresponding letter in the QWERTY order.\n\nThus the rule: replace each letter with the letter at same position in QWERTY string.\n\nSpecifically, define a mapping dict where alphabet = \"abcdefghijklmnopqrstuvwxyz\", qwerty = \"qwertyuiopasdfghjklzxcvbnm\". Then output = translate each character (preserving case? Input may have uppercase first letter; output seems uppercase for first letter when input uppercase: \"Manitoban\" -> \"Dqfozgwqf\": M->D (uppercase). So we need to preserve case: if input char is uppercase, output uppercase version of mapped letter.\n\nThus function:\n\ndef fn(x):\n    qwerty = \"qwertyuiopasdfghjklzxcvbnm\"\n    trans = str.maketrans(\"abcdefghijklmnopqrstuvwxyz\", qwerty)\n    # also uppercase mapping\n    trans_upper = str.maketrans(\"ABCDEFGHIJKLMNOPQRSTUVWXYZ\", qwerty.upper())\n    combined = {**dict(trans), **dict(trans_upper)}? Actually we can create translation table for both using str.maketrans with two strings.\n\nSimpler: use .translate with combined table.\n\ntrans = str.maketrans(\n    \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n    qwerty + qwerty.upper()\n)\nreturn x.translate(trans)\n\nEdge: characters not letters remain unchanged (maybe none). That's fine.\n\nLet's test quickly mentally: \"acronymize\": a->q, c->e, r->k, o->g, n->f, y->n, m->d, i->o, z->m, e->t => \"qekgfndomt\" matches.\n\n\"Manitoban\": M uppercase -> D (since M maps to d, uppercase D). a->q, n->f, i->o, t->z, o->g, b->w, a->q, n->f => \"Dqfozgwqf\". Good.\n\nThus solution.\n\nNow produce answer with reasoning and function inside <ans> tags.assistantfinal<reasoning>\nThe transformation is a simple substitution based on the QWERTY keyboard layout.  \nIf we write the alphabet in order and the letters as they appear on a QWERTY keyboard:\n\n```\nalphabet = abcdefghijklmnopqrstuvwxyz\nqwerty   = qwertyuiopasdfghjklzxcvbnm\n```\n\neach input letter is replaced by the letter occupying the same position in the QWERTY string.  \nThe case of the original character is preserved (uppercase letters become the uppercase version of the mapped letter). Non\u2011alphabetic characters are left unchanged.\n\nThe Python function builds a translation table for both lower\u2011 and upper\u2011case letters and applies it with `str.translate`.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    # QWERTY order corresponding to the alphabet\n    qwerty = \"qwertyuiopasdfghjklzxcvbnm\"\n    # Build translation table for both lower\u2011 and upper\u2011case letters\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n        qwerty + qwerty.upper()\n    )\n    return x.translate(trans)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    # QWERTY order corresponding to the alphabet\n    qwerty = \"qwertyuiopasdfghjklzxcvbnm\"\n    # Build translation table for both lower\u2011 and upper\u2011case letters\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n        qwerty + qwerty.upper()\n    )\n    return x.translate(trans)",
+                        "Reasoning": "The transformation is a simple substitution based on the QWERTY keyboard layout.  \nIf we write the alphabet in order and the letters as they appear on a QWERTY keyboard:\n\n```\nalphabet = abcdefghijklmnopqrstuvwxyz\nqwerty   = qwertyuiopasdfghjklzxcvbnm\n```\n\neach input letter is replaced by the letter occupying the same position in the QWERTY string.  \nThe case of the original character is preserved (uppercase letters become the uppercase version of the mapped letter). Non\u2011alphabetic characters are left unchanged.\n\nThe Python function builds a translation table for both lower\u2011 and upper\u2011case letters and applies it with `str.translate`.",
+                        "TokenUsage": {
+                            "InputTokens": 299,
+                            "OutputTokens": 3592,
+                            "TotalTokens": 3891,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Equivalent": true,
+                        "scoreTrainSet": 1.0,
+                        "scoreEvalSet": 1.0,
+                        "CandidateValid": true,
+                        "OracleStatus": "accepted",
+                        "OracleCounterexamples": [],
+                        "OracleDetails": {
+                            "policy": "bounded_symbolic_python_crypto_v1",
+                            "backend": "cvc5_python_api",
+                            "guarantee": "equivalent_on_bounded_domain_only",
+                            "domain": {
+                                "alphabet": "ASCII A-Z/a-z",
+                                "min_length": 0,
+                                "max_length": 10
+                            },
+                            "timeout_ms_per_check": 10000,
+                            "queries": 11,
+                            "lengths_proved": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "lengths_searched": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10
+                            ],
+                            "fallback": null,
+                            "status": "bounded_unsat"
+                        },
+                        "RepairExamples": [],
+                        "EvaluationDetails": {
+                            "test_examples": 10,
+                            "correct": 10,
+                            "sample_accuracy": 1.0,
+                            "all_test_correct": true
+                        }
+                    }
+                ],
+                "InputTokens": 299,
+                "OutputTokens": 3592,
+                "Counterexamples": [],
+                "TrainingExampleSource": "scheduled",
+                "Attempts": [
+                    {
+                        "Response": "analysisWe need to find mapping rule from input strings to output strings. Let's analyze.\n\nWe have pairs:\n\n1. \"acronymize\" -> \"qekgfndomt\"\n2. \"Manitoban\" -> \"Dqfozgwqf\"\n3. \"silkiness\" -> \"losaoftll\"\n4. \"hogmanay\" -> \"igudqfqn\"\n5. \"cabrilla\" -> \"eqwkossq\"\n6. \"badgerweed\" -> \"wqrutkvttr\"\n7. \"sergeantcy\" -> \"ltkutqfzen\"\n8. \"Itenean\" -> \"Oztftqf\"\n9. \"trucklin? Actually \"truckler\" -> \"zkxeastk\"\n10. \"financial\" -> \"yofqfeoqs\"\n\nWe need to find transformation. Likely some substitution cipher maybe Caesar shift varying per position? Let's compare letters.\n\nTake first pair: \"acronymize\"\nInput letters: a c r o n y m i z e\nOutput: q e k g f n d o m t\n\nMap each position:\na->q (shift +16? a=0, q=16)\nc->e (+2)\nr->k (-7) or +? r=17, k=10 diff -7 (or +19 mod26)\no->g (-8) (14->6 diff -8)\nn->f (-8) (13->5)\ny->n (-11) (24->13)\nm->d (-9) (12->3)\ni->o (+6) (8->14)\nz->m (-13) (25->12)\ne->t (+15) (4->19)\n\nSeems not consistent.\n\nMaybe it's some algorithm like reverse alphabet (a->z, b->y) then shift? Let's compute reverse: a->z, but output q not z. Not.\n\nMaybe it's using a key phrase? Could be Vigenere with a key derived from something like \"something\". Let's test: For each position, compute shift = output - input (mod26). For \"acronymize\": compute numeric (a=0). Output q=16 => shift 16. c=2 -> e=4 shift 2. r=17 -> k=10 shift (10-17) mod26 = 19. o=14 -> g=6 shift (6-14)= -8 mod26=18. n=13 -> f=5 shift 18? Actually 5-13 = -8 mod26=18. y=24 -> n=13 shift 15? 13-24 = -11 mod26=15. m=12 -> d=3 shift 17? 3-12=-9 mod26=17. i=8 -> o=14 shift 6. z=25 -> m=12 shift 13? 12-25=-13 mod26=13. e=4 -> t=19 shift 15.\n\nShifts: [16,2,19,18,18,15,17,6,13,15]\n\nNow second pair: \"Manitoban\" (case? Input capital M). Output \"Dqfozgwqf\". Let's treat case-insensitive maybe preserve case? Input letters: M a n i t o b a n (9 letters). Output: D q f o z g w q f.\n\nCompute shifts ignoring case: M (12) -> D (3) shift = (3-12) mod26 = 17. a(0)->q(16) shift 16. n(13)->f(5) shift 18. i(8)->o(14) shift 6. t(19)->z(25) shift 6. o(14)->g(6) shift 18. b(1)->w(22) shift 21? Actually 22-1=21. a->q shift 16. n->f shift 18.\n\nShifts: [17,16,18,6,6,18,21,16,18]\n\nThird: \"silkiness\" -> \"losaoftll\"\nInput: s i l k i n e s s (9). Output: l o s a o f t l l.\n\nCompute shifts: s(18)->l(11) shift = (11-18)= -7 mod26=19. i(8)->o(14) shift 6. l(11)->s(18) shift 7. k(10)->a(0) shift 16? Actually 0-10=-10 mod26=16. i(8)->o(14) shift 6. n(13)->f(5) shift 18. e(4)->t(19) shift 15. s(18)->l(11) shift 19. s->l shift 19.\n\nShifts: [19,6,7,16,6,18,15,19,19]\n\nObservations: many shifts are 6, 15, 16, 18, 19, 21, 2, 7, etc. Could be derived from some repeating key pattern? Let's see if there is a key string that yields these shifts.\n\nTake first few shifts across examples maybe correspond to letters of a key phrase \"something\". For example shift 6 corresponds to 'g' (since a->g shift 6). shift 15 corresponds to 'p' (a->p). shift 16 -> 'q'. shift 18 -> 's'. shift 19 -> 't'. shift 21 -> 'v'. shift 2 -> 'c'. shift 7 -> 'h'.\n\nMaybe the key is \"g p q s t v c h\"? Not.\n\nMaybe the transformation is: For each character, replace with character 6 positions ahead for vowels? Not.\n\nLet's examine pattern of output relative to input reversed? For \"acronymize\" reversed is \"ezimynorca\". Output \"qekgfndomt\". Not.\n\nMaybe it's a substitution cipher based on keyboard adjacency? Not.\n\nCould be using a simple algorithm: For each character, take its position in alphabet, multiply by something, mod 26? Let's test: For a (0) -> q (16). Multiply by something? 0*? =0 not 16. So maybe add index? a (0) + index (0) =0 not 16. a + 16? index 0? Not.\n\nMaybe it's using a running sum of previous letters? Let's compute cumulative shift? Not.\n\nLet's try to see if output is input shifted by a value that depends on previous output char? Hard.\n\nMaybe it's a simple substitution cipher where each letter maps to another fixed letter (like a monoalphabetic substitution). Let's test mapping across many pairs.\n\nCollect mapping pairs (case-insensitive). We'll list input->output for each occurrence.\n\nFrom first pair:\na->q\nc->e\nr->k\no->g\nn->f\ny->n\nm->d\ni->o\nz->m\ne->t\n\nSecond pair:\nm->d (already m->d matches)\na->q (a->q matches)\nn->f (n->f matches)\ni->o (i->o matches)\nt->z (new: t->z)\no->g (o->g matches)\nb->w (b->w)\na->q (again)\nn->f\n\nThird pair:\ns->l (new)\ni->o (already)\nl->s (new)\nk->a (new)\ni->o (again)\nn->f (again)\ne->t (e->t matches)\ns->l (again)\ns->l\n\nFourth pair: \"hogmanay\" -> \"igudqfqn\"\nh->i (new)\no->g (already)\ng->u (new)\nm->d (already)\na->q (already)\nn->f (already)\na->q (again)\ny->n (already)\n\nFifth: \"cabrilla\" -> \"eqwkossq\"\nc->e (already)\na->q (already)\nb->w (already)\nr->k (already)\ni->o (already)\nl->s (already)\nl->s\na->q\n\nSixth: \"badgerweed\" -> \"wqrutkvttr\"\nb->w (already)\na->q (already)\nd->r (new)\ng->u (already)\ne->t (already)\nr->k (already)\nw->v (new)\ne->t\ne->t\nd->r\n\nSeventh: \"sergeantcy\" -> \"ltkutqfzen\"\ns->l (already)\ne->t (already)\nr->k (already)\ng->u (already)\ne->t\na->q\nn->f\nt->z (already)\nc->e (already)\ny->n (already)\n\nEighth: \"Itenean\" -> \"Oztftqf\"\nI->O (uppercase mapping? i->o earlier, but uppercase I->O maybe same shift 6)\nt->z (already)\ne->t (already)\nn->f (already)\ne->t\na->q\nn->f\n\nNinth: \"truckler\" -> \"zkxeastk\"\nt->z (already)\nr->k (already)\nu->x (new)\nc->e (already)\nk->a (already)\nl->s (already)\ne->t (already)\nr->k (already)\n\nTenth: \"financial\" -> \"yofqfeoqs\"\nf->y (new)\ni->o (already)\nn->f (already)\na->q (already)\nn->f\nc->e (already)\ni->o\na->q\nl->s\n\nNow we have mapping for many letters:\n\na->q\nb->w\nc->e\nd->r\ne->t\nf->y\ng->u\nh->i\ni->o\nj->? none\nk->a\nl->s\nm->d\nn->f\no->g\np->? none\nq->? none\nr->k\ns->l\nt->z\nu->x\nv->? none\nw->v\nx->? none\ny->n\nz->m\n\nThis looks like a simple substitution cipher: each letter maps to the next letter in some permutation. Let's see if this mapping is consistent with a Caesar shift? Not; it's a specific permutation.\n\nLet's check if mapping is maybe ROT? a->q (shift +16). b->w (+22). c->e (+2). d->r (+14). e->t (+15). f->y (+19). g->u (+14). h->i (+1). i->o (+6). j unknown. k->a (+? 0-10 = -10 mod26 =16). l->s (+7). m->d (+? 3-12 = -9 =17). n->f (+? 5-13 = -8 =18). o->g (+? 6-14 = -8 =18). p unknown. q unknown. r->k (+? 10-17 = -7 =19). s->l (+? 11-18 = -7 =19). t->z (+? 25-19 =6). u->x (+? 23-20 =3). v unknown. w->v (+? 21-22 = -1 =25). x unknown. y->n (+? 13-24 = -11 =15). z->m (+? 12-25 = -13 =13).\n\nSeems mapping is not a simple Caesar but appears to be a fixed substitution where each letter maps to another letter, maybe derived from a reversed alphabet with some offset? Let's write mapping in order:\n\na q\nb w\nc e\nd r\ne t\nf y\ng u\nh i\ni o\nj ?\nk a\nl s\nm d\nn f\no g\np ?\nq ?\nr k\ns l\nt z\nu x\nv ?\nw v\nx ?\ny n\nz m\n\nObserve pattern: maybe mapping is \"qwertyuiopasdfghjklzxcvbnm\"? Let's compare: Standard QWERTY keyboard order: q w e r t y u i o p a s d f g h j k l z x c v b n m. Indeed mapping we have:\n\na->q (first of QWERTY)\nb->w (second)\nc->e (third)\nd->r (fourth)\ne->t (fifth)\nf->y (sixth)\ng->u (seventh)\nh->i (eighth)\ni->o (ninth)\nj->p (should be p) unknown but likely j->p\nk->a (10th)\nl->s (11th)\nm->d (12th)\nn->f (13th)\no->g (14th)\np->h (15th) unknown\nq->j (16th) unknown\nr->k (17th) matches\ns->l (18th) matches\nt->z (19th) matches\nu->x (20th) matches\nv->c (21st) unknown\nw->v (22nd) matches\nx->b (23rd) unknown\ny->n (24th) matches\nz->m (25th) matches\n\nYes! The mapping corresponds exactly to the QWERTY keyboard layout string: \"qwertyuiopasdfghjklzxcvbnm\". So each letter of the alphabet (a-z) maps to the corresponding letter in the QWERTY order.\n\nThus the rule: replace each letter with the letter at same position in QWERTY string.\n\nSpecifically, define a mapping dict where alphabet = \"abcdefghijklmnopqrstuvwxyz\", qwerty = \"qwertyuiopasdfghjklzxcvbnm\". Then output = translate each character (preserving case? Input may have uppercase first letter; output seems uppercase for first letter when input uppercase: \"Manitoban\" -> \"Dqfozgwqf\": M->D (uppercase). So we need to preserve case: if input char is uppercase, output uppercase version of mapped letter.\n\nThus function:\n\ndef fn(x):\n    qwerty = \"qwertyuiopasdfghjklzxcvbnm\"\n    trans = str.maketrans(\"abcdefghijklmnopqrstuvwxyz\", qwerty)\n    # also uppercase mapping\n    trans_upper = str.maketrans(\"ABCDEFGHIJKLMNOPQRSTUVWXYZ\", qwerty.upper())\n    combined = {**dict(trans), **dict(trans_upper)}? Actually we can create translation table for both using str.maketrans with two strings.\n\nSimpler: use .translate with combined table.\n\ntrans = str.maketrans(\n    \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n    qwerty + qwerty.upper()\n)\nreturn x.translate(trans)\n\nEdge: characters not letters remain unchanged (maybe none). That's fine.\n\nLet's test quickly mentally: \"acronymize\": a->q, c->e, r->k, o->g, n->f, y->n, m->d, i->o, z->m, e->t => \"qekgfndomt\" matches.\n\n\"Manitoban\": M uppercase -> D (since M maps to d, uppercase D). a->q, n->f, i->o, t->z, o->g, b->w, a->q, n->f => \"Dqfozgwqf\". Good.\n\nThus solution.\n\nNow produce answer with reasoning and function inside <ans> tags.assistantfinal<reasoning>\nThe transformation is a simple substitution based on the QWERTY keyboard layout.  \nIf we write the alphabet in order and the letters as they appear on a QWERTY keyboard:\n\n```\nalphabet = abcdefghijklmnopqrstuvwxyz\nqwerty   = qwertyuiopasdfghjklzxcvbnm\n```\n\neach input letter is replaced by the letter occupying the same position in the QWERTY string.  \nThe case of the original character is preserved (uppercase letters become the uppercase version of the mapped letter). Non\u2011alphabetic characters are left unchanged.\n\nThe Python function builds a translation table for both lower\u2011 and upper\u2011case letters and applies it with `str.translate`.\n</reasoning>\n\n<ans>\n```python\ndef fn(x):\n    # QWERTY order corresponding to the alphabet\n    qwerty = \"qwertyuiopasdfghjklzxcvbnm\"\n    # Build translation table for both lower\u2011 and upper\u2011case letters\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n        qwerty + qwerty.upper()\n    )\n    return x.translate(trans)\n```\n</ans>",
+                        "Prediction": "def fn(x):\n    # QWERTY order corresponding to the alphabet\n    qwerty = \"qwertyuiopasdfghjklzxcvbnm\"\n    # Build translation table for both lower\u2011 and upper\u2011case letters\n    trans = str.maketrans(\n        \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\",\n        qwerty + qwerty.upper()\n    )\n    return x.translate(trans)",
+                        "Reasoning": "The transformation is a simple substitution based on the QWERTY keyboard layout.  \nIf we write the alphabet in order and the letters as they appear on a QWERTY keyboard:\n\n```\nalphabet = abcdefghijklmnopqrstuvwxyz\nqwerty   = qwertyuiopasdfghjklzxcvbnm\n```\n\neach input letter is replaced by the letter occupying the same position in the QWERTY string.  \nThe case of the original character is preserved (uppercase letters become the uppercase version of the mapped letter). Non\u2011alphabetic characters are left unchanged.\n\nThe Python function builds a translation table for both lower\u2011 and upper\u2011case letters and applies it with `str.translate`.",
+                        "TokenUsage": {
+                            "InputTokens": 299,
+                            "OutputTokens": 3592,
+                            "TotalTokens": 3891,
+                            "ReasoningTokens": null,
+                            "Source": "vllm_token_ids"
+                        },
+                        "Error": null
+                    }
+                ],
+                "StopReason": "oracle_accepted"
+            }
+        ]
+    ],
+    "oracle": "cvc5_bounded_symbolic_Python",
+    "TaskSettings": {
+        "crypto_setting": "paper",
+        "n_train": 10,
+        "n_test": 10,
+        "noise_ratio": 0.0,
+        "ood_ratio": 0.0,
+        "hypothesis": "Python_fn_x",
+        "paper_task_protocol": true,
+        "method": "shared_CE_pipeline_not_paper_SRR",
+        "regularization_applied": false,
+        "prompt_variant": "base_with_reasoning_and_ans",
+        "oracle_policy": "bounded_symbolic_python_crypto_v1",
+        "oracle_domain": {
+            "alphabet": "ASCII A-Z/a-z",
+            "min_length": 0,
+            "max_length": 10
+        },
+        "Difficulty": {
+            "catalog_version": "benchmark_difficulty_v2",
+            "id": "keyboard:84",
+            "tier": "L1",
+            "level": 1,
+            "levels": 3,
+            "axis": "training_information_coverage",
+            "proxy": true,
+            "features": {
+                "missing_lowercase_letters": 5,
+                "missing_case_sensitive_letters": 29,
+                "family": "keyboard",
+                "training_entries": 10,
+                "within_family_rank": 17
+            },
+            "basis_config_matches": true
+        },
+        "TrainingPoolSize": 10,
+        "ScheduledTrainingBudget": 10,
+        "EvaluationPoolSize": 10,
+        "RoundBudget": 10,
+        "StandardSampleSchedule": [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+        ]
+    }
+}
